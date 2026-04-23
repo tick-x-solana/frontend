@@ -41,8 +41,8 @@ const HowItWork = () => {
                 className="shrink-0 rounded-full"
               />
 
-              <div className="min-w-0 space-y-1">
-                <h3 className="text-text-heading text-[22px] font-semibold tracking-[-0.02em]">
+              <div className="my-auto min-w-0 space-y-1">
+                <h3 className="text-text-heading font-semibold tracking-[-0.02em]">
                   {step.title}
                 </h3>
                 <p className="text-text-sub text-sm tracking-[-0.01em]">

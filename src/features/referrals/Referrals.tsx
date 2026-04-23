@@ -29,7 +29,7 @@ const Referrals = () => {
         className="pointer-events-none absolute top-0 right-0 z-0 h-full w-full object-cover opacity-40"
       />
 
-      <div className="relative z-10 mx-auto flex max-w-[380px] flex-col gap-5 md:max-w-[720px] xl:max-w-[860px]">
+      <div className="relative z-10 mx-auto flex flex-col gap-5 md:max-w-[720px] xl:max-w-[860px]">
         <header className="flex items-center justify-between gap-4 pt-1">
           <h1 className="text-text-heading text-[30px] font-semibold tracking-[-0.03em]">
             Explore

@@ -18,7 +18,7 @@ const timeLabelFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
   minute: "2-digit",
   second: "2-digit",
-  hour12: true,
+  hour12: false,
 });
 
 const priceLabelFormatter = new Intl.NumberFormat("en-US", {
@@ -34,6 +34,7 @@ export const COLOR_GRID = "#162E47";
 export const COLOR_GRID_STRONG = "rgba(17, 118, 186, 0.92)";
 export const COLOR_NOW = "rgba(18,221,255,0.28)";
 export const COLOR_TEXT_DIM = "#53759B";
+export const COLOR_BORDER_MAIN = "#1E3550";
 export const COLOR_BLUE = "#12DDFF";
 export const COLOR_BLUE_SOFT = "#2AC5D9";
 export const COLOR_GREEN = "#A8E8BB";
@@ -75,6 +76,32 @@ function formatMultiplier(value: number): string {
 
 function hasChartReachedColumn(chartX: number, columnX: number) {
   return chartX >= columnX - 0.5;
+}
+
+function getPriceAxisMetrics(
+  ctx: CanvasRenderingContext2D,
+  layout: GridLayout,
+  isMobile: boolean,
+) {
+  const { w, h, effectivePriceStep, basePrice } = layout;
+  const priceAtTop = layout.toPrice(0);
+  const priceAtBot = layout.toPrice(h);
+  const rowAtTop = (priceAtTop - basePrice) / effectivePriceStep;
+  const rowAtBot = (priceAtBot - basePrice) / effectivePriceStep;
+  const rowEndIdx = Math.ceil(Math.max(rowAtTop, rowAtBot)) + 2;
+  const fontSize = isMobile ? 8 : 9;
+
+  ctx.font = `bold ${fontSize}px monospace`;
+
+  const sampleLabel = priceLabelFormatter.format(
+    basePrice + rowEndIdx * effectivePriceStep,
+  );
+  const axisWidth = ctx.measureText(sampleLabel).width + 10;
+
+  return {
+    axisWidth,
+    axisX: w - axisWidth,
+  };
 }
 
 // ─── Background grid ──────────────────────────────────────────────────────────
@@ -983,20 +1010,14 @@ export function drawPriceAxis(
   const rowStartIdx = Math.floor(Math.min(rowAtTop, rowAtBot)) - 2;
   const rowEndIdx = Math.ceil(Math.max(rowAtTop, rowAtBot)) + 2;
 
-  const fontSize = isMobile ? 8 : 9;
-  ctx.font = `bold ${fontSize}px monospace`;
+  const { axisWidth, axisX } = getPriceAxisMetrics(ctx, layout, isMobile);
+
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
 
-  const sampleLabel = priceLabelFormatter.format(
-    anchorPrice + rowEndIdx * effectivePriceStep,
-  );
-  const maxLabelW = ctx.measureText(sampleLabel).width + 10;
-  const axisX = w - maxLabelW;
-
   // Background strip
   ctx.fillStyle = COLOR_BG;
-  ctx.fillRect(axisX, 0, maxLabelW, h);
+  ctx.fillRect(axisX, 0, axisWidth, h);
 
   // Separator line
   ctx.strokeStyle = COLOR_GRID_STRONG;
@@ -1036,7 +1057,11 @@ export function drawTimeAxis(
   isMobile: boolean,
 ) {
   const { w, h, firstTime, lastTime, toCanvasX } = layout;
-  const labelInterval = 15_000; // one label every 15 s
+  const labelInterval = isMobile ? 30_000 : 15_000;
+  const labelColor = isMobile ? "#7A9BB5" : "#79afd5";
+  const stripHeight = 24;
+  const { axisX } = getPriceAxisMetrics(ctx, layout, isMobile);
+  const maxLabelX = isMobile ? axisX : w;
 
   // Collect timestamps that fall inside the visible time range
   const timeLabels: number[] = [];
@@ -1046,20 +1071,40 @@ export function drawTimeAxis(
     tLabel += labelInterval;
   }
 
-  ctx.font = `bold ${isMobile ? 7 : 11}px monospace`;
+  if (isMobile) {
+    ctx.fillStyle = COLOR_BG;
+    ctx.fillRect(0, h - stripHeight, axisX, stripHeight);
+
+    ctx.strokeStyle = COLOR_BORDER_MAIN;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, h - stripHeight + 0.5);
+    ctx.lineTo(axisX, h - stripHeight + 0.5);
+    ctx.stroke();
+  }
+
+  ctx.save();
+  if (isMobile) {
+    ctx.beginPath();
+    ctx.rect(0, h - stripHeight, axisX, stripHeight);
+    ctx.clip();
+  }
+
+  ctx.font = isMobile ? "500 10px monospace" : "bold 11px monospace";
   ctx.textAlign = "center";
-  ctx.textBaseline = "bottom";
-  ctx.fillStyle = "#5f85ab";
+  ctx.textBaseline = isMobile ? "middle" : "bottom";
 
   for (const t of timeLabels) {
     const cx = toCanvasX(t);
-    if (cx < 0 || cx > w) continue;
+    if (cx < 0 || cx > maxLabelX) continue;
 
     const label = timeLabelFormatter.format(new Date(t));
 
-    ctx.fillStyle = "#79afd5";
-    ctx.fillText(label, cx, h - 4);
+    ctx.fillStyle = labelColor;
+    ctx.fillText(label, cx, isMobile ? h - stripHeight / 2 : h - 4);
   }
+
+  ctx.restore();
 }
 
 // ─── Zoom indicator ───────────────────────────────────────────────────────────

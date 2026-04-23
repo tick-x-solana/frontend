@@ -61,6 +61,7 @@ const MOBILE_ZOOM_MIN = 1.3;
 const MIN_PRICE_MOTION_MS = 250;
 const MAX_PRICE_MOTION_MS = 5000;
 const TICK_CADENCE_SMOOTHING = 0.2;
+const RESIZE_COMMIT_DEBOUNCE_MS = 180;
 const FOLLOW_ORDER_EVENTS = [
   "order_follow",
   "order_follow_update",
@@ -209,6 +210,7 @@ export const TradingGrid: React.FC = () => {
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const [canvasInstanceKey, setCanvasInstanceKey] = useState(0);
 
   // Live values kept in refs to avoid re-triggering the rAF loop
   const initialIsMobile =
@@ -242,6 +244,27 @@ export const TradingGrid: React.FC = () => {
   const rafRef = useRef<number>(0);
   const triggeredWinsRef = useRef<Set<string>>(new Set());
   const previewCellIdRef = useRef<string | null>(null);
+  const syncCanvasSize = useCallback((canvas: HTMLCanvasElement | null) => {
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const { w, h } = sizeRef.current;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+  }, []);
+  const handleCanvasRef = useCallback(
+    (node: HTMLCanvasElement | null) => {
+      canvasRef.current = node;
+      syncCanvasSize(node);
+
+      if (node) {
+        drawRef.current();
+      }
+    },
+    [syncCanvasSize],
+  );
 
   // Mirror store into a ref so rAF reads the latest data without deps changes
   const storeRef = useRef<StoreSnapshot>({
@@ -580,9 +603,8 @@ export const TradingGrid: React.FC = () => {
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const dpr = window.devicePixelRatio || 1;
 
-    const resize = () => {
+    const commitResize = (resetCanvas = false) => {
       const w = el.clientWidth;
       const h = el.clientHeight;
       sizeRef.current = { w, h };
@@ -595,31 +617,38 @@ export const TradingGrid: React.FC = () => {
 
       const cv = canvasRef.current;
       if (cv) {
-        cv.width = Math.round(w * dpr);
-        cv.height = Math.round(h * dpr);
-        cv.style.width = `${w}px`;
-        cv.style.height = `${h}px`;
+        syncCanvasSize(cv);
       }
+
+      if (resetCanvas) {
+        setCanvasInstanceKey((currentKey) => currentKey + 1);
+        return;
+      }
+
       drawRef.current();
     };
 
-    const ro = new ResizeObserver(resize);
-    ro.observe(el);
-    resize();
-
-    let debounceTimer: ReturnType<typeof setTimeout>;
-    const handleWindowResize = () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(resize, 150);
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleResizeCommit = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        commitResize(true);
+      }, RESIZE_COMMIT_DEBOUNCE_MS);
     };
-    window.addEventListener("resize", handleWindowResize);
+
+    const ro = new ResizeObserver(scheduleResizeCommit);
+    ro.observe(el);
+    commitResize();
+
+    window.addEventListener("resize", scheduleResizeCommit);
 
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", handleWindowResize);
-      clearTimeout(debounceTimer);
+      window.removeEventListener("resize", scheduleResizeCommit);
+      if (debounceTimer) clearTimeout(debounceTimer);
     };
-  }, [getMinZoom]);
+  }, [getMinZoom, syncCanvasSize]);
 
   // ── Hit-test ───────────────────────────────────────────────────────────────
   const hitTest = useCallback((cx: number, cy: number) => {
@@ -890,7 +919,8 @@ export const TradingGrid: React.FC = () => {
         onTouchEnd={handleTouchEnd}
       >
         <canvas
-          ref={canvasRef}
+          key={canvasInstanceKey}
+          ref={handleCanvasRef}
           className="absolute inset-0"
           style={{ display: "block" }}
         />

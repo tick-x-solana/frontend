@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -eu
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "pre-push: bun is required but was not found in PATH." >&2
+  exit 1
+fi
+
+echo "pre-push: running bun run build"
+bun run build

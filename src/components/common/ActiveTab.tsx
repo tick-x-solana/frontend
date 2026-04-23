@@ -21,6 +21,13 @@ interface ActiveTabItemProps {
   onClick: (value: TabType["value"]) => void | Promise<unknown>;
 }
 
+interface ActiveTabContainerProps {
+  listTabs: readonly TabType[];
+  activeTab: string;
+  onTabChange: (value: TabType["value"]) => void | Promise<unknown>;
+  className?: string;
+}
+
 const ActiveTabItem = ({
   label,
   value,
@@ -42,20 +49,12 @@ const ActiveTabItem = ({
   );
 };
 
-const ActiveTab = ({
+const ActiveTabContainer = ({
   listTabs,
-  activeTab: controlledActiveTab,
+  activeTab,
   onTabChange,
   className,
-}: ActiveTabProps) => {
-  const defaultTab = listTabs[0]?.value ?? "";
-  const [queryTab, setQueryTab] = useQueryState(
-    "tab",
-    parseAsString.withDefault(defaultTab),
-  );
-  const activeTab = controlledActiveTab ?? queryTab;
-  const handleTabChange = onTabChange ?? setQueryTab;
-
+}: ActiveTabContainerProps) => {
   return (
     <div
       className={cn(
@@ -69,13 +68,53 @@ const ActiveTab = ({
           <ActiveTabItem
             key={tab.value}
             isActive={isActive}
-            onClick={handleTabChange}
+            onClick={onTabChange}
             {...tab}
           />
         );
       })}
     </div>
   );
+};
+
+const QuerySyncedActiveTab = ({
+  listTabs,
+  className,
+}: Pick<ActiveTabProps, "listTabs" | "className">) => {
+  const defaultTab = listTabs[0]?.value ?? "";
+  const [queryTab, setQueryTab] = useQueryState(
+    "tab",
+    parseAsString.withDefault(defaultTab),
+  );
+
+  return (
+    <ActiveTabContainer
+      listTabs={listTabs}
+      activeTab={queryTab}
+      onTabChange={setQueryTab}
+      className={className}
+    />
+  );
+};
+
+const ActiveTab = ({
+  listTabs,
+  activeTab: controlledActiveTab,
+  onTabChange,
+  className,
+}: ActiveTabProps) => {
+  if (controlledActiveTab !== undefined) {
+    return (
+      <ActiveTabContainer
+        listTabs={listTabs}
+        activeTab={controlledActiveTab}
+        onTabChange={onTabChange ?? (() => undefined)}
+        className={className}
+      />
+    );
+  }
+
+  return <QuerySyncedActiveTab listTabs={listTabs} className={className} />;
 };
 
 export default ActiveTab;

@@ -46,7 +46,7 @@ const ReferralsHeader = () => {
             My WorldID
           </p>
 
-          <div className="border-border-main bg-surface-field flex min-w-0 flex-1 items-center gap-2 rounded-[10px] border px-3 py-2.5">
+          <div className="border-border-main bg-surface-field flex min-w-0 items-center gap-2 rounded-[10px] border px-3 py-2.5">
             <p className="min-w-0 flex-1 truncate font-mono text-sm font-medium tracking-[-0.01em] text-white">
               {WORLD_ID}
             </p>
@@ -61,16 +61,16 @@ const ReferralsHeader = () => {
               <CopyIcon className="size-3.5" aria-hidden="true" />
             </Button>
           </div>
-        </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          className="border-primary-light text-text-heading hover:text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[10px] bg-transparent px-4 text-sm font-medium backdrop-blur-[8px]"
-        >
-          <Share2 className="size-4" />
-          WorldChat
-        </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-primary-light text-text-heading hover:text-text-heading hover:bg-surface-overlay-subtle ml-auto h-11 flex-1 rounded-[10px] bg-transparent px-4 text-sm font-medium backdrop-blur-[8px]"
+          >
+            <Share2 className="size-4" />
+            WorldChat
+          </Button>
+        </div>
       </div>
     </header>
   );

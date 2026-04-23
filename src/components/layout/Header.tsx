@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
-import { useHealthCheckControllerHealthCheck } from "@/src/services/queries";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { sepolia } from "wagmi/chains";
@@ -33,9 +32,6 @@ const Header = () => {
   const { disconnect } = useDisconnect();
   const { switchChain, isPending: isSwitchPending } = useSwitchChain();
   const { isLoggingIn } = useAuth();
-
-  const { data } = useHealthCheckControllerHealthCheck();
-  console.log("data: ", data);
 
   const isActivePath = (href: string) => {
     if (href === "#") return false;
