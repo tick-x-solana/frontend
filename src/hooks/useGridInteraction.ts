@@ -34,6 +34,7 @@ interface UseGridInteractionOptions {
   transformRef: React.RefObject<Transform>;
   nowRef: React.RefObject<number>;
   storeRef: React.RefObject<StoreSnapshot>;
+  previewCellIdRef: React.RefObject<string | null>;
   hitTest: (cx: number, cy: number) => CellData | null;
   placeBet: (cellId: string, amount: number) => void;
   getMinZoom: () => number;
@@ -47,6 +48,7 @@ export function useGridInteraction({
   transformRef,
   nowRef,
   storeRef,
+  previewCellIdRef,
   hitTest,
   placeBet,
   getMinZoom,
@@ -63,6 +65,22 @@ export function useGridInteraction({
   // Two-finger pinch state
   const lastTouchDistRef = useRef<number | null>(null);
   const lastTouchMidRef = useRef<{ x: number; y: number } | null>(null);
+
+  const updatePreviewCell = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const cell = hitTest(clientX - rect.left, clientY - rect.top);
+      previewCellIdRef.current = cell?.id ?? null;
+    },
+    [canvasRef, hitTest, previewCellIdRef],
+  );
+
+  const clearPreviewCell = useCallback(() => {
+    previewCellIdRef.current = null;
+  }, [previewCellIdRef]);
 
   // ── Zoom helpers ────────────────────────────────────────────────────────────
 
@@ -100,22 +118,29 @@ export function useGridInteraction({
 
   // ── Pan (mouse drag) ─────────────────────────────────────────────────────────
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    dragRef.current = {
-      active: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      lastOffX: transformRef.current.offsetX,
-      lastOffY: transformRef.current.offsetY,
-    };
-    setIsDragging(true);
-  }, [transformRef]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      updatePreviewCell(e.clientX, e.clientY);
+      dragRef.current = {
+        active: true,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastOffX: transformRef.current.offsetX,
+        lastOffY: transformRef.current.offsetY,
+      };
+      setIsDragging(true);
+    },
+    [transformRef, updatePreviewCell],
+  );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       const d = dragRef.current;
-      if (!d.active) return;
+      if (!d.active) {
+        updatePreviewCell(e.clientX, e.clientY);
+        return;
+      }
       const next: Transform = {
         ...transformRef.current,
         offsetX: d.lastOffX + (e.clientX - d.startX),
@@ -123,7 +148,7 @@ export function useGridInteraction({
       };
       transformRef.current = next;
     },
-    [transformRef],
+    [transformRef, updatePreviewCell],
   );
 
   const endDrag = useCallback(() => {
@@ -136,6 +161,7 @@ export function useGridInteraction({
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
       if (e.touches.length === 1) {
+        updatePreviewCell(e.touches[0].clientX, e.touches[0].clientY);
         dragRef.current = {
           active: true,
           startX: e.touches[0].clientX,
@@ -146,6 +172,7 @@ export function useGridInteraction({
         setIsDragging(true);
         lastTouchDistRef.current = null;
       } else if (e.touches.length === 2) {
+        clearPreviewCell();
         const dx = e.touches[1].clientX - e.touches[0].clientX;
         const dy = e.touches[1].clientY - e.touches[0].clientY;
         lastTouchDistRef.current = Math.hypot(dx, dy);
@@ -155,17 +182,22 @@ export function useGridInteraction({
         };
       }
     },
-    [transformRef],
+    [clearPreviewCell, transformRef, updatePreviewCell],
   );
 
   const handleTouchMove = useCallback(
     (e: TouchEvent) => {
       e.preventDefault();
       if (e.touches.length === 1 && dragRef.current.active) {
+        clearPreviewCell();
         const next: Transform = {
           ...transformRef.current,
-          offsetX: dragRef.current.lastOffX + (e.touches[0].clientX - dragRef.current.startX),
-          offsetY: dragRef.current.lastOffY + (e.touches[0].clientY - dragRef.current.startY),
+          offsetX:
+            dragRef.current.lastOffX +
+            (e.touches[0].clientX - dragRef.current.startX),
+          offsetY:
+            dragRef.current.lastOffY +
+            (e.touches[0].clientY - dragRef.current.startY),
         };
         transformRef.current = next;
       } else if (
@@ -181,12 +213,16 @@ export function useGridInteraction({
           y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
         };
         const rect = canvasRef.current!.getBoundingClientRect();
-        applyZoom(mid.x - rect.left, mid.y - rect.top, dist / lastTouchDistRef.current);
+        applyZoom(
+          mid.x - rect.left,
+          mid.y - rect.top,
+          dist / lastTouchDistRef.current,
+        );
         lastTouchDistRef.current = dist;
         lastTouchMidRef.current = mid;
       }
     },
-    [canvasRef, transformRef, applyZoom],
+    [canvasRef, clearPreviewCell, transformRef, applyZoom],
   );
 
   const handleTouchEnd = useCallback(() => {
@@ -201,7 +237,11 @@ export function useGridInteraction({
     (e: React.MouseEvent<HTMLDivElement>) => {
       // Ignore if the pointer moved more than threshold (it was a drag)
       const d = dragRef.current;
-      if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > DRAG_CLICK_THRESHOLD) return;
+      if (
+        Math.hypot(e.clientX - d.startX, e.clientY - d.startY) >
+        DRAG_CLICK_THRESHOLD
+      )
+        return;
 
       const rect = canvasRef.current!.getBoundingClientRect();
       const cx = e.clientX - rect.left;
@@ -218,7 +258,9 @@ export function useGridInteraction({
         if (cell.timeWindowStart > now && cell.timeWindowStart - now <= 5000) {
           const hasBet = bets[cell.id] || pendingBets[cell.id];
           if (!hasBet) {
-            appToast.warning("Cell closing soon. Select another!", { icon: "⏳" });
+            appToast.warning("Cell closing soon. Select another!", {
+              icon: "⏳",
+            });
             return;
           }
         }
@@ -250,11 +292,12 @@ export function useGridInteraction({
         }
 
         placeBet(cell.id, betAmount);
+        clearPreviewCell();
       } catch (err) {
         console.log("handleClick() error:", err);
       }
     },
-    [canvasRef, nowRef, storeRef, hitTest, placeBet],
+    [canvasRef, nowRef, storeRef, hitTest, placeBet, clearPreviewCell],
   );
 
   // ── Reset zoom ───────────────────────────────────────────────────────────────
@@ -274,6 +317,7 @@ export function useGridInteraction({
     handleTouchMove,
     handleTouchEnd,
     handleClick,
+    clearPreviewCell,
     resetTransform,
   };
 }

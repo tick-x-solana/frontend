@@ -85,11 +85,21 @@ export function computeLayout(
 ): GridLayout {
   const BASE_DATA_COLS = 11;
   const BASE_DATA_ROWS = 9;
-  const VIEWPORT_PADDING_COLS = 2;
-  const LEADING_PADDING_COLS = 1;
+  const MOBILE_BREAKPOINT_PX = 640;
+  const DESKTOP_VIEWPORT_PADDING_COLS = 2;
+  const MOBILE_VIEWPORT_PADDING_COLS = 2;
+  const DESKTOP_LEADING_PADDING_COLS = 1;
+  const MOBILE_LEADING_PADDING_COLS = 6;
 
   const { w, h } = size;
   const { modeIntervalSeconds, modePriceStep, cells: rawCells, basePrice } = store;
+  const isMobileViewport = w < MOBILE_BREAKPOINT_PX;
+  const viewportPaddingCols = isMobileViewport
+    ? MOBILE_VIEWPORT_PADDING_COLS
+    : DESKTOP_VIEWPORT_PADDING_COLS;
+  const leadingPaddingCols = isMobileViewport
+    ? MOBILE_LEADING_PADDING_COLS
+    : DESKTOP_LEADING_PADDING_COLS;
 
   // Use cached dims — recomputed only when cells change (see TradingGrid storeRef sync).
   // Fall back to computing inline if cache is missing (e.g. first frame).
@@ -111,8 +121,10 @@ export function computeLayout(
   // Keep the viewport width stable. If visibleCols tracks live server column
   // count, removing the leading column makes cellSize shrink/grow for one
   // frame, which reads as a horizontal "kick" exactly when a column hides.
-  const visibleCols = BASE_DATA_COLS + VIEWPORT_PADDING_COLS;
-  const firstTime = chartHeadTime - LEADING_PADDING_COLS * intervalMs;
+  const visibleCols = BASE_DATA_COLS + viewportPaddingCols;
+  // On mobile, bias the initial frame so the active/focus column lands near
+  // the viewport centre instead of opening flush against the left edge.
+  const firstTime = chartHeadTime - leadingPaddingCols * intervalMs;
   const lastTime = firstTime + visibleCols * intervalMs;
   // Snap the background grid to the scrolling viewport instead of the first
   // live server column, otherwise rolling off that column shifts the whole

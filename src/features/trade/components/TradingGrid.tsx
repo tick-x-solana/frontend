@@ -32,7 +32,7 @@ import { useGridInteraction } from "@/src/hooks/useGridInteraction";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DESKTOP_ZOOM_MIN = 1.3;
+const DESKTOP_ZOOM_MIN = 0.5;
 const MOBILE_ZOOM_MIN = 1.3;
 const MIN_PRICE_MOTION_MS = 250;
 const MAX_PRICE_MOTION_MS = 5000;
@@ -119,6 +119,7 @@ export const TradingGrid: React.FC = () => {
   const drawRef = useRef<() => void>(() => {});
   const rafRef = useRef<number>(0);
   const triggeredWinsRef = useRef<Set<string>>(new Set());
+  const previewCellIdRef = useRef<string | null>(null);
 
   // Mirror store into a ref so rAF reads the latest data without deps changes
   const storeRef = useRef<StoreSnapshot>({
@@ -374,7 +375,7 @@ export const TradingGrid: React.FC = () => {
     ctx.fillRect(0, 0, layout.w, layout.h);
 
     drawBackgroundGrid(ctx, layout, drawStore);
-    drawBetCells(ctx, layout, drawStore, isMobile);
+    drawBetCells(ctx, layout, drawStore, isMobile, previewCellIdRef.current);
     drawPriceLine(ctx, layout, drawStore);
     drawPriceAxis(ctx, layout, drawStore, isMobile);
     drawTimeAxis(ctx, layout, isMobile);
@@ -457,12 +458,14 @@ export const TradingGrid: React.FC = () => {
     handleTouchMove,
     handleTouchEnd,
     handleClick,
+    clearPreviewCell,
   } = useGridInteraction({
     canvasRef,
     sizeRef,
     transformRef,
     nowRef,
     storeRef,
+    previewCellIdRef,
     hitTest,
     placeBet,
     getMinZoom,
@@ -533,7 +536,10 @@ export const TradingGrid: React.FC = () => {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={endDrag}
-        onMouseLeave={endDrag}
+        onMouseLeave={() => {
+          endDrag();
+          clearPreviewCell();
+        }}
         onClick={handleClick}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}

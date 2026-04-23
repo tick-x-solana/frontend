@@ -34,6 +34,7 @@ export const COLOR_GRID_STRONG = "rgba(17, 118, 186, 0.92)";
 export const COLOR_NOW = "rgba(18,221,255,0.28)";
 export const COLOR_TEXT_DIM = "#53759B";
 export const COLOR_BLUE = "#12DDFF";
+export const COLOR_BLUE_SOFT = "#2AC5D9";
 export const COLOR_GREEN = "#A8E8BB";
 export const COLOR_RED = "#F6465D";
 export const COLOR_DOT = "#B2EBDF";
@@ -163,6 +164,7 @@ export function drawBetCells(
   layout: GridLayout,
   store: StoreSnapshot,
   isMobile: boolean,
+  previewCellId: string | null = null,
 ) {
   const {
     w,
@@ -183,7 +185,10 @@ export function drawBetCells(
   const chartHeadX = toCanvasX(chartTime);
   const selectedColumnStart =
     cells
-      .filter((cell) => !hasChartReachedColumn(chartHeadX, toCanvasX(cell.timeWindowStart)))
+      .filter(
+        (cell) =>
+          !hasChartReachedColumn(chartHeadX, toCanvasX(cell.timeWindowStart)),
+      )
       .reduce<
         number | null
       >((minTs, cell) => (minTs === null || cell.timeWindowStart < minTs ? cell.timeWindowStart : minTs), null) ??
@@ -216,6 +221,8 @@ export function drawBetCells(
     const isSelectedColumn =
       selectedColumnStart !== null &&
       cell.timeWindowStart === selectedColumnStart;
+    const isPreviewed =
+      previewCellId === cell.id && !isPast && !isNext && !hasAnyBet;
 
     // priceLevel is the CENTRE of the band; top edge = centre + step/2
     const cw = cellW;
@@ -234,21 +241,50 @@ export function drawBetCells(
     const textY = cellTop + ch - clamp(cellSize * 0.12, 6, 10);
 
     // ── Background fill ──
-    if (isHit && hasAnyBet) {
-      ctx.fillStyle = "rgba(46,189,133,0.35)";
-      ctx.fillRect(rx, ry, rw, rh);
-      ctx.strokeStyle = COLOR_GREEN;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(rx + 0.75, ry + 0.75, rw - 1.5, rh - 1.5);
+    if (isPreviewed) {
+      _drawPreviewCell(ctx, {
+        x: rx,
+        y: ry,
+        width: rw,
+        height: rh,
+        cellTop,
+        cellBottom: cellTop + ch,
+        cellLeft: cx,
+        cellRight: cx + cw,
+        cellSize,
+        multiplier: Number(cell.original.rewardRate),
+        betAmount: store.betAmount,
+        isMobile,
+      });
+    } else if (isHit && hasAnyBet) {
+      _drawWinCell(ctx, {
+        x: rx,
+        y: ry,
+        width: rw,
+        height: rh,
+        cellTop,
+        cellBottom: cellTop + ch,
+        cellLeft: cx,
+        cellRight: cx + cw,
+        cellSize,
+        multiplier: cell.multiplier,
+        detailTxt: formatMultiplier(Number(cell.original.rewardRate)),
+        isMobile,
+      });
     } else if (!isPast && hasAnyBet) {
-      const grad = ctx.createLinearGradient(rx, ry, rx, ry + rh);
-      grad.addColorStop(0, "rgba(22,40,81,0.25)");
-      grad.addColorStop(1, "rgba(9,22,53,0.35)");
-      ctx.fillStyle = grad;
-      ctx.fillRect(rx, ry, rw, rh);
-      ctx.strokeStyle = COLOR_GRID_STRONG;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(rx + 0.75, ry + 0.75, rw - 1.5, rh - 1.5);
+      _drawBetBadge(ctx, {
+        x: rx,
+        y: ry,
+        width: rw,
+        height: rh,
+        cellTop,
+        cellBottom: cellTop + ch,
+        cellLeft: cx,
+        cellRight: cx + cw,
+        cellSize,
+        multTxt: formatMultiplier(cell.multiplier),
+        displayBetAmount,
+      });
     } else if (isNext && !hasAnyBet) {
       ctx.fillStyle = "rgba(246,70,93,0.06)";
       ctx.fillRect(rx, ry, rw, rh);
@@ -258,9 +294,11 @@ export function drawBetCells(
     }
 
     // Subtle outer border (always)
-    ctx.strokeStyle = COLOR_GRID;
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(rx, ry, rw, rh);
+    if (!isPreviewed && !(hasAnyBet && !isHit)) {
+      ctx.strokeStyle = COLOR_GRID;
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(rx, ry, rw, rh);
+    }
 
     // Only clip when the cell is partially outside the viewport — saves save/clip/restore
     // overhead (~130 cells/frame) for the common fully-visible case.
@@ -314,24 +352,15 @@ export function drawBetCells(
         : formatMultiplier(Number(cell.original.rewardRate))
     }`;
 
-    if (hasAnyBet && !isHit) {
-      _drawBetBadge(ctx, {
-        textX,
-        textCenterY: textY,
-        cellSize,
-        multTxt,
-        multColor,
-        fontSize,
-        displayBetAmount,
-      });
+    if (isPreviewed) {
+      if (needsClip) ctx.restore();
+      continue;
+    } else if (hasAnyBet && !isHit) {
+      if (needsClip) ctx.restore();
+      continue;
     } else if (isHit && hasAnyBet) {
-      _drawWinBadge(ctx, {
-        textX,
-        textCenterY: textY,
-        cellSize,
-        displayBetAmount,
-        multiplier: cell.multiplier,
-      });
+      if (needsClip) ctx.restore();
+      continue;
     } else {
       // Plain multiplier
       ctx.font = `${fontSize}px monospace`;
@@ -364,86 +393,345 @@ export function drawBetCells(
 // ── Badge helpers (private) ───────────────────────────────────────────────────
 
 interface BetBadgeParams {
-  textX: number;
-  textCenterY: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  cellTop: number;
+  cellBottom: number;
+  cellLeft: number;
+  cellRight: number;
   cellSize: number;
   multTxt: string;
-  multColor: string;
-  fontSize: number;
   displayBetAmount: number;
+}
+
+interface PreviewCellParams {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  cellTop: number;
+  cellBottom: number;
+  cellLeft: number;
+  cellRight: number;
+  cellSize: number;
+  multiplier: number;
+  betAmount: number;
+  isMobile: boolean;
+}
+
+function _drawPreviewCell(ctx: CanvasRenderingContext2D, p: PreviewCellParams) {
+  const {
+    x,
+    y,
+    width,
+    height,
+    cellTop,
+    cellBottom,
+    cellLeft,
+    cellRight,
+    cellSize,
+    multiplier,
+    betAmount,
+    isMobile,
+  } = p;
+  const radius = clamp(cellSize * 0.16, 6, 8);
+  const innerInset = 0.75;
+  const titleSize = clamp(Math.round(cellSize * 0.25), 10, 12);
+  const detailSize = clamp(Math.round(cellSize * 0.17), 7, 8);
+  const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
+  const titleY = y + height * 0.44;
+  const detailY = y + height * 0.68;
+  const safeMultiplier = Number.isFinite(multiplier) ? multiplier : 0;
+  const previewPayout = Math.max(0, betAmount * safeMultiplier);
+  const previewDetail =
+    previewPayout > 0
+      ? new Intl.NumberFormat("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(previewPayout)
+      : formatMultiplier(safeMultiplier);
+
+  ctx.save();
+  ctx.shadowColor = "rgba(0,229,255,0.15)";
+  ctx.shadowBlur = clamp(cellSize * 0.18, 7, 10);
+  ctx.fillStyle = "rgba(0,229,255,0.10)";
+  roundRect(
+    ctx,
+    x + innerInset,
+    y + innerInset,
+    width - innerInset * 2,
+    height - innerInset * 2,
+    radius,
+  );
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "#2AC5D9";
+  ctx.lineWidth = 0.5;
+  roundRect(
+    ctx,
+    x + innerInset,
+    y + innerInset,
+    width - innerInset * 2,
+    height - innerInset * 2,
+    radius,
+  );
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(0,229,255,0.30)";
+  ctx.lineWidth = 0.7;
+  roundRect(
+    ctx,
+    x + innerInset * 2,
+    y + innerInset * 2,
+    width - innerInset * 4,
+    height - innerInset * 4,
+    Math.max(0, radius - 1),
+  );
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#00E5FF";
+  ctx.font = `700 ${titleSize}px sans-serif`;
+  ctx.fillText(formatMultiplier(safeMultiplier), x + width / 2, titleY);
+
+  ctx.fillStyle = "#7A9BB5";
+  ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
+  ctx.fillText(previewDetail, x + width / 2, detailY);
+
+  ctx.fillStyle = "#00E5FF";
+  const corners = [
+    [cellLeft, cellTop],
+    [cellRight, cellTop],
+    [cellLeft, cellBottom],
+    [cellRight, cellBottom],
+  ];
+  for (const [dx, dy] of corners) {
+    ctx.beginPath();
+    ctx.arc(dx, dy, cornerDotRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+interface WinCellParams {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  cellTop: number;
+  cellBottom: number;
+  cellLeft: number;
+  cellRight: number;
+  cellSize: number;
+  multiplier: number;
+  detailTxt: string;
+  isMobile: boolean;
+}
+
+function _drawWinCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
+  const {
+    x,
+    y,
+    width,
+    height,
+    cellTop,
+    cellBottom,
+    cellLeft,
+    cellRight,
+    cellSize,
+    multiplier,
+    detailTxt,
+    isMobile,
+  } = p;
+  const radius = clamp(cellSize * 0.16, 6, 8);
+  const innerInset = 0.75;
+  const titleSize = clamp(Math.round(cellSize * 0.25), 10, 12);
+  const detailSize = clamp(Math.round(cellSize * 0.17), 7, 8);
+  const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
+  const titleY = y + height * 0.44;
+  const detailY = y + height * 0.68;
+  const safeMultiplier = Number.isFinite(multiplier) ? multiplier : 0;
+
+  ctx.save();
+  ctx.shadowColor = "rgba(17,211,68,0.18)";
+  ctx.shadowBlur = clamp(cellSize * 0.16, 6, 8);
+  ctx.fillStyle = "rgba(17,211,68,0.04)";
+  roundRect(
+    ctx,
+    x + innerInset,
+    y + innerInset,
+    width - innerInset * 2,
+    height - innerInset * 2,
+    radius,
+  );
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "#11D344";
+  ctx.lineWidth = 0.5;
+  roundRect(
+    ctx,
+    x + innerInset,
+    y + innerInset,
+    width - innerInset * 2,
+    height - innerInset * 2,
+    radius,
+  );
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(0,229,255,0.25)";
+  ctx.lineWidth = 0.7;
+  roundRect(
+    ctx,
+    x + innerInset * 2,
+    y + innerInset * 2,
+    width - innerInset * 4,
+    height - innerInset * 4,
+    Math.max(0, radius - 1),
+  );
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#11D344";
+  ctx.font = `${isMobile ? 600 : 700} ${titleSize}px sans-serif`;
+  ctx.fillText(formatMultiplier(safeMultiplier), x + width / 2, titleY);
+
+  ctx.fillStyle = "#7A9BB5";
+  ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
+  ctx.fillText(detailTxt, x + width / 2, detailY);
+
+  ctx.fillStyle = "#12DDFF";
+  const corners = [
+    [cellLeft, cellTop],
+    [cellRight, cellTop],
+    [cellLeft, cellBottom],
+    [cellRight, cellBottom],
+  ];
+  for (const [dx, dy] of corners) {
+    ctx.beginPath();
+    ctx.arc(dx, dy, cornerDotRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
   const {
-    textX,
-    textCenterY,
+    x,
+    y,
+    width,
+    height,
+    cellTop,
+    cellBottom,
+    cellLeft,
+    cellRight,
     cellSize,
     multTxt,
-    multColor,
-    fontSize,
     displayBetAmount,
   } = p;
-  const badgeFontSize = clamp(Math.round(cellSize * 0.25), 6, 20);
-  const gapY = clamp(cellSize * 0.11, 2, 10);
-
-  // Multiplier above centre
-  ctx.font = `${fontSize}px monospace`;
-  ctx.fillStyle = multColor;
-  ctx.fillText(multTxt, textX, textCenterY - gapY);
-
-  // Amount badge below
-  ctx.shadowBlur = 0;
+  const inset = 0.75;
+  const radius = clamp(cellSize * 0.18, 8, 12);
+  const multiplierSize = clamp(Math.round(cellSize * 0.2), 11, 16);
+  const badgeFontSize = clamp(Math.round(cellSize * 0.25), 13, 22);
+  const badgeWidth = clamp(width * 0.5, 40, width - 18);
+  const badgeHeight = clamp(height * 0.26, 18, 28);
+  const badgeRadius = clamp(cellSize * 0.14, 6, 10);
+  const centerX = x + width / 2;
+  const multiplierY = y + height * 0.33;
+  const badgeX = centerX - badgeWidth / 2;
+  const badgeY = y + height * 0.56;
   const badgeText = `$${displayBetAmount}`;
-  ctx.font = `bold ${badgeFontSize}px monospace`;
-  const bw = ctx.measureText(badgeText).width + clamp(cellSize * 0.22, 4, 18);
-  const bh = clamp(cellSize * 0.39, 8, 28);
-  const bx = textX - bw / 2;
-  const by = textCenterY + gapY - bh / 2;
-  ctx.fillStyle = COLOR_GRID_STRONG;
-  roundRect(ctx, bx, by, bw, bh, 4);
+  const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
+
+  ctx.save();
+
+  ctx.shadowColor = "rgba(0,229,255,0.12)";
+  ctx.shadowBlur = clamp(cellSize * 0.14, 5, 8);
+  ctx.fillStyle = "rgba(5,29,43,0.94)";
+  roundRect(
+    ctx,
+    x + inset,
+    y + inset,
+    width - inset * 2,
+    height - inset * 2,
+    radius,
+  );
   ctx.fill();
-  ctx.fillStyle = "#eaf8ff";
-  ctx.textBaseline = "middle";
-  ctx.fillText(badgeText, textX, by + bh / 2);
-}
 
-interface WinBadgeParams {
-  textX: number;
-  textCenterY: number;
-  cellSize: number;
-  displayBetAmount: number;
-  multiplier: number;
-}
-
-function _drawWinBadge(ctx: CanvasRenderingContext2D, p: WinBadgeParams) {
-  const { textX, textCenterY, cellSize, displayBetAmount, multiplier } = p;
-  const winPayout =
-    displayBetAmount * (multiplier && !isNaN(multiplier) ? multiplier : 0);
-  const badgeFontSize = clamp(Math.round(cellSize * 0.25), 6, 20);
-  const gapY = clamp(cellSize * 0.11, 2, 10);
-
-  // "WIN!" label
-  const winFontSize = clamp(Math.round(cellSize * 0.22), 5, 18);
-  ctx.font = `900 ${winFontSize}px monospace`;
-  ctx.fillStyle = COLOR_GRID_STRONG;
-  ctx.shadowColor = "rgba(46,189,133,1)";
-  ctx.shadowBlur = 8;
-  ctx.fillText("WIN!", textX, textCenterY - gapY * 2);
-
-  // Payout badge
   ctx.shadowBlur = 0;
-  const payoutText = `+$${winPayout > 0 ? winPayout.toFixed(2) : displayBetAmount}`;
-  ctx.font = `bold ${badgeFontSize}px monospace`;
-  const bw = ctx.measureText(payoutText).width + clamp(cellSize * 0.22, 4, 18);
-  const bh = clamp(cellSize * 0.39, 8, 28);
-  const bx = textX - bw / 2;
-  const by = textCenterY + gapY / 2 - bh / 2;
-  ctx.fillStyle = COLOR_GREEN;
-  roundRect(ctx, bx, by, bw, bh, 4);
-  ctx.fill();
-  ctx.fillStyle = "#eaf8ff";
+  ctx.strokeStyle = COLOR_BLUE_SOFT;
+  ctx.lineWidth = 0.5;
+  roundRect(
+    ctx,
+    x + inset,
+    y + inset,
+    width - inset * 2,
+    height - inset * 2,
+    radius,
+  );
+  ctx.stroke();
+
+  ctx.shadowColor = "rgba(0,229,255,0.16)";
+  ctx.shadowBlur = clamp(cellSize * 0.18, 6, 9);
+  ctx.strokeStyle = "rgba(18,221,255,0.14)";
+  ctx.lineWidth = 0.6;
+  roundRect(
+    ctx,
+    x + inset * 2,
+    y + inset * 2,
+    width - inset * 4,
+    height - inset * 4,
+    Math.max(0, radius - 2),
+  );
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(payoutText, textX, by + bh / 2);
+  ctx.fillStyle = "#00E5FF";
+  ctx.font = `700 ${multiplierSize}px Inter, sans-serif`;
+  ctx.fillText(multTxt, centerX, multiplierY);
+
+  const badgeGradient = ctx.createLinearGradient(
+    badgeX,
+    badgeY,
+    badgeX,
+    badgeY + badgeHeight,
+  );
+  badgeGradient.addColorStop(0, "#3D95DA");
+  badgeGradient.addColorStop(1, "#2C7FC8");
+  ctx.fillStyle = badgeGradient;
+  roundRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, badgeRadius);
+  ctx.fill();
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `700 ${badgeFontSize}px Inter, sans-serif`;
+  ctx.shadowColor = "rgba(255,255,255,0.14)";
+  ctx.shadowBlur = 0.8;
+  ctx.shadowOffsetY = 0.4;
+  ctx.fillText(badgeText, centerX, badgeY + badgeHeight / 2);
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+
+  ctx.fillStyle = "#00E5FF";
+  const corners = [
+    [cellLeft, cellTop],
+    [cellRight, cellTop],
+    [cellLeft, cellBottom],
+    [cellRight, cellBottom],
+  ];
+  for (const [dx, dy] of corners) {
+    ctx.beginPath();
+    ctx.arc(dx, dy, cornerDotRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
 // ─── Price chart line ─────────────────────────────────────────────────────────
@@ -459,7 +747,9 @@ export function drawPriceLine(
 
   const clipPaddingMs = 30_000;
   const visibleHistory = history.filter(
-    (pt) => pt.time >= firstTime - clipPaddingMs && pt.time <= lastTime + clipPaddingMs,
+    (pt) =>
+      pt.time >= firstTime - clipPaddingMs &&
+      pt.time <= lastTime + clipPaddingMs,
   );
   if (visibleHistory.length < 2) return;
 

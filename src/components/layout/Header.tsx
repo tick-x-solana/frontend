@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
+import { useHealthCheckControllerHealthCheck } from "@/src/services/queries";
 
 type NavItem = {
   label: string;
@@ -20,6 +21,9 @@ const navItems: NavItem[] = [
 
 const Header = () => {
   const pathname = usePathname();
+
+  const { data } = useHealthCheckControllerHealthCheck();
+  console.log("data: ", data);
 
   const isActivePath = (href: string) => {
     if (href === "#") return false;
