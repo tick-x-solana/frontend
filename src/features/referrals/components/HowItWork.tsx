@@ -1,4 +1,3 @@
-import Title from "@/src/components/common/Title";
 import Image from "next/image";
 
 const HOW_IT_WORK_STEPS = [
@@ -26,9 +25,11 @@ const HOW_IT_WORK_STEPS = [
 const HowItWork = () => {
   return (
     <section className="column w-full gap-3">
-      <Title>How It Works</Title>
+      <h3 className="text-text-heading text-[22px] font-semibold tracking-[-0.02em]">
+        How It Works
+      </h3>
 
-      <div className="border-border-main bg-background-main overflow-hidden rounded-lg border p-4">
+      <div className="border-border-main bg-surface-card overflow-hidden rounded-[14px] border p-4 shadow-[0_16px_32px_rgba(0,0,0,0.16)]">
         {HOW_IT_WORK_STEPS.map((step, index) => (
           <div key={step.title}>
             <div className="flex items-start gap-4">
@@ -41,7 +42,7 @@ const HowItWork = () => {
               />
 
               <div className="min-w-0 space-y-1">
-                <h3 className="text-text-heading text-base font-semibold tracking-[-0.01em]">
+                <h3 className="text-text-heading text-[22px] font-semibold tracking-[-0.02em]">
                   {step.title}
                 </h3>
                 <p className="text-text-sub text-sm tracking-[-0.01em]">

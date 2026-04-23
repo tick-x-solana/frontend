@@ -5,7 +5,7 @@
  * interaction logic (pan, pinch-zoom, wheel-zoom, click-to-bet) lives here.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { appToast } from "@/src/features/trade/toast";
 import { signWssMessage } from "@/src/features/trade/socketSignature";
 import type { CellData } from "@/src/features/trade/store";
@@ -16,6 +16,7 @@ import type { StoreSnapshot, Transform } from "@/src/utils/gridLayout";
 
 const ZOOM_MAX = 4;
 const ZOOM_SPEED = 0.001;
+const RESET_ANIMATION_MS = 280;
 /** Drag threshold in px below which a mouseup is treated as a click, not a pan */
 const DRAG_CLICK_THRESHOLD = 4;
 
@@ -41,6 +42,10 @@ interface UseGridInteractionOptions {
   getMinZoom: () => number;
 }
 
+function easeInOutCubic(t: number) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useGridInteraction({
@@ -62,6 +67,7 @@ export function useGridInteraction({
     lastOffY: 0,
   });
   const [isDragging, setIsDragging] = useState(false);
+  const resetAnimationFrameRef = useRef<number | null>(null);
 
   // Two-finger pinch state
   const lastTouchDistRef = useRef<number | null>(null);
@@ -83,11 +89,20 @@ export function useGridInteraction({
     previewCellIdRef.current = null;
   }, [previewCellIdRef]);
 
+  const cancelResetAnimation = useCallback(() => {
+    if (resetAnimationFrameRef.current === null) return;
+    cancelAnimationFrame(resetAnimationFrameRef.current);
+    resetAnimationFrameRef.current = null;
+  }, []);
+
+  useEffect(() => cancelResetAnimation, [cancelResetAnimation]);
+
   // ── Zoom helpers ────────────────────────────────────────────────────────────
 
   /** Applies a zoom delta around canvas-space point (mx, my). */
   const applyZoom = useCallback(
     (mx: number, my: number, scaleFactor: number) => {
+      cancelResetAnimation();
       const tf = transformRef.current;
       const { w, h } = sizeRef.current;
       const pivotX = w / 2;
@@ -102,7 +117,7 @@ export function useGridInteraction({
       };
       transformRef.current = next;
     },
-    [getMinZoom, sizeRef, transformRef],
+    [cancelResetAnimation, getMinZoom, sizeRef, transformRef],
   );
 
   // ── Wheel (desktop zoom) ─────────────────────────────────────────────────────
@@ -122,6 +137,7 @@ export function useGridInteraction({
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
+      cancelResetAnimation();
       updatePreviewCell(e.clientX, e.clientY);
       dragRef.current = {
         active: true,
@@ -132,7 +148,7 @@ export function useGridInteraction({
       };
       setIsDragging(true);
     },
-    [transformRef, updatePreviewCell],
+    [cancelResetAnimation, transformRef, updatePreviewCell],
   );
 
   const handleMouseMove = useCallback(
@@ -161,6 +177,7 @@ export function useGridInteraction({
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
+      cancelResetAnimation();
       if (e.touches.length === 1) {
         updatePreviewCell(e.touches[0].clientX, e.touches[0].clientY);
         dragRef.current = {
@@ -183,7 +200,7 @@ export function useGridInteraction({
         };
       }
     },
-    [clearPreviewCell, transformRef, updatePreviewCell],
+    [cancelResetAnimation, clearPreviewCell, transformRef, updatePreviewCell],
   );
 
   const handleTouchMove = useCallback(
@@ -318,8 +335,54 @@ export function useGridInteraction({
   // ── Reset zoom ───────────────────────────────────────────────────────────────
 
   const resetTransform = useCallback(() => {
-    transformRef.current = { offsetX: 0, offsetY: 0, zoom: getMinZoom() };
-  }, [getMinZoom, transformRef]);
+    cancelResetAnimation();
+
+    const start = transformRef.current;
+    const target: Transform = {
+      offsetX: 0,
+      offsetY: 0,
+      zoom: getMinZoom(),
+    };
+
+    const isAlreadyReset =
+      Math.abs(start.offsetX - target.offsetX) < 0.5 &&
+      Math.abs(start.offsetY - target.offsetY) < 0.5 &&
+      Math.abs(start.zoom - target.zoom) < 0.001;
+
+    if (isAlreadyReset) {
+      transformRef.current = target;
+      return;
+    }
+
+    let startTime: number | null = null;
+
+    const step = (timestamp: number) => {
+      if (startTime === null) startTime = timestamp;
+      const progress = Math.min(
+        1,
+        (timestamp - startTime) / RESET_ANIMATION_MS,
+      );
+      const easedProgress = easeInOutCubic(progress);
+
+      transformRef.current = {
+        offsetX:
+          start.offsetX + (target.offsetX - start.offsetX) * easedProgress,
+        offsetY:
+          start.offsetY + (target.offsetY - start.offsetY) * easedProgress,
+        zoom: start.zoom + (target.zoom - start.zoom) * easedProgress,
+      };
+
+      if (progress < 1) {
+        resetAnimationFrameRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      transformRef.current = target;
+      resetAnimationFrameRef.current = null;
+    };
+
+    resetAnimationFrameRef.current = requestAnimationFrame(step);
+  }, [cancelResetAnimation, getMinZoom, transformRef]);
 
   return {
     dragRef,

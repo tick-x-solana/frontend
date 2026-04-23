@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import Image from "next/image";
 import { CopyOutlineIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
@@ -29,7 +28,7 @@ const ReferAFriend = () => {
   };
 
   return (
-    <section className="border-border-main bg-background-main flex w-full max-w-full flex-col gap-3 rounded-lg border p-4 xl:max-w-[360px]">
+    <section className="border-border-main bg-surface-card flex w-full max-w-full flex-col gap-4 rounded-[14px] border p-4 shadow-[0_16px_32px_rgba(0,0,0,0.16)]">
       <div className="flex items-start gap-4">
         <Image
           src="/icons/refer-friend-gem.png"
@@ -40,10 +39,10 @@ const ReferAFriend = () => {
         />
 
         <div className="min-w-0 space-y-1">
-          <h3 className="text-text-heading text-base leading-6 font-semibold tracking-[-0.01em]">
+          <h3 className="text-text-heading text-[22px] font-semibold tracking-[-0.02em]">
             Refer a friend
           </h3>
-          <p className="text-text-sub text-sm leading-5 tracking-[-0.01em]">
+          <p className="text-text-sub text-sm tracking-[-0.01em]">
             Invite a friend to join the platform and earn points!
           </p>
         </div>
@@ -52,18 +51,18 @@ const ReferAFriend = () => {
       <div className="bg-border-main h-px w-full" />
 
       <div className="space-y-1">
-        <p className="text-hint text-sm leading-5 font-medium tracking-[-0.01em]">
+        <p className="text-hint text-sm font-medium tracking-[-0.01em]">
           Share my referral link:
         </p>
-        <div className="bg-surface-overlay flex items-center gap-1.5 rounded-lg px-3 py-2">
-          <p className="min-w-0 flex-1 truncate font-mono text-sm leading-5 font-medium tracking-[-0.01em] text-white">
+        <div className="border-border-main bg-surface-field-strong flex items-center gap-2 rounded-[10px] border px-3 py-2.5">
+          <p className="min-w-0 flex-1 truncate font-mono text-sm font-medium tracking-[0.02em] text-white">
             {REFERRAL_LINK}
           </p>
           <Button
             type="button"
             variant="ghost"
             size="icon-xs"
-            className="focus-visible:ring-primary-light size-5 cursor-pointer rounded-sm border-none bg-transparent p-0 text-white/70 shadow-none transition-colors hover:bg-transparent hover:text-white focus-visible:ring-1"
+            className="focus-visible:ring-primary-light size-5 rounded-sm border-none bg-transparent p-0 text-white/70 shadow-none transition-colors hover:bg-transparent hover:text-white focus-visible:ring-1"
             aria-label="Copy referral link"
             onClick={handleCopyReferral}
           >
@@ -74,7 +73,7 @@ const ReferAFriend = () => {
 
       <Button
         type="button"
-        className="bg-primary-medium text-text-inverse hover:bg-primary-light h-10 w-full rounded-lg px-3 py-1.5 text-sm leading-5 font-medium tracking-[-0.01em]"
+        className="bg-primary-light text-text-inverse hover:bg-primary-medium h-11 w-full rounded-[10px] px-3 text-sm font-semibold tracking-[-0.01em] shadow-none"
       >
         Invite Friends
       </Button>
@@ -86,7 +85,7 @@ const ReferAFriend = () => {
             type="button"
             variant="outline"
             size="icon"
-            className="border-border-main hover:bg-surface-overlay size-10 rounded-[4px] bg-transparent text-white"
+            className="border-border-main hover:bg-surface-overlay size-10 rounded-[8px] bg-transparent text-white"
             aria-label={social.label}
           >
             <Image

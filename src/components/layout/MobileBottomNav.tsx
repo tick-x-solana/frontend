@@ -15,7 +15,7 @@ const navItems: MobileNavItem[] = [
   { href: "/", label: "Trade", icon: LineChart },
   { href: "/portfolio", label: "Portfolio", icon: Wallet },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-  { label: "Explore", icon: Compass },
+  { href: "/explore", label: "Explore", icon: Compass },
 ];
 
 const MobileBottomNav = () => {

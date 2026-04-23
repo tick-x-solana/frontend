@@ -61,7 +61,8 @@ interface GameState {
 
 const MODE_INTERVAL_SECONDS = 5;
 const MODE_PRICE_STEP = 25;
-const MAX_HISTORY_POINTS = 240;
+// Limit chart length
+const MAX_HISTORY_POINTS = 1040;
 const MAX_FOLLOWED_ORDER_ACTIVITIES = 200;
 // Very slow smoothing (2%) so each price tick moves serverTimeOffset by at most
 // ~120ms — shift of ~0.8px at typical zoom. Faster convergence would cause

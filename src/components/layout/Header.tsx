@@ -8,12 +8,7 @@ import { useHealthCheckControllerHealthCheck } from "@/src/services/queries";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { sepolia } from "wagmi/chains";
-import {
-  useAccount,
-  useConnect,
-  useDisconnect,
-  useSwitchChain,
-} from "wagmi";
+import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 
 type NavItem = {
   label: string;
@@ -47,6 +42,8 @@ const Header = () => {
     if (href === "/") return pathname === "/";
     return pathname === href || pathname.startsWith(`${href}/`);
   };
+  const hideOnExploreMobile =
+    pathname === "/explore" || pathname.startsWith("/explore/");
 
   const isWrongNetwork = isConnected && chainId !== sepolia.id;
   const primaryConnector = connectors[0];
@@ -80,7 +77,12 @@ const Header = () => {
   })();
 
   return (
-    <header className="border-border-main bg-background-main px-4 py-3">
+    <header
+      className={[
+        "border-border-main bg-background-main px-4 py-3",
+        hideOnExploreMobile ? "hidden md:block" : "",
+      ].join(" ")}
+    >
       <div className="mx-auto flex w-full items-center gap-6">
         <Link
           href="/"
@@ -133,7 +135,12 @@ const Header = () => {
           type="button"
           size="lg"
           onClick={handleWalletAction}
-          disabled={!primaryConnector || isConnectPending || isSwitchPending || isLoggingIn}
+          disabled={
+            !primaryConnector ||
+            isConnectPending ||
+            isSwitchPending ||
+            isLoggingIn
+          }
           className="bg-primary-light text-text-inverse hover:bg-primary-medium ml-auto h-10 rounded-[8px] px-3 py-1.5 text-sm font-medium tracking-[-0.01em] shadow-none disabled:opacity-60"
         >
           {walletButtonLabel}

@@ -55,6 +55,7 @@
   --color-stroke-main: var(--stroke-main);
   --color-text-main: var(--text-main);
   --color-text-heading: var(--text-heading);
+  --color-text-disabled: var(--text-disabled);
   --color-text-inverse: var(--text-inverse);
   --color-primary-medium: var(--primary-medium);
   --color-primary-light: var(--primary-light);
@@ -66,6 +67,7 @@
   --color-surface-overlay-subtle: var(--surface-overlay-subtle);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
   --color-success-medium: var(--success-medium);
+  --color-success-light: var(--success-light);
   --color-success-background: var(--success-background);
   --color-success-border: var(--success-border);
   --color-reward-gold: var(--reward-gold);
@@ -84,6 +86,13 @@
   --color-warning-medium: var(--warning-medium);
   --color-warning-surface: var(--warning-surface);
   --color-border-subtle: var(--stroke-subtle);
+  --color-surface-card: var(--surface-card);
+  --color-surface-card-strong: var(--surface-card-strong);
+  --color-surface-field: var(--surface-field);
+  --color-surface-field-strong: var(--surface-field-strong);
+  --color-accent-blue: var(--accent-blue);
+  --color-avatar-cyan: var(--avatar-cyan);
+  --color-avatar-blue: var(--avatar-blue);
 }
 
 :root {
@@ -127,6 +136,7 @@
   --color-white: #ffffff;
   --text-main: #e8f4ff;
   --text-heading: #f5faff;
+  --text-disabled: #dadada;
   --text-inverse: #040b18;
   --primary-medium: #a8e8bb;
   --primary-light: #d0f7dc;
@@ -138,6 +148,7 @@
   --surface-overlay-subtle: rgb(255 255 255 / 4%);
   --surface-overlay-strong: rgb(255 255 255 / 12%);
   --success-medium: #11d344;
+  --success-light: #96fea7;
   --success-background: rgb(0 167 84 / 10%);
   --success-border: rgb(0 167 84 / 50%);
   --reward-gold: #fdcc5c;
@@ -155,6 +166,13 @@
   --warning-medium: #fd7f26;
   --warning-surface: rgb(253 127 38 / 16%);
   --stroke-subtle: rgb(228 228 228 / 40%);
+  --surface-card: #091423;
+  --surface-card-strong: #0b1626;
+  --surface-field: #0a1829;
+  --surface-field-strong: #10233a;
+  --accent-blue: #1764ff;
+  --avatar-cyan: #56c5c5;
+  --avatar-blue: #6998ee;
 }
 
 .dark {

@@ -19,11 +19,12 @@ import React, {
 } from "react";
 import { Button } from "@/src/components/shadcn/button";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Eye, Globe, Info } from "lucide-react";
+import { ChevronDown, Eye, Globe, Info, LocateFixed } from "lucide-react";
 import { Sheet } from "react-modal-sheet";
 import { io } from "socket.io-client";
 import { useAccount } from "wagmi";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import OverlayModePanel from "@/src/features/trade/components/OverlayModePanel";
 import TradeControlsPanel from "@/src/features/trade/components/TradeControlsPanel";
 import {
   extractFollowedOrderActivities,
@@ -293,6 +294,8 @@ export const TradingGrid: React.FC = () => {
   });
 
   const [overlayMode, setOverlayMode] = useState(false);
+  const [overlayModeDraft, setOverlayModeDraft] = useState(false);
+  const [isOverlaySheetOpen, setIsOverlaySheetOpen] = useState(false);
   const [isInfoSheetOpen, setIsInfoSheetOpen] = useState(false);
 
   useEffect(() => {
@@ -748,6 +751,7 @@ export const TradingGrid: React.FC = () => {
     handleTouchEnd,
     handleClick,
     clearPreviewCell,
+    resetTransform,
   } = useGridInteraction({
     canvasRef,
     sizeRef,
@@ -787,6 +791,22 @@ export const TradingGrid: React.FC = () => {
     currentPrice > 0 ? livePriceFormatter.format(currentPrice) : "--";
   const displayMarketPrice =
     displayPrice === "--" ? displayPrice : `~ ${displayPrice}`;
+  const handleRecenterGrid = useCallback(() => {
+    clearPreviewCell();
+    resetTransform();
+  }, [clearPreviewCell, resetTransform]);
+  const handleOpenOverlaySheet = useCallback(() => {
+    setOverlayModeDraft(overlayMode);
+    setIsOverlaySheetOpen(true);
+  }, [overlayMode]);
+  const handleCloseOverlaySheet = useCallback(() => {
+    setOverlayModeDraft(overlayMode);
+    setIsOverlaySheetOpen(false);
+  }, [overlayMode]);
+  const handleApplyOverlayMode = useCallback(() => {
+    setOverlayMode(overlayModeDraft);
+    setIsOverlaySheetOpen(false);
+  }, [overlayModeDraft]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -823,12 +843,22 @@ export const TradingGrid: React.FC = () => {
             <Info className="size-4" strokeWidth={1.75} />
           </GridActionButton>
           <GridActionButton
-            aria-label="Toggle overlay mode"
-            aria-pressed={overlayMode}
+            aria-label={
+              overlayMode
+                ? "Overlay mode enabled. Open overlay settings"
+                : "Open overlay settings"
+            }
+            aria-haspopup="dialog"
             active={overlayMode}
-            onClick={() => setOverlayMode((prev) => !prev)}
+            onClick={handleOpenOverlaySheet}
           >
             <Eye className="size-4" strokeWidth={1.75} />
+          </GridActionButton>
+          <GridActionButton
+            aria-label="Recenter trading grid"
+            onClick={handleRecenterGrid}
+          >
+            <LocateFixed className="size-4" strokeWidth={1.75} />
           </GridActionButton>
           <GridActionButton aria-label="Change market region">
             <Globe className="size-4" strokeWidth={1.75} />
@@ -888,18 +918,46 @@ export const TradingGrid: React.FC = () => {
         detent="content"
         unstyled
       >
-        <Sheet.Backdrop className="bg-background-main/55 backdrop-blur-[2px]" />
+        <Sheet.Backdrop
+          onTap={() => setIsInfoSheetOpen(false)}
+          className="bg-background-main/55 backdrop-blur-[2px]"
+        />
         <Sheet.Container className="pointer-events-none">
           <Sheet.Content
             disableDrag={false}
-            className="pointer-events-auto rounded-t-[16px] border-t border-border-main bg-background-main px-5 pt-3 pb-5"
+            className="border-border-main bg-background-main pointer-events-auto rounded-t-[16px] border-t px-5 pt-3 pb-5"
           >
             <TradeControlsPanel
               marketSymbol={MARKET_SYMBOL}
               displayPrice={displayPrice}
               showMarketHeader
               showHandle
+              showCloseButton={false}
               onClose={() => setIsInfoSheetOpen(false)}
+            />
+          </Sheet.Content>
+        </Sheet.Container>
+      </Sheet>
+
+      <Sheet
+        isOpen={isOverlaySheetOpen}
+        onClose={handleCloseOverlaySheet}
+        detent="content"
+        unstyled
+      >
+        <Sheet.Backdrop
+          onTap={handleCloseOverlaySheet}
+          className="bg-background-main/55 backdrop-blur-[2px]"
+        />
+        <Sheet.Container className="pointer-events-none">
+          <Sheet.Content
+            disableDrag={false}
+            className="border-border-main bg-background-main pointer-events-auto rounded-t-[16px] border-t px-5 pt-3 pb-5"
+          >
+            <OverlayModePanel
+              overlayMode={overlayModeDraft}
+              onOverlayModeChange={setOverlayModeDraft}
+              onApply={handleApplyOverlayMode}
             />
           </Sheet.Content>
         </Sheet.Container>

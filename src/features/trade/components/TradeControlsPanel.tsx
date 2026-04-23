@@ -37,6 +37,7 @@ type TradeControlsPanelProps = {
   displayPrice?: string;
   showMarketHeader?: boolean;
   showHandle?: boolean;
+  showCloseButton?: boolean;
   closeLabel?: string;
   onClose?: () => void;
   onAddFunds?: () => void;
@@ -49,6 +50,7 @@ export default function TradeControlsPanel({
   displayPrice = "--",
   showMarketHeader = false,
   showHandle = false,
+  showCloseButton = true,
   closeLabel = "Close trade controls",
   onClose,
   onAddFunds,
@@ -93,7 +95,7 @@ export default function TradeControlsPanel({
               {marketPriceLabel}
             </span>
           </div>
-          {onClose ? (
+          {onClose && showCloseButton ? (
             <Button
               type="button"
               size="icon"
