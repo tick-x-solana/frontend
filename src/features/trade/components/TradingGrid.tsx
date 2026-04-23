@@ -13,6 +13,8 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { ChevronDown } from "lucide-react";
 import { io } from "socket.io-client";
+import { useAccount } from "wagmi";
+import { useAuth } from "@/src/components/providers/AuthProvider";
 import type { RemoteCell } from "@/src/features/trade/store";
 import { BACKEND_URL } from "@/src/features/trade/constant";
 import { useGameStore } from "@/src/features/trade/store";
@@ -37,6 +39,10 @@ const MOBILE_ZOOM_MIN = 1.3;
 const MIN_PRICE_MOTION_MS = 250;
 const MAX_PRICE_MOTION_MS = 5000;
 const TICK_CADENCE_SMOOTHING = 0.2;
+const livePriceFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 function buildDisplayHistory(
   history: StoreSnapshot["history"],
@@ -79,10 +85,8 @@ export const TradingGrid: React.FC = () => {
   const betAmount = useGameStore((s) => s.betAmount);
   const balance = useGameStore((s) => s.balance);
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
-
-  const isDemoMode = useGameStore((s) => s.isDemoMode);
-  const demoAddress = useGameStore((s) => s.demoAddress);
-  const address = isDemoMode ? demoAddress : null;
+  const { address } = useAccount();
+  const { isLoggingIn } = useAuth();
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -489,9 +493,13 @@ export const TradingGrid: React.FC = () => {
   const showLoadingState = !hasLiveData;
   const loadingLabel = socket
     ? "Waiting for live market grid..."
-    : address
+    : isLoggingIn
+      ? "Authenticating wallet..."
+      : address
       ? "Reconnecting to market feed..."
       : "Connect wallet to load the market feed";
+  const displayPrice =
+    currentPrice > 0 ? livePriceFormatter.format(currentPrice) : "--";
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -499,10 +507,12 @@ export const TradingGrid: React.FC = () => {
       <div className="pointer-events-none absolute inset-x-2 top-2 z-20 flex items-center gap-3 sm:inset-x-3">
         <div className="pointer-events-auto flex h-8 items-center gap-1 rounded-[9px] border border-white/80 bg-transparent px-2.5 text-xs font-medium text-white">
           <span className="bg-grid-axis size-2 rounded-full" />
-          ETH/USD
+          BTC/USD
           <ChevronDown className="size-3.5 text-white/80" />
         </div>
-        <span className="text-grid-axis text-xs font-medium">2,290.07</span>
+        <span className="text-grid-axis text-xs font-medium">
+          {displayPrice}
+        </span>
         <span className="h-6 w-px bg-[#113e66]" />
         <button
           type="button"

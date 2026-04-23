@@ -5,6 +5,15 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { useHealthCheckControllerHealthCheck } from "@/src/services/queries";
+import { Button } from "@/src/components/shadcn/button";
+import { useAuth } from "@/src/components/providers/AuthProvider";
+import { sepolia } from "wagmi/chains";
+import {
+  useAccount,
+  useConnect,
+  useDisconnect,
+  useSwitchChain,
+} from "wagmi";
 
 type NavItem = {
   label: string;
@@ -19,8 +28,16 @@ const navItems: NavItem[] = [
   { label: "More", href: "#", hasDropdown: true },
 ];
 
+const formatWalletAddress = (address: string) =>
+  `${address.slice(0, 6)}...${address.slice(-4)}`;
+
 const Header = () => {
   const pathname = usePathname();
+  const { address, chainId, isConnected } = useAccount();
+  const { connect, connectors, isPending: isConnectPending } = useConnect();
+  const { disconnect } = useDisconnect();
+  const { switchChain, isPending: isSwitchPending } = useSwitchChain();
+  const { isLoggingIn } = useAuth();
 
   const { data } = useHealthCheckControllerHealthCheck();
   console.log("data: ", data);
@@ -31,15 +48,46 @@ const Header = () => {
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
+  const isWrongNetwork = isConnected && chainId !== sepolia.id;
+  const primaryConnector = connectors[0];
+
+  const handleWalletAction = () => {
+    if (isWrongNetwork) {
+      switchChain({ chainId: sepolia.id });
+      return;
+    }
+
+    if (isConnected) {
+      disconnect();
+      return;
+    }
+
+    if (!primaryConnector) return;
+
+    connect({
+      connector: primaryConnector,
+      chainId: sepolia.id,
+    });
+  };
+
+  const walletButtonLabel = (() => {
+    if (isLoggingIn) return "Signing in...";
+    if (isSwitchPending) return "Switching...";
+    if (isConnectPending) return "Connecting...";
+    if (isWrongNetwork) return "Switch to Sepolia";
+    if (isConnected && address) return formatWalletAddress(address);
+    return "Connect Wallet";
+  })();
+
   return (
-    <header className="border-b border-[#16305a] bg-[#040b18] px-4 py-3">
+    <header className="border-border-main bg-background-main px-4 py-3">
       <div className="mx-auto flex w-full items-center gap-6">
         <Link
           href="/"
           className="flex shrink-0 items-center gap-[10.324px]"
           aria-label="TickX home"
         >
-          <span className="flex h-8 w-[33.085px] items-center justify-center rounded-[2.893px] bg-[#d0f7dc]">
+          <span className="bg-primary-light flex h-8 w-[33.085px] items-center justify-center rounded-[2.893px]">
             <Image
               src="/branding/tickx-mark.svg"
               alt=""
@@ -66,8 +114,8 @@ const Header = () => {
                   className={[
                     "flex items-center justify-center gap-2 rounded-[8px] px-[10px] py-2 text-center text-sm leading-5 tracking-[-0.01em] transition-colors",
                     isActivePath(item.href)
-                      ? "bg-[rgba(208,247,220,0.12)] font-semibold text-[#d0f7dc]"
-                      : "font-semibold text-[rgba(255,255,255,0.6)] hover:text-[rgba(255,255,255,0.85)]",
+                      ? "bg-primary-light/12 text-primary-light font-semibold"
+                      : "font-semibold text-white/60 hover:text-white/85",
                   ].join(" ")}
                 >
                   <span>{item.label}</span>
@@ -78,15 +126,18 @@ const Header = () => {
               </li>
             ))}
           </ul>
-          <span className="h-8 w-px shrink-0 bg-[#16305a]" aria-hidden />
+          <span className="bg-border-main h-8 w-px shrink-0" aria-hidden />
         </nav>
 
-        <button
+        <Button
           type="button"
-          className="ml-auto inline-flex h-10 items-center justify-center rounded-[8px] bg-[#d0f7dc] px-3 py-1.5 text-sm leading-5 font-medium tracking-[-0.01em] text-[#040b18] transition-colors hover:bg-[#bdecc9]"
+          size="lg"
+          onClick={handleWalletAction}
+          disabled={!primaryConnector || isConnectPending || isSwitchPending || isLoggingIn}
+          className="bg-primary-light text-text-inverse hover:bg-primary-medium ml-auto h-10 rounded-[8px] px-3 py-1.5 text-sm font-medium tracking-[-0.01em] shadow-none disabled:opacity-60"
         >
-          Connect Wallet
-        </button>
+          {walletButtonLabel}
+        </Button>
       </div>
     </header>
   );

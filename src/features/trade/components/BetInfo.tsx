@@ -1,6 +1,7 @@
 "use client";
 
 import WldMarketIcon from "@/src/assets/icons/wld-market.svg";
+import { useAuth } from "@/src/components/providers/AuthProvider";
 import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
 import { cn } from "@/lib/utils";
@@ -17,13 +18,13 @@ const formatMoney = (amount: number) =>
   }).format(amount);
 
 const formatWalletAddress = (address: string | null) => {
-  if (!address) return "0x81962...1827659";
+  if (!address) return "Not connected";
   if (!address.startsWith("0x") || address.length < 14) return address;
   return `${address.slice(0, 7)}...${address.slice(-7)}`;
 };
 
 export default function BetInfo() {
-  const rawAddress = useGameStore((s) => s.demoAddress);
+  const { walletAddress: rawAddress } = useAuth();
   const balance = useGameStore((s) => s.balance);
   const betAmount = useGameStore((s) => s.betAmount);
   const setBetAmount = useGameStore((s) => s.setBetAmount);

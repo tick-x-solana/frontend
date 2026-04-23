@@ -47,8 +47,6 @@ interface GameState {
   wssKey: string | null;
   betAmount: number;
   serverTimeOffset: number;
-  isDemoMode: boolean;
-  demoAddress: string | null;
   setBetAmount: (amount: number) => void;
   placeBet: (cellId: string, amount: number) => void;
   checkWinEffects: (now: number) => void;
@@ -161,8 +159,6 @@ export const useGameStore = create<GameState>((set) => ({
   wssKey: null,
   betAmount: 10,
   serverTimeOffset: 0,
-  isDemoMode: true,
-  demoAddress: "0xD49f9f4A840F0a7cCb8173729Fa9d82dBAF427f4",
 
   setBetAmount: (amount) => set({ betAmount: amount }),
 
