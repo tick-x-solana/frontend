@@ -49,9 +49,25 @@
 
   /* Self config */
   --color-background-main: var(--background-main);
+  --color-background-subtle: var(--background-subtle);
+  --color-background-surface: var(--background-surface);
   --color-white: var(--color-white);
+  --color-stroke-main: var(--stroke-main);
+  --color-text-main: var(--text-main);
+  --color-text-heading: var(--text-heading);
+  --color-text-inverse: var(--text-inverse);
   --color-primary-medium: var(--primary-medium);
+  --color-primary-light: var(--primary-light);
   --color-hint: var(--color-hint);
+  --color-text-sub: var(--text-sub);
+  --color-border-main: var(--stroke-main);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-surface-overlay-subtle: var(--surface-overlay-subtle);
+  --color-surface-overlay-strong: var(--surface-overlay-strong);
+  --color-success-medium: var(--success-medium);
+  --color-success-background: var(--success-background);
+  --color-success-border: var(--success-border);
+  --color-reward-gold: var(--reward-gold);
 }
 
 :root {
@@ -90,9 +106,24 @@
 
   /* Self config */
   --background-main: #040b18;
+  --background-subtle: #1e3550;
+  --background-surface: #0d1e30;
   --color-white: #ffffff;
+  --text-main: #e8f4ff;
+  --text-heading: #f5faff;
+  --text-inverse: #040b18;
   --primary-medium: #a8e8bb;
+  --primary-light: #d0f7dc;
   --color-hint: #587994;
+  --text-sub: #7a9bb5;
+  --stroke-main: #1e3550;
+  --surface-overlay: rgb(255 255 255 / 6%);
+  --surface-overlay-subtle: rgb(255 255 255 / 4%);
+  --surface-overlay-strong: rgb(255 255 255 / 12%);
+  --success-medium: #11d344;
+  --success-background: rgb(0 167 84 / 10%);
+  --success-border: rgb(0 167 84 / 50%);
+  --reward-gold: #fdcc5c;
 }
 
 .dark {
@@ -171,6 +202,16 @@
 }
 
 @utility flow-row {
+  display: flex;
+  flex-direction: row;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
   display: flex;
   flex-direction: row;
 }

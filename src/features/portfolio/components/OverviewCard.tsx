@@ -18,7 +18,7 @@ const OverviewCard = ({
   return (
     <div
       className={cn(
-        "flex flex-col items-center gap-2 overflow-hidden rounded-[8px] border border-[#1e3550] bg-background-main px-[10px] py-[10px] text-center",
+        "border-stroke-main bg-background-main flex flex-col items-center gap-2 overflow-hidden rounded-[8px] border px-[10px] py-[10px] text-center",
         className,
       )}
     >

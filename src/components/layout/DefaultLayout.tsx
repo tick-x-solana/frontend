@@ -7,7 +7,9 @@ const DefaultLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="bg-background-main flex min-h-screen flex-col">
       <Header />
-      <main className="flex-1 pb-[60px] md:pb-0">{children}</main>
+      <main className="bg-background-main flex-1 pb-[60px] md:pb-0">
+        {children}
+      </main>
       <div className="hidden md:block">
         <Footer />
       </div>

@@ -2,6 +2,7 @@ import ActiveTab from "@/src/components/common/ActiveTab";
 import Title from "@/src/components/common/Title";
 import ActivePredictionCard from "@/src/features/portfolio/components/ActivePredictionCard";
 import OverviewCard from "@/src/features/portfolio/components/OverviewCard";
+import Image from "next/image";
 import { Suspense } from "react";
 
 const portfolioTabs = [
@@ -17,7 +18,14 @@ const overviewCards = [
 
 const Portfolio = () => {
   return (
-    <div className="bg-background-main flex-col gap-4 px-4 py-4 md:gap-6 md:px-10 xl:gap-8 xl:px-20">
+    <div className="bg-background-main relative flex-col gap-4 overflow-hidden px-4 py-4 md:gap-6 md:px-10 xl:gap-8 xl:px-20">
+      <Image
+        src="/line-background.svg"
+        alt="tickx"
+        width={100}
+        height={100}
+        className="pointer-events-none absolute top-[100px] z-0 h-full w-full object-cover opacity-50"
+      />
       <div className="flex flex-col gap-4 md:flex-row md:items-center xl:gap-10">
         <Title>Portfolio</Title>
         <Suspense

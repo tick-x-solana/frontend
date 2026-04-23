@@ -40,7 +40,7 @@ const ActivePredictionCard = ({
   return (
     <div
       className={cn(
-        "w-full rounded-[8px] border border-[#1e3550] bg-[#0d1e30] p-6",
+        "bg-background-surface border-stroke-main relative z-10 w-full rounded-[8px] border p-6",
         className,
       )}
     >
@@ -79,7 +79,7 @@ const ActivePredictionCard = ({
         </div>
       </div>
 
-      <div className="my-4 border-t border-[#1e3550]" />
+      <div className="border-border-main my-4 border-t" />
 
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-4">

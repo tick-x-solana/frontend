@@ -1,0 +1,6 @@
+<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M44 44H4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+<path d="M42 44V29C42 27.3431 40.6569 26 39 26H33C31.3431 26 30 27.3431 30 29V44" stroke="currentColor" stroke-width="3"/>
+<path d="M30 44V10C30 7.17157 30 5.75736 29.1213 4.87868C28.2426 4 26.8284 4 24 4C21.1716 4 19.7574 4 18.8787 4.87868C18 5.75736 18 7.17157 18 10V44" stroke="currentColor" stroke-width="3"/>
+<path d="M18 44V19C18 17.3431 16.6569 16 15 16H9C7.34315 16 6 17.3431 6 19V44" stroke="currentColor" stroke-width="3"/>
+</svg>
