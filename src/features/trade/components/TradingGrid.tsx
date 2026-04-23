@@ -32,9 +32,31 @@ import { useGridInteraction } from "@/src/hooks/useGridInteraction";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DESKTOP_ZOOM_MIN = 1;
-const MOBILE_ZOOM_MIN = 1.8;
+const DESKTOP_ZOOM_MIN = 1.3;
+const MOBILE_ZOOM_MIN = 1.3;
+const MIN_PRICE_MOTION_MS = 250;
+const MAX_PRICE_MOTION_MS = 5000;
+const TICK_CADENCE_SMOOTHING = 0.2;
 
+function buildDisplayHistory(
+  history: StoreSnapshot["history"],
+  now: number,
+  displayPrice: number,
+): StoreSnapshot["history"] {
+  if (history.length === 0 || !Number.isFinite(displayPrice)) return history;
+
+  const lastPoint = history[history.length - 1];
+  const displayTime = Math.max(now, lastPoint.time);
+
+  if (
+    displayTime === lastPoint.time &&
+    Math.abs(displayPrice - lastPoint.price) < 1e-6
+  ) {
+    return history;
+  }
+
+  return [...history, { time: displayTime, price: displayPrice }];
+}
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const TradingGrid: React.FC = () => {
@@ -83,6 +105,17 @@ export const TradingGrid: React.FC = () => {
     offsetY: 0,
     zoom: initialMinZoom,
   });
+  const priceMotionRef = useRef<{
+    startPrice: number;
+    targetPrice: number;
+    startTime: number;
+    durationMs: number;
+  } | null>(null);
+  const tickCadenceMsRef = useRef(1000);
+  const lastHistoryPointRef = useRef<{
+    time: number;
+    price: number;
+  } | null>(null);
   const drawRef = useRef<() => void>(() => {});
   const rafRef = useRef<number>(0);
   const triggeredWinsRef = useRef<Set<string>>(new Set());
@@ -110,7 +143,11 @@ export const TradingGrid: React.FC = () => {
     const nextDims =
       cells !== prevCells
         ? computeGridDimensions(
-            cells.map((c) => ({ ...c.original, startTs: c.timeWindowStart, endTs: c.timeWindowEnd }))
+            cells.map((c) => ({
+              ...c.original,
+              startTs: c.timeWindowStart,
+              endTs: c.timeWindowEnd,
+            })),
           )
         : storeRef.current.dims;
     storeRef.current = {
@@ -131,12 +168,6 @@ export const TradingGrid: React.FC = () => {
     };
   });
 
-  // Zoom / pan React state mirror (real value is in transformRef)
-  const [, setTransform] = useState<Transform>({
-    offsetX: 0,
-    offsetY: 0,
-    zoom: initialMinZoom,
-  });
   const [overlayMode, setOverlayMode] = useState(false);
 
   // ── Live socket feed ───────────────────────────────────────────────────────
@@ -200,6 +231,58 @@ export const TradingGrid: React.FC = () => {
     });
   }, [cells, bets, pendingBets]);
 
+  useEffect(() => {
+    if (history.length === 0) return;
+
+    const lastPoint = history[history.length - 1];
+    const previousRealPoint =
+      history.length > 1 ? history[history.length - 2] : null;
+    const previousTrackedPoint = lastHistoryPointRef.current;
+
+    if (
+      previousTrackedPoint &&
+      previousTrackedPoint.time === lastPoint.time &&
+      previousTrackedPoint.price === lastPoint.price
+    ) {
+      return;
+    }
+
+    if (!previousTrackedPoint || cameraPriceRef.current === 0) {
+      cameraPriceRef.current = lastPoint.price;
+      priceMotionRef.current = null;
+      lastHistoryPointRef.current = {
+        time: lastPoint.time,
+        price: lastPoint.price,
+      };
+      return;
+    }
+
+    const observedInterval = previousRealPoint
+      ? lastPoint.time - previousRealPoint.time
+      : 0;
+    if (observedInterval > 0) {
+      tickCadenceMsRef.current =
+        tickCadenceMsRef.current +
+        (observedInterval - tickCadenceMsRef.current) * TICK_CADENCE_SMOOTHING;
+    }
+    const durationMs = Math.min(
+      MAX_PRICE_MOTION_MS,
+      Math.max(MIN_PRICE_MOTION_MS, tickCadenceMsRef.current * 0.92),
+    );
+
+    priceMotionRef.current = {
+      startPrice: cameraPriceRef.current,
+      targetPrice: lastPoint.price,
+      startTime:
+        nowRef.current > 0 ? nowRef.current : Date.now() + serverTimeOffset,
+      durationMs,
+    };
+    lastHistoryPointRef.current = {
+      time: lastPoint.time,
+      price: lastPoint.price,
+    };
+  }, [history, serverTimeOffset]);
+
   // ── Resize observer ────────────────────────────────────────────────────────
   useEffect(() => {
     const el = wrapRef.current;
@@ -214,9 +297,7 @@ export const TradingGrid: React.FC = () => {
       const minZoom = getMinZoom();
 
       if (transformRef.current.zoom < minZoom) {
-        const next = { ...transformRef.current, zoom: minZoom };
-        transformRef.current = next;
-        setTransform(next);
+        transformRef.current = { ...transformRef.current, zoom: minZoom };
       }
 
       const cv = canvasRef.current;
@@ -277,6 +358,14 @@ export const TradingGrid: React.FC = () => {
     );
     const store = storeRef.current;
     const isMobile = isMobileRef.current;
+    const drawStore = {
+      ...store,
+      history: buildDisplayHistory(
+        store.history,
+        nowRef.current,
+        cameraPriceRef.current,
+      ),
+    };
     ctx.save();
     ctx.scale(dpr, dpr);
 
@@ -284,10 +373,10 @@ export const TradingGrid: React.FC = () => {
     ctx.fillStyle = COLOR_BG;
     ctx.fillRect(0, 0, layout.w, layout.h);
 
-    drawBackgroundGrid(ctx, layout, store);
-    drawBetCells(ctx, layout, store, isMobile);
-    drawPriceLine(ctx, layout, store);
-    drawPriceAxis(ctx, layout, store, isMobile);
+    drawBackgroundGrid(ctx, layout, drawStore);
+    drawBetCells(ctx, layout, drawStore, isMobile);
+    drawPriceLine(ctx, layout, drawStore);
+    drawPriceAxis(ctx, layout, drawStore, isMobile);
     drawTimeAxis(ctx, layout, isMobile);
     drawZoomIndicator(ctx, layout, tf.zoom);
 
@@ -305,8 +394,6 @@ export const TradingGrid: React.FC = () => {
   }, [serverTimeOffset]);
 
   useEffect(() => {
-    let lastRender = 0;
-    let lastLoopTime = performance.now();
     // Throttle checkWinEffects — cell windows are 5 s wide so checking once per second is plenty.
     let lastWinCheck = 0;
 
@@ -315,42 +402,43 @@ export const TradingGrid: React.FC = () => {
       const wallClockNow = Date.now();
       const state = useGameStore.getState();
       const target = state.currentPrice;
-      const dt = Math.min(64, Math.max(0, loopNow - lastLoopTime));
-      lastLoopTime = loopNow;
 
-      // Snap on first price, then smooth-follow with a frame-rate independent EMA.
-      if (cameraPriceRef.current === 0 && target !== 0) {
+      const nextNow = wallClockNow + state.serverTimeOffset;
+      nowRef.current = nextNow;
+
+      // Animate each real tick across most of the gap to the next tick so the
+      // line keeps moving instead of snapping and then idling.
+      const motion = priceMotionRef.current;
+      if (motion && motion.durationMs > 0) {
+        const elapsed = nextNow - motion.startTime;
+        const progress = Math.min(1, Math.max(0, elapsed / motion.durationMs));
+        cameraPriceRef.current =
+          motion.startPrice +
+          (motion.targetPrice - motion.startPrice) * progress;
+
+        if (progress >= 1) {
+          cameraPriceRef.current = motion.targetPrice;
+          priceMotionRef.current = null;
+        }
+      } else if (cameraPriceRef.current === 0 && target !== 0) {
         cameraPriceRef.current = target;
-      } else {
-        const tauMs = 120;
-        const alpha = 1 - Math.exp(-dt / tauMs);
-        cameraPriceRef.current += (target - cameraPriceRef.current) * alpha;
-
-        if (Math.abs(target - cameraPriceRef.current) < 1e-6) {
-          cameraPriceRef.current = target;
-        }
+      } else if (Math.abs(target - cameraPriceRef.current) < 1e-6) {
+        cameraPriceRef.current = target;
       }
 
-      // Cap to ~66 fps to avoid burning CPU
-      if (loopNow - lastRender > 15) {
-        nowRef.current = wallClockNow + state.serverTimeOffset;
-        lastRender = loopNow;
-
-        // Only check win effects once per second — avoids zustand setState at 60fps.
-        if (loopNow - lastWinCheck > 1000) {
-          const hasOpenBetState =
-            Object.keys(state.pendingBets).length > 0 ||
-            Object.keys(state.bets).length > 0 ||
-            Object.keys(state.pendingWins).length > 0;
-          if (hasOpenBetState) {
-            state.checkWinEffects(nowRef.current);
-          }
-          lastWinCheck = loopNow;
+      // Only check win effects once per second — avoids zustand setState at 60fps.
+      if (loopNow - lastWinCheck > 1000) {
+        const hasOpenBetState =
+          Object.keys(state.pendingBets).length > 0 ||
+          Object.keys(state.bets).length > 0 ||
+          Object.keys(state.pendingWins).length > 0;
+        if (hasOpenBetState) {
+          state.checkWinEffects(nowRef.current);
         }
-
-        draw();
+        lastWinCheck = loopNow;
       }
 
+      draw();
       rafRef.current = requestAnimationFrame(loop);
     };
 
@@ -377,7 +465,6 @@ export const TradingGrid: React.FC = () => {
     storeRef,
     hitTest,
     placeBet,
-    setTransform,
     getMinZoom,
   });
 

@@ -36,7 +36,6 @@ interface UseGridInteractionOptions {
   storeRef: React.RefObject<StoreSnapshot>;
   hitTest: (cx: number, cy: number) => CellData | null;
   placeBet: (cellId: string, amount: number) => void;
-  setTransform: (t: Transform) => void;
   getMinZoom: () => number;
 }
 
@@ -50,7 +49,6 @@ export function useGridInteraction({
   storeRef,
   hitTest,
   placeBet,
-  setTransform,
   getMinZoom,
 }: UseGridInteractionOptions) {
   const dragRef = useRef<DragState>({
@@ -84,9 +82,8 @@ export function useGridInteraction({
         offsetY: my - pivotY - (my - pivotY - tf.offsetY) * ratio,
       };
       transformRef.current = next;
-      setTransform(next);
     },
-    [getMinZoom, sizeRef, transformRef, setTransform],
+    [getMinZoom, sizeRef, transformRef],
   );
 
   // ── Wheel (desktop zoom) ─────────────────────────────────────────────────────
@@ -125,9 +122,8 @@ export function useGridInteraction({
         offsetY: d.lastOffY + (e.clientY - d.startY),
       };
       transformRef.current = next;
-      setTransform(next);
     },
-    [transformRef, setTransform],
+    [transformRef],
   );
 
   const endDrag = useCallback(() => {
@@ -172,7 +168,6 @@ export function useGridInteraction({
           offsetY: dragRef.current.lastOffY + (e.touches[0].clientY - dragRef.current.startY),
         };
         transformRef.current = next;
-        setTransform(next);
       } else if (
         e.touches.length === 2 &&
         lastTouchDistRef.current !== null &&
@@ -191,7 +186,7 @@ export function useGridInteraction({
         lastTouchMidRef.current = mid;
       }
     },
-    [canvasRef, transformRef, setTransform, applyZoom],
+    [canvasRef, transformRef, applyZoom],
   );
 
   const handleTouchEnd = useCallback(() => {
@@ -265,10 +260,8 @@ export function useGridInteraction({
   // ── Reset zoom ───────────────────────────────────────────────────────────────
 
   const resetTransform = useCallback(() => {
-    const next: Transform = { offsetX: 0, offsetY: 0, zoom: getMinZoom() };
-    transformRef.current = next;
-    setTransform(next);
-  }, [getMinZoom, transformRef, setTransform]);
+    transformRef.current = { offsetX: 0, offsetY: 0, zoom: getMinZoom() };
+  }, [getMinZoom, transformRef]);
 
   return {
     dragRef,

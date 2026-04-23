@@ -8,6 +8,10 @@
 
 import type { GridLayout, StoreSnapshot } from "./gridLayout";
 import { clamp } from "./gridLayout";
+import {
+  getCellHideThresholdTime,
+  getLatestChartTime,
+} from "@/src/features/trade/gridTiming";
 
 const timeLabelFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
@@ -61,6 +65,10 @@ function roundRect(
 function formatMultiplier(value: number): string {
   const rounded = Number(value.toFixed(2));
   return `${rounded.toString()}x`;
+}
+
+function hasChartReachedColumn(chartX: number, columnX: number) {
+  return chartX >= columnX - 0.5;
 }
 
 // ─── Background grid ──────────────────────────────────────────────────────────
@@ -169,10 +177,13 @@ export function drawBetCells(
     cellH,
     effectivePriceStep,
   } = layout;
-  const { cells, bets, pendingBets } = store;
+  const { cells, bets, history, pendingBets } = store;
+  const chartTime = getLatestChartTime(history, now);
+  const hideThresholdTime = getCellHideThresholdTime(chartTime);
+  const chartHeadX = toCanvasX(chartTime);
   const selectedColumnStart =
     cells
-      .filter((cell) => cell.timeWindowStart > now)
+      .filter((cell) => !hasChartReachedColumn(chartHeadX, toCanvasX(cell.timeWindowStart)))
       .reduce<
         number | null
       >((minTs, cell) => (minTs === null || cell.timeWindowStart < minTs ? cell.timeWindowStart : minTs), null) ??
@@ -195,8 +206,12 @@ export function drawBetCells(
 
     const cx = toCanvasX(cell.timeWindowStart);
     const cellTop = toCellY(cell.priceLevel + effectivePriceStep / 2);
+    const chartReachedColumn = hasChartReachedColumn(chartHeadX, cx);
+    const hasTrackedState = hasAnyBet || isHit;
 
-    const isFuture = cell.timeWindowStart > now;
+    if (chartReachedColumn && !hasTrackedState) continue;
+
+    const isFuture = cell.timeWindowStart > hideThresholdTime;
     const isNext = isFuture && cell.timeWindowStart - now <= CLOSING_MS;
     const isSelectedColumn =
       selectedColumnStart !== null &&

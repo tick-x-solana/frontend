@@ -1,6 +1,10 @@
 "use client";
 
 import { create } from "zustand";
+import {
+  getCellHideThresholdTime,
+  getLatestChartTime,
+} from "@/src/features/trade/gridTiming";
 
 export interface PricePoint {
   time: number;
@@ -134,6 +138,13 @@ function mapRemoteCells(remoteCells: RemoteCell[], now: number): CellData[] {
     .filter((cell): cell is CellData => cell !== null);
 }
 
+function sortGridCells(a: CellData, b: CellData): number {
+  if (a.timeWindowStart !== b.timeWindowStart) {
+    return a.timeWindowStart - b.timeWindowStart;
+  }
+  return b.priceLevel - a.priceLevel;
+}
+
 export const useGameStore = create<GameState>((set) => ({
   balance: 1000,
   serverBalance: 1000,
@@ -210,8 +221,34 @@ export const useGameStore = create<GameState>((set) => ({
       }
 
       const now = getServerNow(nextServerTimeOffset);
+      const chartTime = getLatestChartTime(state.history, now);
+      const hideThresholdTime = getCellHideThresholdTime(chartTime);
+      const incomingCells = mapRemoteCells(remoteCells, now);
+      const incomingIds = new Set(incomingCells.map((cell) => cell.id));
+      const retainedCells = state.cells
+        .filter((cell) => {
+          if (incomingIds.has(cell.id)) return false;
+
+          const hasTrackedState =
+            (state.bets[cell.id] || 0) > 0 ||
+            (state.pendingBets[cell.id] || 0) > 0 ||
+            state.pendingWins[cell.id] !== undefined;
+
+          // Keep cells the server has already rolled off only until the chart
+          // reaches that column. This keeps store retention aligned with the
+          // canvas hide threshold.
+          return cell.timeWindowStart > hideThresholdTime || hasTrackedState;
+        })
+        .map((cell) => ({
+          ...cell,
+          status:
+            cell.status === "hit"
+              ? "hit"
+              : statusForWindow(now, cell.timeWindowStart, cell.timeWindowEnd),
+        }));
+
       return {
-        cells: mapRemoteCells(remoteCells, now),
+        cells: [...retainedCells, ...incomingCells].sort(sortGridCells),
         serverTimeOffset: nextServerTimeOffset,
       };
     }),

@@ -84,6 +84,7 @@ export function computeLayout(
   store: StoreSnapshot,
 ): GridLayout {
   const BASE_DATA_COLS = 11;
+  const BASE_DATA_ROWS = 9;
   const VIEWPORT_PADDING_COLS = 2;
   const LEADING_PADDING_COLS = 1;
 
@@ -95,9 +96,10 @@ export function computeLayout(
   const dims = store.dims ?? computeGridDimensions(
     rawCells.map((c) => ({ ...c.original, startTs: c.timeWindowStart, endTs: c.timeWindowEnd }))
   );
-  // dataRows drives the vertical cell size — don't let transient row-count changes
-  // affect layout; clamp to the stable baseline.
-  const dataRows = dims.rowCount || 9;
+  // Keep the row budget stable for the same reason as columns: live payload
+  // rowCount can fluctuate as the backend recentres the grid, and letting that
+  // drive cellSize produces a visible canvas rescale.
+  const dataRows = BASE_DATA_ROWS;
 
   const intervalMs = modeIntervalSeconds * 1000;
   const effectivePriceStep = dims.priceStep > 0 ? dims.priceStep : modePriceStep;
@@ -106,21 +108,16 @@ export function computeLayout(
   // cameraTimeRef — already EMA-smoothed so no extra computation needed here.
   const chartHeadTime = now;
 
-  // Fit the viewport to the actual grid payload so all server-provided columns
-  // remain visible. The feed sends a forward-looking strip (11 columns), so a
-  // `now`-anchored window would only expose the first couple of columns.
-  const dataColumnCount = Math.max(BASE_DATA_COLS, dims.columnCount || 0);
-  const visibleCols = dataColumnCount + VIEWPORT_PADDING_COLS;
-  const firstDataStart =
-    dims.columns.length > 0
-      ? dims.columns[0].startTs
-      : Math.floor(chartHeadTime / intervalMs) * intervalMs;
-  const firstTime = firstDataStart - LEADING_PADDING_COLS * intervalMs;
+  // Keep the viewport width stable. If visibleCols tracks live server column
+  // count, removing the leading column makes cellSize shrink/grow for one
+  // frame, which reads as a horizontal "kick" exactly when a column hides.
+  const visibleCols = BASE_DATA_COLS + VIEWPORT_PADDING_COLS;
+  const firstTime = chartHeadTime - LEADING_PADDING_COLS * intervalMs;
   const lastTime = firstTime + visibleCols * intervalMs;
-  const gridAnchorTime =
-    dims.columns.length > 0
-      ? dims.columns[0].startTs
-      : Math.floor(firstTime / intervalMs) * intervalMs;
+  // Snap the background grid to the scrolling viewport instead of the first
+  // live server column, otherwise rolling off that column shifts the whole
+  // grid phase by one interval.
+  const gridAnchorTime = Math.floor(firstTime / intervalMs) * intervalMs;
   const gridAnchorPrice =
     rawCells.length > 0 ? rawCells[0].priceLevel : basePrice;
 
