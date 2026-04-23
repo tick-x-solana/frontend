@@ -7,6 +7,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { appToast } from "@/src/features/trade/toast";
+import { signWssMessage } from "@/src/features/trade/socketSignature";
 import type { CellData } from "@/src/features/trade/store";
 import { clamp } from "@/src/utils/gridLayout";
 import type { StoreSnapshot, Transform } from "@/src/utils/gridLayout";
@@ -234,7 +235,7 @@ export function useGridInteraction({
   // ── Click → place bet ────────────────────────────────────────────────────────
 
   const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    async (e: React.MouseEvent<HTMLDivElement>) => {
       // Ignore if the pointer moved more than threshold (it was a drag)
       const d = dragRef.current;
       if (
@@ -274,22 +275,36 @@ export function useGridInteraction({
           return;
         }
 
-        // Emit best-effort event when socket is available.
-        if (
-          socket &&
-          typeof socket === "object" &&
-          "emit" in socket &&
-          typeof socket.emit === "function"
-        ) {
-          const payload = {
-            userId: address || "demo-user",
-            marketId: "BTCUSDT",
-            amount: betAmount.toString(),
-            cell: cell.original,
-            ...(wssKey ? { userSignature: wssKey } : {}),
-          };
-          socket.emit("place_bet", payload);
+        if (!address || !wssKey) {
+          appToast.error("Missing wallet session. Reconnect and try again.", {
+            icon: "🔐",
+          });
+          return;
         }
+
+        if (
+          !socket ||
+          typeof socket !== "object" ||
+          !("emit" in socket) ||
+          typeof socket.emit !== "function"
+        ) {
+          appToast.error("Connection unavailable. Try again.", { icon: "📡" });
+          return;
+        }
+
+        const amount = betAmount.toString();
+        const cellId = cell.id;
+        const message = `${cell.original.gridTs}:${cellId}:${amount}`;
+        const signature = await signWssMessage(wssKey, message);
+        const payload = {
+          userId: address,
+          marketId: "BTCUSDT",
+          amount,
+          cell: cell.original,
+          userSignature: signature,
+        };
+
+        socket.emit("place_bet", payload);
 
         placeBet(cell.id, betAmount);
         clearPreviewCell();

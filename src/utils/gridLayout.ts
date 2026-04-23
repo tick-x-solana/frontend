@@ -9,6 +9,7 @@
 import { computeGridDimensions } from "./gridDimensions";
 import type { GridDimensions } from "./gridDimensions";
 import type { CellData } from "@/src/features/trade/store";
+import type { FollowedOrderActivity } from "@/src/features/trade/orderFollow";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ export interface StoreSnapshot {
   socket: unknown;
   wssKey: string | null;
   address: string | null | undefined;
+  followedOrderActivities: FollowedOrderActivity[];
   /** Cached result of computeGridDimensions — updated only when cells change. */
   dims: GridDimensions | null;
 }

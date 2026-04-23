@@ -62,6 +62,7 @@
   --color-text-sub: var(--text-sub);
   --color-border-main: var(--stroke-main);
   --color-surface-overlay: var(--surface-overlay);
+  --color-surface-overlay-medium: var(--surface-overlay-medium);
   --color-surface-overlay-subtle: var(--surface-overlay-subtle);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
   --color-success-medium: var(--success-medium);
@@ -80,6 +81,9 @@
   --color-border-primary: var(--stroke-primary);
   --color-text-link-main: var(--text-link-main);
   --color-surface-selected: var(--surface-selected);
+  --color-warning-medium: var(--warning-medium);
+  --color-warning-surface: var(--warning-surface);
+  --color-border-subtle: var(--stroke-subtle);
 }
 
 :root {
@@ -130,6 +134,7 @@
   --text-sub: #7a9bb5;
   --stroke-main: #1e3550;
   --surface-overlay: rgb(255 255 255 / 6%);
+  --surface-overlay-medium: rgb(255 255 255 / 8%);
   --surface-overlay-subtle: rgb(255 255 255 / 4%);
   --surface-overlay-strong: rgb(255 255 255 / 12%);
   --success-medium: #11d344;
@@ -147,6 +152,9 @@
   --stroke-primary: var(--primary-light);
   --text-link-main: #7fd89a;
   --surface-selected: rgb(17 26 36 / 90%);
+  --warning-medium: #fd7f26;
+  --warning-surface: rgb(253 127 38 / 16%);
+  --stroke-subtle: rgb(228 228 228 / 40%);
 }
 
 .dark {

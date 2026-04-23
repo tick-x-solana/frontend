@@ -5,7 +5,10 @@ export default function Home() {
   return (
     <div className="bg-background-main flex h-full flex-1 flex-col">
       <div className="flex max-h-[calc(100vh-120px)] min-h-[calc(100vh-120px)] flex-1">
-        <BetInfo />
+        <div className="hidden md:block">
+          <BetInfo />
+        </div>
+
         <TradingGrid />
       </div>
     </div>

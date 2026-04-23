@@ -10,14 +10,35 @@
  *   TradingGrid.tsx           — React wiring: store selectors, rAF loop, resize observer
  */
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import { ChevronDown } from "lucide-react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
+import { Button } from "@/src/components/shadcn/button";
+import { cn } from "@/lib/utils";
+import { ChevronDown, Eye, Globe, Info } from "lucide-react";
+import { Sheet } from "react-modal-sheet";
 import { io } from "socket.io-client";
 import { useAccount } from "wagmi";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import TradeControlsPanel from "@/src/features/trade/components/TradeControlsPanel";
+import {
+  extractFollowedOrderActivities,
+  extractOrderFollowings,
+  extractWssKey,
+} from "@/src/features/trade/orderFollow";
 import type { RemoteCell } from "@/src/features/trade/store";
 import { BACKEND_URL } from "@/src/features/trade/constant";
 import { useGameStore } from "@/src/features/trade/store";
+import {
+  authControllerGetChallenge,
+  useAuthControllerGetWssKey,
+  useOrderFollowControllerListFollowing,
+} from "@/src/services/queries";
+import { signWssMessage } from "@/src/features/trade/socketSignature";
 import { computeLayout, hitTestCell } from "@/src/utils/gridLayout";
 import type { Transform, StoreSnapshot } from "@/src/utils/gridLayout";
 import { computeGridDimensions } from "@/src/utils/gridDimensions";
@@ -39,10 +60,68 @@ const MOBILE_ZOOM_MIN = 1.3;
 const MIN_PRICE_MOTION_MS = 250;
 const MAX_PRICE_MOTION_MS = 5000;
 const TICK_CADENCE_SMOOTHING = 0.2;
+const FOLLOW_ORDER_EVENTS = [
+  "order_follow",
+  "order_follow_update",
+  "order_follows",
+  "follow_order_placed",
+  "place_bet",
+] as const;
+const FOLLOWED_ORDER_UPDATE_EVENT = "followed_order_update";
+const SUBSCRIBE_ORDER_FOLLOWS_EVENT = "subscribe_order_follows";
+const UNSUBSCRIBE_ORDER_FOLLOWS_EVENT = "unsubscribe_order_follows";
 const livePriceFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const ETHEREUM_LOGO_SRC =
+  "https://www.figma.com/api/mcp/asset/5b2e0c8b-1140-4470-a234-0d3b7057a3f5";
+const MARKET_SYMBOL = "BTC/USD";
+
+type GridActionButtonProps = React.ComponentProps<typeof Button> & {
+  active?: boolean;
+};
+
+function GridActionButton({
+  active = false,
+  className,
+  children,
+  ...props
+}: GridActionButtonProps) {
+  return (
+    <Button
+      type="button"
+      size="icon-lg"
+      variant="ghost"
+      className={cn(
+        "border-border-main bg-background-surface text-text-sub hover:bg-surface-control pointer-events-auto h-9 w-9 rounded-[4px] border p-0 shadow-none hover:text-white",
+        active &&
+          "border-grid-accent bg-surface-control-active text-grid-accent hover:bg-surface-control-active hover:text-grid-accent",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function extractChallenge(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+
+  const record = response as Record<string, unknown>;
+  const challenge =
+    record.challenge ??
+    (record.data &&
+    typeof record.data === "object" &&
+    !Array.isArray(record.data)
+      ? (record.data as Record<string, unknown>).challenge
+      : null);
+
+  return typeof challenge === "string" && challenge.trim().length > 0
+    ? challenge
+    : null;
+}
 
 function buildDisplayHistory(
   history: StoreSnapshot["history"],
@@ -79,14 +158,52 @@ export const TradingGrid: React.FC = () => {
   const pendingWins = useGameStore((s) => s.pendingWins);
   const socket = useGameStore((s) => s.socket);
   const wssKey = useGameStore((s) => s.wssKey);
+  const followedOrderActivities = useGameStore(
+    (s) => s.followedOrderActivities,
+  );
   const setConnection = useGameStore((s) => s.setConnection);
+  const setWssKey = useGameStore((s) => s.setWssKey);
+  const upsertFollowedOrderActivity = useGameStore(
+    (s) => s.upsertFollowedOrderActivity,
+  );
   const updatePrice = useGameStore((s) => s.updatePrice);
   const updateGrid = useGameStore((s) => s.updateGrid);
   const betAmount = useGameStore((s) => s.betAmount);
   const balance = useGameStore((s) => s.balance);
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
   const { address } = useAccount();
-  const { isLoggingIn } = useAuth();
+  const { isAuthenticated, isLoggingIn, walletAddress } = useAuth();
+  const { data: wssKeyResponse } = useAuthControllerGetWssKey({
+    query: {
+      enabled: isAuthenticated && !isLoggingIn,
+      staleTime: 0,
+      refetchOnWindowFocus: false,
+    },
+  });
+  const { data: followingResponse } = useOrderFollowControllerListFollowing({
+    query: {
+      enabled: isAuthenticated && !isLoggingIn,
+      staleTime: 10_000,
+      refetchOnWindowFocus: true,
+    },
+  });
+
+  const resolvedWssKey = extractWssKey(wssKeyResponse);
+  const activeFollowings = useMemo(
+    () =>
+      extractOrderFollowings(followingResponse).filter(
+        (item) => item.status === "ACTIVE",
+      ),
+    [followingResponse],
+  );
+  const followedTargetIds = useMemo(
+    () => activeFollowings.map((item) => item.targetUserId),
+    [activeFollowings],
+  );
+  const followedTargetsKey = useMemo(
+    () => followedTargetIds.slice().sort().join("|"),
+    [followedTargetIds],
+  );
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -140,6 +257,7 @@ export const TradingGrid: React.FC = () => {
     socket,
     wssKey,
     address,
+    followedOrderActivities,
     dims: null,
   });
   useEffect(() => {
@@ -169,11 +287,17 @@ export const TradingGrid: React.FC = () => {
       socket,
       wssKey,
       address,
+      followedOrderActivities,
       dims: nextDims,
     };
   });
 
   const [overlayMode, setOverlayMode] = useState(false);
+  const [isInfoSheetOpen, setIsInfoSheetOpen] = useState(false);
+
+  useEffect(() => {
+    setWssKey(resolvedWssKey);
+  }, [resolvedWssKey, setWssKey]);
 
   // ── Live socket feed ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -225,6 +349,167 @@ export const TradingGrid: React.FC = () => {
       setConnection(null, null);
     };
   }, [setConnection, updateGrid, updatePrice]);
+
+  useEffect(() => {
+    if (
+      !socket ||
+      typeof socket !== "object" ||
+      !("emit" in socket) ||
+      typeof socket.emit !== "function"
+    ) {
+      return;
+    }
+    if (!resolvedWssKey || activeFollowings.length === 0 || !walletAddress) {
+      return;
+    }
+
+    const socketClient = socket as {
+      emit: (event: string, payload: unknown) => void;
+      on: (event: string, handler: (payload: unknown) => void) => void;
+      off: (event: string, handler?: (payload: unknown) => void) => void;
+    };
+
+    let isDisposed = false;
+
+    const getFollowSignature = async () => {
+      const challengeResponse = await authControllerGetChallenge({
+        address: walletAddress,
+      });
+      const challenge = extractChallenge(challengeResponse);
+
+      if (!challenge) {
+        throw new Error("Missing socket follow challenge");
+      }
+
+      return signWssMessage(resolvedWssKey, walletAddress, challenge);
+    };
+
+    const subscribeToFollows = async () => {
+      const signature = await getFollowSignature();
+      if (isDisposed) return;
+
+      activeFollowings.forEach((follow) => {
+        socketClient.emit(SUBSCRIBE_ORDER_FOLLOWS_EVENT, {
+          userId: walletAddress,
+          targetUserId: follow.targetUserId,
+          signature,
+        });
+      });
+    };
+
+    const handleConnect = () => {
+      void subscribeToFollows().catch((error) => {
+        console.error("Failed to subscribe to followed orders:", error);
+      });
+    };
+
+    handleConnect();
+    socketClient.on("connect", handleConnect);
+
+    return () => {
+      isDisposed = true;
+
+      void getFollowSignature()
+        .then((signature) => {
+          activeFollowings.forEach((follow) => {
+            socketClient.emit(UNSUBSCRIBE_ORDER_FOLLOWS_EVENT, {
+              userId: walletAddress,
+              targetUserId: follow.targetUserId,
+              signature,
+            });
+          });
+        })
+        .catch((error) => {
+          console.error("Failed to unsubscribe from followed orders:", error);
+        });
+      socketClient.off("connect", handleConnect);
+    };
+  }, [
+    activeFollowings,
+    followedTargetsKey,
+    resolvedWssKey,
+    socket,
+    walletAddress,
+  ]);
+
+  useEffect(() => {
+    if (
+      !socket ||
+      typeof socket !== "object" ||
+      !("on" in socket) ||
+      typeof socket.on !== "function" ||
+      !("off" in socket) ||
+      typeof socket.off !== "function" ||
+      followedTargetIds.length === 0
+    ) {
+      return;
+    }
+
+    const socketClient = socket as {
+      on: (event: string, handler: (payload: unknown) => void) => void;
+      off: (event: string, handler: (payload: unknown) => void) => void;
+    };
+
+    const handleFollowedOrderUpdate = (payload: unknown) => {
+      const activities = extractFollowedOrderActivities(
+        payload,
+        followedTargetIds,
+      );
+      activities.forEach((activity) => {
+        upsertFollowedOrderActivity(activity);
+      });
+    };
+
+    socketClient.on(FOLLOWED_ORDER_UPDATE_EVENT, handleFollowedOrderUpdate);
+
+    return () => {
+      socketClient.off(FOLLOWED_ORDER_UPDATE_EVENT, handleFollowedOrderUpdate);
+    };
+  }, [
+    followedTargetIds,
+    socket,
+    upsertFollowedOrderActivity,
+    followedTargetsKey,
+  ]);
+
+  useEffect(() => {
+    if (!socket) {
+      return;
+    }
+
+    const socketClient = socket as {
+      on: (event: string, handler: (payload: unknown) => void) => void;
+      off: (event: string, handler: (payload: unknown) => void) => void;
+    };
+    const handleFollowedOrder = (payload: unknown) => {
+      const activities = extractFollowedOrderActivities(
+        payload,
+        followedTargetIds,
+      );
+
+      activities.forEach((activity) => {
+        upsertFollowedOrderActivity(activity);
+      });
+    };
+
+    FOLLOW_ORDER_EVENTS.forEach((event) => {
+      if (event === "order_follow_update") {
+        console.log("subscribed order_follow_update");
+      }
+      socketClient.on(event, handleFollowedOrder);
+    });
+
+    return () => {
+      FOLLOW_ORDER_EVENTS.forEach((event) => {
+        socketClient.off(event, handleFollowedOrder);
+      });
+    };
+  }, [
+    followedTargetIds,
+    socket,
+    upsertFollowedOrderActivity,
+    followedTargetsKey,
+  ]);
 
   // ── Track wins (avoid repeated effects for the same cell id) ──────────────
   useEffect(() => {
@@ -496,39 +781,59 @@ export const TradingGrid: React.FC = () => {
     : isLoggingIn
       ? "Authenticating wallet..."
       : address
-      ? "Reconnecting to market feed..."
-      : "Connect wallet to load the market feed";
+        ? "Reconnecting to market feed..."
+        : "Connect wallet to load the market feed";
   const displayPrice =
     currentPrice > 0 ? livePriceFormatter.format(currentPrice) : "--";
+  const displayMarketPrice =
+    displayPrice === "--" ? displayPrice : `~ ${displayPrice}`;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="bg-background-grid relative flex flex-1 flex-col overflow-hidden font-mono">
-      <div className="pointer-events-none absolute inset-x-2 top-2 z-20 flex items-center gap-3 sm:inset-x-3">
-        <div className="pointer-events-auto flex h-8 items-center gap-1 rounded-[9px] border border-white/80 bg-transparent px-2.5 text-xs font-medium text-white">
-          <span className="bg-grid-axis size-2 rounded-full" />
-          BTC/USD
-          <ChevronDown className="size-3.5 text-white/80" />
-        </div>
-        <span className="text-grid-axis text-xs font-medium">
-          {displayPrice}
-        </span>
-        <span className="h-6 w-px bg-[#113e66]" />
-        <button
-          type="button"
-          onClick={() => setOverlayMode((prev) => !prev)}
-          className="pointer-events-auto flex items-center gap-2 text-xs font-medium text-white/95"
-        >
-          <span>OVERLAY MODE</span>
-          <span
-            className={`relative flex h-6 w-10 items-center rounded-full border border-white/80 px-[2px] ${overlayMode ? "justify-end bg-white/10" : "justify-start bg-transparent"}`}
-            aria-hidden
+      <div className="pointer-events-none absolute inset-x-2 top-2 z-20 flex items-center justify-between gap-3 sm:inset-x-3">
+        <div className="flex min-w-0 items-center gap-1">
+          <button
+            type="button"
+            className="bg-surface-control pointer-events-auto flex h-8 shrink-0 items-center gap-1 rounded-[8px] px-1 text-white"
           >
-            <span
-              className={`size-4 rounded-full ${overlayMode ? "bg-grid-accent" : "bg-transparent"}`}
-            />
+            <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={ETHEREUM_LOGO_SRC}
+                alt=""
+                className="h-full w-full object-contain"
+              />
+            </span>
+            <span className="text-sm font-semibold tracking-[-0.01em]">
+              {MARKET_SYMBOL}
+            </span>
+            <ChevronDown className="size-4 text-white/80" strokeWidth={1.75} />
+          </button>
+          <span className="text-text-sub truncate text-xs font-semibold tracking-[-0.01em]">
+            {displayMarketPrice}
           </span>
-        </button>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          <GridActionButton
+            aria-label="Market info"
+            onClick={() => setIsInfoSheetOpen(true)}
+          >
+            <Info className="size-4" strokeWidth={1.75} />
+          </GridActionButton>
+          <GridActionButton
+            aria-label="Toggle overlay mode"
+            aria-pressed={overlayMode}
+            active={overlayMode}
+            onClick={() => setOverlayMode((prev) => !prev)}
+          >
+            <Eye className="size-4" strokeWidth={1.75} />
+          </GridActionButton>
+          <GridActionButton aria-label="Change market region">
+            <Globe className="size-4" strokeWidth={1.75} />
+          </GridActionButton>
+        </div>
       </div>
 
       {/* Canvas wrapper */}
@@ -576,6 +881,29 @@ export const TradingGrid: React.FC = () => {
           </div>
         )}
       </div>
+
+      <Sheet
+        isOpen={isInfoSheetOpen}
+        onClose={() => setIsInfoSheetOpen(false)}
+        detent="content"
+        unstyled
+      >
+        <Sheet.Backdrop className="bg-background-main/55 backdrop-blur-[2px]" />
+        <Sheet.Container className="pointer-events-none">
+          <Sheet.Content
+            disableDrag={false}
+            className="pointer-events-auto rounded-t-[16px] border-t border-border-main bg-background-main px-5 pt-3 pb-5"
+          >
+            <TradeControlsPanel
+              marketSymbol={MARKET_SYMBOL}
+              displayPrice={displayPrice}
+              showMarketHeader
+              showHandle
+              onClose={() => setIsInfoSheetOpen(false)}
+            />
+          </Sheet.Content>
+        </Sheet.Container>
+      </Sheet>
     </div>
   );
 };

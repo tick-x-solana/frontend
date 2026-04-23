@@ -47,7 +47,7 @@ import type {
 } from "./models";
 
 import { customClient } from "./custom-client";
-import type { ErrorType } from "./custom-client";
+import type { ErrorType, BodyType } from "./custom-client";
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
@@ -568,14 +568,14 @@ export const getAuthControllerMiniAppLoginMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof authControllerMiniAppLogin>>,
     TError,
-    { data: MiniAppLoginDto },
+    { data: BodyType<MiniAppLoginDto> },
     TContext
   >;
   request?: SecondParameter<typeof customClient>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof authControllerMiniAppLogin>>,
   TError,
-  { data: MiniAppLoginDto },
+  { data: BodyType<MiniAppLoginDto> },
   TContext
 > => {
   const mutationKey = ["authControllerMiniAppLogin"];
@@ -589,7 +589,7 @@ export const getAuthControllerMiniAppLoginMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof authControllerMiniAppLogin>>,
-    { data: MiniAppLoginDto }
+    { data: BodyType<MiniAppLoginDto> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -602,7 +602,7 @@ export const getAuthControllerMiniAppLoginMutationOptions = <
 export type AuthControllerMiniAppLoginMutationResult = NonNullable<
   Awaited<ReturnType<typeof authControllerMiniAppLogin>>
 >;
-export type AuthControllerMiniAppLoginMutationBody = MiniAppLoginDto;
+export type AuthControllerMiniAppLoginMutationBody = BodyType<MiniAppLoginDto>;
 export type AuthControllerMiniAppLoginMutationError = ErrorType<unknown>;
 
 /**
@@ -616,7 +616,7 @@ export const useAuthControllerMiniAppLogin = <
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof authControllerMiniAppLogin>>,
       TError,
-      { data: MiniAppLoginDto },
+      { data: BodyType<MiniAppLoginDto> },
       TContext
     >;
     request?: SecondParameter<typeof customClient>;
@@ -625,7 +625,7 @@ export const useAuthControllerMiniAppLogin = <
 ): UseMutationResult<
   Awaited<ReturnType<typeof authControllerMiniAppLogin>>,
   TError,
-  { data: MiniAppLoginDto },
+  { data: BodyType<MiniAppLoginDto> },
   TContext
 > => {
   return useMutation(
@@ -848,14 +848,14 @@ export const getOrderControllerPlaceOrderMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof orderControllerPlaceOrder>>,
     TError,
-    { data: PlaceOrderDto },
+    { data: BodyType<PlaceOrderDto> },
     TContext
   >;
   request?: SecondParameter<typeof customClient>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof orderControllerPlaceOrder>>,
   TError,
-  { data: PlaceOrderDto },
+  { data: BodyType<PlaceOrderDto> },
   TContext
 > => {
   const mutationKey = ["orderControllerPlaceOrder"];
@@ -869,7 +869,7 @@ export const getOrderControllerPlaceOrderMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof orderControllerPlaceOrder>>,
-    { data: PlaceOrderDto }
+    { data: BodyType<PlaceOrderDto> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -882,7 +882,7 @@ export const getOrderControllerPlaceOrderMutationOptions = <
 export type OrderControllerPlaceOrderMutationResult = NonNullable<
   Awaited<ReturnType<typeof orderControllerPlaceOrder>>
 >;
-export type OrderControllerPlaceOrderMutationBody = PlaceOrderDto;
+export type OrderControllerPlaceOrderMutationBody = BodyType<PlaceOrderDto>;
 export type OrderControllerPlaceOrderMutationError = ErrorType<unknown>;
 
 export const useOrderControllerPlaceOrder = <
@@ -893,7 +893,7 @@ export const useOrderControllerPlaceOrder = <
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof orderControllerPlaceOrder>>,
       TError,
-      { data: PlaceOrderDto },
+      { data: BodyType<PlaceOrderDto> },
       TContext
     >;
     request?: SecondParameter<typeof customClient>;
@@ -902,7 +902,7 @@ export const useOrderControllerPlaceOrder = <
 ): UseMutationResult<
   Awaited<ReturnType<typeof orderControllerPlaceOrder>>,
   TError,
-  { data: PlaceOrderDto },
+  { data: BodyType<PlaceOrderDto> },
   TContext
 > => {
   return useMutation(
@@ -1318,14 +1318,14 @@ export const getOrderFollowControllerRegisterMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof orderFollowControllerRegister>>,
     TError,
-    { data: RegisterOrderFollowDto },
+    { data: BodyType<RegisterOrderFollowDto> },
     TContext
   >;
   request?: SecondParameter<typeof customClient>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof orderFollowControllerRegister>>,
   TError,
-  { data: RegisterOrderFollowDto },
+  { data: BodyType<RegisterOrderFollowDto> },
   TContext
 > => {
   const mutationKey = ["orderFollowControllerRegister"];
@@ -1339,7 +1339,7 @@ export const getOrderFollowControllerRegisterMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof orderFollowControllerRegister>>,
-    { data: RegisterOrderFollowDto }
+    { data: BodyType<RegisterOrderFollowDto> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -1352,7 +1352,8 @@ export const getOrderFollowControllerRegisterMutationOptions = <
 export type OrderFollowControllerRegisterMutationResult = NonNullable<
   Awaited<ReturnType<typeof orderFollowControllerRegister>>
 >;
-export type OrderFollowControllerRegisterMutationBody = RegisterOrderFollowDto;
+export type OrderFollowControllerRegisterMutationBody =
+  BodyType<RegisterOrderFollowDto>;
 export type OrderFollowControllerRegisterMutationError = ErrorType<unknown>;
 
 export const useOrderFollowControllerRegister = <
@@ -1363,7 +1364,7 @@ export const useOrderFollowControllerRegister = <
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof orderFollowControllerRegister>>,
       TError,
-      { data: RegisterOrderFollowDto },
+      { data: BodyType<RegisterOrderFollowDto> },
       TContext
     >;
     request?: SecondParameter<typeof customClient>;
@@ -1372,7 +1373,7 @@ export const useOrderFollowControllerRegister = <
 ): UseMutationResult<
   Awaited<ReturnType<typeof orderFollowControllerRegister>>,
   TError,
-  { data: RegisterOrderFollowDto },
+  { data: BodyType<RegisterOrderFollowDto> },
   TContext
 > => {
   return useMutation(
@@ -1864,14 +1865,14 @@ export const getPaymentControllerRequestWithdrawalMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof paymentControllerRequestWithdrawal>>,
     TError,
-    { data: WithdrawRequestDto },
+    { data: BodyType<WithdrawRequestDto> },
     TContext
   >;
   request?: SecondParameter<typeof customClient>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof paymentControllerRequestWithdrawal>>,
   TError,
-  { data: WithdrawRequestDto },
+  { data: BodyType<WithdrawRequestDto> },
   TContext
 > => {
   const mutationKey = ["paymentControllerRequestWithdrawal"];
@@ -1885,7 +1886,7 @@ export const getPaymentControllerRequestWithdrawalMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof paymentControllerRequestWithdrawal>>,
-    { data: WithdrawRequestDto }
+    { data: BodyType<WithdrawRequestDto> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -1898,7 +1899,8 @@ export const getPaymentControllerRequestWithdrawalMutationOptions = <
 export type PaymentControllerRequestWithdrawalMutationResult = NonNullable<
   Awaited<ReturnType<typeof paymentControllerRequestWithdrawal>>
 >;
-export type PaymentControllerRequestWithdrawalMutationBody = WithdrawRequestDto;
+export type PaymentControllerRequestWithdrawalMutationBody =
+  BodyType<WithdrawRequestDto>;
 export type PaymentControllerRequestWithdrawalMutationError =
   ErrorType<unknown>;
 
@@ -1910,7 +1912,7 @@ export const usePaymentControllerRequestWithdrawal = <
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof paymentControllerRequestWithdrawal>>,
       TError,
-      { data: WithdrawRequestDto },
+      { data: BodyType<WithdrawRequestDto> },
       TContext
     >;
     request?: SecondParameter<typeof customClient>;
@@ -1919,7 +1921,7 @@ export const usePaymentControllerRequestWithdrawal = <
 ): UseMutationResult<
   Awaited<ReturnType<typeof paymentControllerRequestWithdrawal>>,
   TError,
-  { data: WithdrawRequestDto },
+  { data: BodyType<WithdrawRequestDto> },
   TContext
 > => {
   return useMutation(
@@ -1966,14 +1968,14 @@ export const getPaymentControllerDebugDepositMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof paymentControllerDebugDeposit>>,
     TError,
-    { data: DepositDto },
+    { data: BodyType<DepositDto> },
     TContext
   >;
   request?: SecondParameter<typeof customClient>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof paymentControllerDebugDeposit>>,
   TError,
-  { data: DepositDto },
+  { data: BodyType<DepositDto> },
   TContext
 > => {
   const mutationKey = ["paymentControllerDebugDeposit"];
@@ -1987,7 +1989,7 @@ export const getPaymentControllerDebugDepositMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof paymentControllerDebugDeposit>>,
-    { data: DepositDto }
+    { data: BodyType<DepositDto> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -2000,7 +2002,7 @@ export const getPaymentControllerDebugDepositMutationOptions = <
 export type PaymentControllerDebugDepositMutationResult = NonNullable<
   Awaited<ReturnType<typeof paymentControllerDebugDeposit>>
 >;
-export type PaymentControllerDebugDepositMutationBody = DepositDto;
+export type PaymentControllerDebugDepositMutationBody = BodyType<DepositDto>;
 export type PaymentControllerDebugDepositMutationError = ErrorType<unknown>;
 
 export const usePaymentControllerDebugDeposit = <
@@ -2011,7 +2013,7 @@ export const usePaymentControllerDebugDeposit = <
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof paymentControllerDebugDeposit>>,
       TError,
-      { data: DepositDto },
+      { data: BodyType<DepositDto> },
       TContext
     >;
     request?: SecondParameter<typeof customClient>;
@@ -2020,7 +2022,7 @@ export const usePaymentControllerDebugDeposit = <
 ): UseMutationResult<
   Awaited<ReturnType<typeof paymentControllerDebugDeposit>>,
   TError,
-  { data: DepositDto },
+  { data: BodyType<DepositDto> },
   TContext
 > => {
   return useMutation(
@@ -2067,14 +2069,14 @@ export const getPaymentControllerDebugFinalizeWithdrawalMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof paymentControllerDebugFinalizeWithdrawal>>,
     TError,
-    { data: FinalizeWithdrawalDto },
+    { data: BodyType<FinalizeWithdrawalDto> },
     TContext
   >;
   request?: SecondParameter<typeof customClient>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof paymentControllerDebugFinalizeWithdrawal>>,
   TError,
-  { data: FinalizeWithdrawalDto },
+  { data: BodyType<FinalizeWithdrawalDto> },
   TContext
 > => {
   const mutationKey = ["paymentControllerDebugFinalizeWithdrawal"];
@@ -2088,7 +2090,7 @@ export const getPaymentControllerDebugFinalizeWithdrawalMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof paymentControllerDebugFinalizeWithdrawal>>,
-    { data: FinalizeWithdrawalDto }
+    { data: BodyType<FinalizeWithdrawalDto> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -2103,7 +2105,7 @@ export type PaymentControllerDebugFinalizeWithdrawalMutationResult =
     Awaited<ReturnType<typeof paymentControllerDebugFinalizeWithdrawal>>
   >;
 export type PaymentControllerDebugFinalizeWithdrawalMutationBody =
-  FinalizeWithdrawalDto;
+  BodyType<FinalizeWithdrawalDto>;
 export type PaymentControllerDebugFinalizeWithdrawalMutationError =
   ErrorType<unknown>;
 
@@ -2115,7 +2117,7 @@ export const usePaymentControllerDebugFinalizeWithdrawal = <
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof paymentControllerDebugFinalizeWithdrawal>>,
       TError,
-      { data: FinalizeWithdrawalDto },
+      { data: BodyType<FinalizeWithdrawalDto> },
       TContext
     >;
     request?: SecondParameter<typeof customClient>;
@@ -2124,7 +2126,7 @@ export const usePaymentControllerDebugFinalizeWithdrawal = <
 ): UseMutationResult<
   Awaited<ReturnType<typeof paymentControllerDebugFinalizeWithdrawal>>,
   TError,
-  { data: FinalizeWithdrawalDto },
+  { data: BodyType<FinalizeWithdrawalDto> },
   TContext
 > => {
   return useMutation(
@@ -2171,14 +2173,14 @@ export const getPaymentControllerDebugExpireTimeoutMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof paymentControllerDebugExpireTimeout>>,
     TError,
-    { data: ExpireTimeoutDto },
+    { data: BodyType<ExpireTimeoutDto> },
     TContext
   >;
   request?: SecondParameter<typeof customClient>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof paymentControllerDebugExpireTimeout>>,
   TError,
-  { data: ExpireTimeoutDto },
+  { data: BodyType<ExpireTimeoutDto> },
   TContext
 > => {
   const mutationKey = ["paymentControllerDebugExpireTimeout"];
@@ -2192,7 +2194,7 @@ export const getPaymentControllerDebugExpireTimeoutMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof paymentControllerDebugExpireTimeout>>,
-    { data: ExpireTimeoutDto }
+    { data: BodyType<ExpireTimeoutDto> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -2205,7 +2207,8 @@ export const getPaymentControllerDebugExpireTimeoutMutationOptions = <
 export type PaymentControllerDebugExpireTimeoutMutationResult = NonNullable<
   Awaited<ReturnType<typeof paymentControllerDebugExpireTimeout>>
 >;
-export type PaymentControllerDebugExpireTimeoutMutationBody = ExpireTimeoutDto;
+export type PaymentControllerDebugExpireTimeoutMutationBody =
+  BodyType<ExpireTimeoutDto>;
 export type PaymentControllerDebugExpireTimeoutMutationError =
   ErrorType<unknown>;
 
@@ -2217,7 +2220,7 @@ export const usePaymentControllerDebugExpireTimeout = <
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof paymentControllerDebugExpireTimeout>>,
       TError,
-      { data: ExpireTimeoutDto },
+      { data: BodyType<ExpireTimeoutDto> },
       TContext
     >;
     request?: SecondParameter<typeof customClient>;
@@ -2226,7 +2229,7 @@ export const usePaymentControllerDebugExpireTimeout = <
 ): UseMutationResult<
   Awaited<ReturnType<typeof paymentControllerDebugExpireTimeout>>,
   TError,
-  { data: ExpireTimeoutDto },
+  { data: BodyType<ExpireTimeoutDto> },
   TContext
 > => {
   return useMutation(
@@ -3559,14 +3562,14 @@ export const getSettlementControllerCommitBatchMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof settlementControllerCommitBatch>>,
     TError,
-    { batchId: string; data: CommitBatchDto },
+    { batchId: string; data: BodyType<CommitBatchDto> },
     TContext
   >;
   request?: SecondParameter<typeof customClient>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof settlementControllerCommitBatch>>,
   TError,
-  { batchId: string; data: CommitBatchDto },
+  { batchId: string; data: BodyType<CommitBatchDto> },
   TContext
 > => {
   const mutationKey = ["settlementControllerCommitBatch"];
@@ -3580,7 +3583,7 @@ export const getSettlementControllerCommitBatchMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof settlementControllerCommitBatch>>,
-    { batchId: string; data: CommitBatchDto }
+    { batchId: string; data: BodyType<CommitBatchDto> }
   > = (props) => {
     const { batchId, data } = props ?? {};
 
@@ -3593,7 +3596,8 @@ export const getSettlementControllerCommitBatchMutationOptions = <
 export type SettlementControllerCommitBatchMutationResult = NonNullable<
   Awaited<ReturnType<typeof settlementControllerCommitBatch>>
 >;
-export type SettlementControllerCommitBatchMutationBody = CommitBatchDto;
+export type SettlementControllerCommitBatchMutationBody =
+  BodyType<CommitBatchDto>;
 export type SettlementControllerCommitBatchMutationError = ErrorType<void>;
 
 /**
@@ -3607,7 +3611,7 @@ export const useSettlementControllerCommitBatch = <
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof settlementControllerCommitBatch>>,
       TError,
-      { batchId: string; data: CommitBatchDto },
+      { batchId: string; data: BodyType<CommitBatchDto> },
       TContext
     >;
     request?: SecondParameter<typeof customClient>;
@@ -3616,7 +3620,7 @@ export const useSettlementControllerCommitBatch = <
 ): UseMutationResult<
   Awaited<ReturnType<typeof settlementControllerCommitBatch>>,
   TError,
-  { batchId: string; data: CommitBatchDto },
+  { batchId: string; data: BodyType<CommitBatchDto> },
   TContext
 > => {
   return useMutation(

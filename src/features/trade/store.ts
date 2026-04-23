@@ -5,6 +5,7 @@ import {
   getCellHideThresholdTime,
   getLatestChartTime,
 } from "@/src/features/trade/gridTiming";
+import type { FollowedOrderActivity } from "@/src/features/trade/orderFollow";
 
 export interface PricePoint {
   time: number;
@@ -45,12 +46,15 @@ interface GameState {
   pendingWins: Record<string, number>;
   socket: unknown | null;
   wssKey: string | null;
+  followedOrderActivities: FollowedOrderActivity[];
   betAmount: number;
   serverTimeOffset: number;
   setBetAmount: (amount: number) => void;
   placeBet: (cellId: string, amount: number) => void;
   checkWinEffects: (now: number) => void;
   setConnection: (socket: unknown | null, wssKey?: string | null) => void;
+  setWssKey: (wssKey: string | null) => void;
+  upsertFollowedOrderActivity: (activity: FollowedOrderActivity) => void;
   updatePrice: (price: number, ts?: number) => void;
   updateGrid: (remoteCells: RemoteCell[]) => void;
 }
@@ -58,6 +62,7 @@ interface GameState {
 const MODE_INTERVAL_SECONDS = 5;
 const MODE_PRICE_STEP = 25;
 const MAX_HISTORY_POINTS = 240;
+const MAX_FOLLOWED_ORDER_ACTIVITIES = 200;
 // Very slow smoothing (2%) so each price tick moves serverTimeOffset by at most
 // ~120ms — shift of ~0.8px at typical zoom. Faster convergence would cause
 // nowRef to jump each tick, shifting the entire viewport.
@@ -144,8 +149,8 @@ function sortGridCells(a: CellData, b: CellData): number {
 }
 
 export const useGameStore = create<GameState>((set) => ({
-  balance: 1000,
-  serverBalance: 1000,
+  balance: 0,
+  serverBalance: 0,
   currentPrice: 0,
   history: [],
   cells: [],
@@ -157,12 +162,36 @@ export const useGameStore = create<GameState>((set) => ({
   pendingWins: {},
   socket: null,
   wssKey: null,
+  followedOrderActivities: [],
   betAmount: 10,
   serverTimeOffset: 0,
 
   setBetAmount: (amount) => set({ betAmount: amount }),
 
   setConnection: (socket, wssKey = null) => set({ socket, wssKey }),
+
+  setWssKey: (wssKey) => set({ wssKey }),
+
+  upsertFollowedOrderActivity: (activity) =>
+    set((state) => {
+      const nextActivities = state.followedOrderActivities.filter(
+        (item) =>
+          !(
+            item.targetUserId === activity.targetUserId &&
+            item.cellId === activity.cellId
+          ),
+      );
+
+      nextActivities.push(activity);
+      nextActivities.sort((a, b) => b.observedAt - a.observedAt);
+
+      return {
+        followedOrderActivities: nextActivities.slice(
+          0,
+          MAX_FOLLOWED_ORDER_ACTIVITIES,
+        ),
+      };
+    }),
 
   updatePrice: (price, ts) =>
     set((state) => {
@@ -179,10 +208,9 @@ export const useGameStore = create<GameState>((set) => ({
           : 0;
       const safeTs = Math.max(normalizedTs, lastHistoryTime);
 
-      const nextHistory = [
-        ...state.history,
-        { time: safeTs, price },
-      ].slice(-MAX_HISTORY_POINTS);
+      const nextHistory = [...state.history, { time: safeTs, price }].slice(
+        -MAX_HISTORY_POINTS,
+      );
       const observedOffset = normalizedTs - Date.now();
       const nextServerTimeOffset = blendServerOffset(
         state.serverTimeOffset,

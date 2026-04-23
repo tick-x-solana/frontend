@@ -39,6 +39,11 @@ type LoginResponse = {
   accessToken?: string;
 };
 
+function getStoredToken() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("token");
+}
+
 function extractBalance(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -56,7 +61,7 @@ function extractBalance(value: unknown): number | null {
   const record = value as Record<string, unknown>;
 
   return (
-    extractBalance(record.balance) ??
+    extractBalance(record.free) ??
     extractBalance(record.amount) ??
     extractBalance(record.availableBalance) ??
     extractBalance(record.data)
@@ -65,11 +70,18 @@ function extractBalance(value: unknown): number | null {
 
 const AuthProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, isConnecting, isReconnecting } = useAccount();
   const { signMessageAsync } = useSignMessage();
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(() => getStoredToken());
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const isLoggingInRef = useRef(false);
+  const previousConnectionRef = useRef<{
+    address: string | null;
+    isConnected: boolean;
+  }>({
+    address: null,
+    isConnected: false,
+  });
 
   const syncBalance = useCallback(async () => {
     const balanceResponse = await accountControllerGetBalance();
@@ -87,29 +99,42 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
   }, [queryClient]);
 
-  const logout = useCallback(() => {
-    if (typeof window === "undefined") return;
-
-    window.localStorage.removeItem("token");
-    window.localStorage.removeItem("wallet-address");
-    setToken(null);
+  const clearBalance = useCallback(() => {
     useGameStore.setState({
       balance: 0,
       serverBalance: 0,
     });
   }, []);
 
+  const logout = useCallback(() => {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.removeItem("token");
+    setToken(null);
+    clearBalance();
+  }, [clearBalance]);
+
+  const handleWalletDisconnect = useCallback(() => {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.removeItem("token");
+    window.localStorage.removeItem("wallet-address");
+    setToken(null);
+    clearBalance();
+  }, [clearBalance]);
+
   const login = useCallback(async () => {
     if (!isConnected || !address || isLoggingInRef.current) return;
     if (typeof window === "undefined") return;
 
+    const normalizedAddress = address.toLowerCase();
     const storedToken = window.localStorage.getItem("token");
     const storedAddress = window.localStorage.getItem("wallet-address");
 
     if (
       storedToken &&
       storedAddress &&
-      storedAddress.toLowerCase() === address.toLowerCase()
+      storedAddress.toLowerCase() === normalizedAddress
     ) {
       setToken(storedToken);
       await syncBalance();
@@ -159,25 +184,44 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [address, isConnected, signMessageAsync, syncBalance]);
 
   useEffect(() => {
-    if (!isConnected || !address) {
-      const frame = window.requestAnimationFrame(() => {
-        logout();
-      });
-
-      return () => window.cancelAnimationFrame(frame);
-    }
+    if (!isConnected || !address) return;
 
     const frame = window.requestAnimationFrame(() => {
       void login();
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [address, isConnected, login, logout]);
+  }, [address, isConnected, login]);
+
+  useEffect(() => {
+    const previousConnection = previousConnectionRef.current;
+    const didDisconnect =
+      previousConnection.isConnected &&
+      !isConnected &&
+      !isConnecting &&
+      !isReconnecting;
+
+    if (didDisconnect) {
+      handleWalletDisconnect();
+    }
+
+    previousConnectionRef.current = {
+      address: address ?? null,
+      isConnected,
+    };
+  }, [
+    address,
+    handleWalletDisconnect,
+    isConnected,
+    isConnecting,
+    isReconnecting,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const handleLogout = () => {
+      window.localStorage.removeItem("token");
       setToken(null);
       void login();
     };
