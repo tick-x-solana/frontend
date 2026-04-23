@@ -68,6 +68,18 @@
   --color-success-background: var(--success-background);
   --color-success-border: var(--success-border);
   --color-reward-gold: var(--reward-gold);
+  --color-background-grid: var(--background-grid);
+  --color-grid-line: var(--grid-line);
+  --color-grid-line-strong: var(--grid-line-strong);
+  --color-grid-accent: var(--grid-accent);
+  --color-grid-axis: var(--grid-axis);
+  --color-grid-price-line: var(--grid-price-line);
+  --color-surface-control: var(--surface-control);
+  --color-surface-control-active: var(--surface-control-active);
+  --color-stroke-primary: var(--stroke-primary);
+  --color-border-primary: var(--stroke-primary);
+  --color-text-link-main: var(--text-link-main);
+  --color-surface-selected: var(--surface-selected);
 }
 
 :root {
@@ -124,6 +136,17 @@
   --success-background: rgb(0 167 84 / 10%);
   --success-border: rgb(0 167 84 / 50%);
   --reward-gold: #fdcc5c;
+  --background-grid: #030c1c;
+  --grid-line: rgb(20 78 129 / 48%);
+  --grid-line-strong: rgb(26 96 154 / 80%);
+  --grid-accent: #12ddff;
+  --grid-axis: #53759b;
+  --grid-price-line: #9bc4ba;
+  --surface-control: rgb(255 255 255 / 10%);
+  --surface-control-active: rgb(18 221 255 / 14%);
+  --stroke-primary: var(--primary-light);
+  --text-link-main: #7fd89a;
+  --surface-selected: rgb(17 26 36 / 90%);
 }
 
 .dark {
