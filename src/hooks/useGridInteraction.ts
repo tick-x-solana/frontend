@@ -329,6 +329,13 @@ export function useGridInteraction({
           return;
         }
 
+        if (!address) {
+          appToast.error("Missing wallet address. Reconnect and try again.", {
+            icon: "👛",
+          });
+          return;
+        }
+
         if (
           !socket ||
           typeof socket !== "object" ||
@@ -344,9 +351,10 @@ export function useGridInteraction({
         const cellId = `${cellOrigin.startTs}:${cellOrigin.endTs}:${cellOrigin.lowerPrice}:${cellOrigin.upperPrice}`;
         const message = `${cellOrigin.gridTs}:${cellId}:${amountStr}`;
         const signature = await signWssMessage(wssKey, message);
+        const userId = getAddress(address);
 
         const payload = {
-          userId: getAddress(address as string),
+          userId,
           marketId: "BTCUSDT",
           amount: amountStr,
           cell: cellOrigin,

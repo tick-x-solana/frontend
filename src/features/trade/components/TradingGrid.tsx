@@ -203,16 +203,22 @@ function extractBalanceUserId(value: unknown): string | null {
   const directUserId = record.userId ?? record.userAddress ?? record.address;
 
   if (typeof directUserId === "string" && directUserId.trim().length > 0) {
-    return directUserId;
+    return directUserId.trim();
   }
 
   return extractBalanceUserId(record.data);
 }
 
-function normalizeAddress(value: string | null | undefined): string | null {
+function parseAddress(value: string | null | undefined): string | null {
   if (!value || typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+
+  try {
+    return getAddress(trimmed);
+  } catch {
+    return null;
+  }
 }
 
 function extractUserOrders(value: unknown): unknown[] {
@@ -294,8 +300,10 @@ export const TradingGrid: React.FC = () => {
   const miniKitWalletAddress = isMiniApp
     ? (MiniKit.user?.walletAddress ?? null)
     : null;
-  const resolvedUserAddress =
-    miniKitWalletAddress ?? walletAddress ?? address ?? null;
+  const resolvedUserAddress = useMemo(
+    () => parseAddress(miniKitWalletAddress ?? walletAddress ?? address ?? null),
+    [address, miniKitWalletAddress, walletAddress],
+  );
   const { data: wssKeyResponse } = useAuthControllerGetWssKey({
     query: {
       enabled: isAuthenticated && !isLoggingIn,
@@ -340,7 +348,10 @@ export const TradingGrid: React.FC = () => {
     [followingResponse],
   );
   const followedTargetIds = useMemo(
-    () => activeFollowings.map((item) => item.targetUserId),
+    () =>
+      activeFollowings
+        .map((item) => parseAddress(item.targetUserId))
+        .filter((item): item is string => item !== null),
     [activeFollowings],
   );
   const followedTargetsKey = useMemo(
@@ -575,13 +586,13 @@ export const TradingGrid: React.FC = () => {
 
       const signature = await signWssMessage(
         wssKey,
-        getAddress(userAddress),
+        userAddress,
         challenge,
       );
       if (isDisposed) return;
 
       socketClient.emit(SUBSCRIBE_USER_EVENT, {
-        userId: getAddress(userAddress),
+        userId: userAddress,
         signature,
       });
     };
@@ -654,9 +665,12 @@ export const TradingGrid: React.FC = () => {
       if (isDisposed) return;
 
       activeFollowings.forEach((follow) => {
+        const targetUserId = parseAddress(follow.targetUserId);
+        if (!targetUserId) return;
+
         socketClient.emit(SUBSCRIBE_ORDER_FOLLOWS_EVENT, {
-          userId: getAddress(userAddress),
-          targetUserId: getAddress(follow.targetUserId),
+          userId: userAddress,
+          targetUserId,
           signature,
         });
       });
@@ -679,9 +693,12 @@ export const TradingGrid: React.FC = () => {
       void getFollowSignature()
         .then((signature) => {
           activeFollowings.forEach((follow) => {
+            const targetUserId = parseAddress(follow.targetUserId);
+            if (!targetUserId) return;
+
             socketClient.emit(UNSUBSCRIBE_ORDER_FOLLOWS_EVENT, {
-              userId: getAddress(userAddress),
-              targetUserId: getAddress(follow.targetUserId),
+              userId: userAddress,
+              targetUserId,
               signature,
             });
           });
@@ -759,10 +776,10 @@ export const TradingGrid: React.FC = () => {
       off: (event: string, handler: (payload: unknown) => void) => void;
     };
 
-    const normalizedCurrentUser = normalizeAddress(resolvedUserAddress);
+    const normalizedCurrentUser = parseAddress(resolvedUserAddress);
 
     const handleBalanceUpdate = (payload: unknown) => {
-      const payloadUserId = normalizeAddress(extractBalanceUserId(payload));
+      const payloadUserId = parseAddress(extractBalanceUserId(payload));
       if (
         payloadUserId &&
         (!normalizedCurrentUser || payloadUserId !== normalizedCurrentUser)

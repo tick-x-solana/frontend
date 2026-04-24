@@ -25,7 +25,7 @@ const Portfolio = () => {
         className="pointer-events-none absolute top-[100px] z-0 h-full w-full object-cover opacity-50"
       />
       <div className="flex flex-col gap-4">
-        <Title>Portfolio1</Title>
+        <Title>Portfolio</Title>
         <WalletActionPanel />
       </div>
 

@@ -109,7 +109,7 @@ const CopyTradeProfileCard = ({
               : "bg-primary-light text-text-inverse hover:bg-primary-light/90",
         )}
       >
-        {isFollowing ? "Following" : isSubmitting ? "Processing..." : "Copy Trade"}
+        {isFollowing ? "Following" : isSubmitting ? "Processing..." : "Follow Trade"}
       </Button>
     </article>
   );

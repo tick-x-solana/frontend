@@ -1,5 +1,7 @@
 "use client";
 
+import { getAddress } from "viem";
+
 export interface OrderFollowingItem {
   id?: string;
   subscriberUserId: string;
@@ -43,6 +45,17 @@ function asNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function parseAddress(value: unknown): string | null {
+  const raw = asString(value);
+  if (!raw) return null;
+
+  try {
+    return getAddress(raw);
+  } catch {
+    return null;
+  }
 }
 
 function readNestedRecord(
@@ -100,8 +113,8 @@ function toFollowingItem(value: unknown): OrderFollowingItem | null {
   const record = asRecord(value);
   if (!record) return null;
 
-  const subscriberUserId = asString(record.subscriberUserId);
-  const targetUserId = asString(record.targetUserId);
+  const subscriberUserId = parseAddress(record.subscriberUserId);
+  const targetUserId = parseAddress(record.targetUserId);
 
   if (!subscriberUserId || !targetUserId) return null;
 
@@ -150,17 +163,17 @@ function toActivity(
     readNestedRecord(nestedData, "cell");
 
   const directTargetUserId =
-    asString(record.targetUserId) ??
-    asString(record.traderUserId) ??
-    asString(record.followedUserId) ??
-    asString(nestedOrder?.targetUserId) ??
-    asString(nestedData?.targetUserId);
+    parseAddress(record.targetUserId) ??
+    parseAddress(record.traderUserId) ??
+    parseAddress(record.followedUserId) ??
+    parseAddress(nestedOrder?.targetUserId) ??
+    parseAddress(nestedData?.targetUserId);
 
   const sourceUserId =
-    asString(record.userId) ??
-    asString(record.walletAddress) ??
-    asString(nestedOrder?.userId) ??
-    asString(nestedData?.userId);
+    parseAddress(record.userId) ??
+    parseAddress(record.walletAddress) ??
+    parseAddress(nestedOrder?.userId) ??
+    parseAddress(nestedData?.userId);
 
   const targetUserId =
     directTargetUserId ??
@@ -170,9 +183,9 @@ function toActivity(
 
   return {
     subscriberUserId:
-      asString(record.subscriberUserId) ??
-      asString(nestedOrder?.subscriberUserId) ??
-      asString(nestedData?.subscriberUserId),
+      parseAddress(record.subscriberUserId) ??
+      parseAddress(nestedOrder?.subscriberUserId) ??
+      parseAddress(nestedData?.subscriberUserId),
     targetUserId,
     multiplier:
       asNumber(record.multiplier) ??
