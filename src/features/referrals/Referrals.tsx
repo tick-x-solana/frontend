@@ -1,18 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { MiniKit } from "@worldcoin/minikit-js";
 import type { MiniKitChatOptions } from "@worldcoin/minikit-js/commands";
 import ActiveTab from "@/src/components/common/ActiveTab";
-import ActiveRef from "@/src/features/referrals/components/ActiveRef";
 import BrowseCopyTrade from "@/src/features/referrals/components/BrowseCopyTrade";
+import CREProofView from "@/src/features/referrals/components/CREProofView";
 import HowItWork from "@/src/features/referrals/components/HowItWork";
 import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
 import ReferralsHeader from "@/src/features/referrals/components/ReferralsHeader";
-import UserRefInfo from "@/src/features/referrals/components/UserRefInfo";
 import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
-import useWorldMiniAppChatPay from "@/src/hooks/useWorldMiniAppChatPay";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { useGameStore } from "@/src/features/trade/store";
@@ -31,7 +29,6 @@ const Referrals = () => {
   const { walletAddress, logout } = useAuth();
   console.log("walletAddress: ", walletAddress);
   const balance = useGameStore((state) => state.balance);
-  const { payWld } = useWorldMiniAppChatPay();
 
   const displayWalletAddress = useMemo(() => {
     if (!walletAddress) {
@@ -52,8 +49,49 @@ const Referrals = () => {
     })}`;
   }, [balance]);
 
-  const referralLink = buildMiniAppReferralLink(MiniKit.user?.username);
-  const worldId = MiniKit.user?.username?.trim() || null;
+  const resolveMiniAppUsername = useCallback(async () => {
+    const directUsername = MiniKit.user?.username?.trim();
+    if (directUsername) {
+      return directUsername;
+    }
+
+    const resolvedAddress =
+      MiniKit.user?.walletAddress ?? walletAddress ?? undefined;
+    if (!resolvedAddress) {
+      return null;
+    }
+
+    try {
+      return (
+        (await MiniKit.getUserByAddress(resolvedAddress)).username?.trim() ||
+        null
+      );
+    } catch (error) {
+      console.warn("[Referrals] Failed to resolve username", { error });
+      return null;
+    }
+  }, [walletAddress]);
+
+  const [worldId, setWorldId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncWorldId = async () => {
+      const username = await resolveMiniAppUsername();
+      if (!cancelled) {
+        setWorldId(username);
+      }
+    };
+
+    void syncWorldId();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolveMiniAppUsername]);
+
+  const referralLink = buildMiniAppReferralLink(worldId);
 
   const shareToChat = async () => {
     try {
@@ -62,17 +100,15 @@ const Referrals = () => {
         return;
       }
 
-      const resolvedAddress =
-        MiniKit.user?.walletAddress ?? walletAddress ?? undefined;
-      const miniAppUsername =
-        MiniKit.user?.username?.trim() ??
-        (resolvedAddress
-          ? (await MiniKit.getUserByAddress(resolvedAddress)).username?.trim()
-          : undefined);
+      const miniAppUsername = await resolveMiniAppUsername();
 
       if (!miniAppUsername) {
         toast.error("Missing World username. Please set your username first.");
         return;
+      }
+
+      if (miniAppUsername !== worldId) {
+        setWorldId(miniAppUsername);
       }
 
       const miniAppReferralLink = buildMiniAppReferralLink(miniAppUsername);
@@ -108,27 +144,6 @@ const Referrals = () => {
         height={100}
         className="pointer-events-none absolute top-0 right-0 z-0 h-full w-full object-cover opacity-40"
       />
-      <Button
-        onClick={() => {
-          console.log("[Referrals] Pay button clicked");
-          void payWld({
-            to: "0x0cb3e84e2c4bf88032e2279e7dd11b4e75ba7303",
-            amountWld: 0.001,
-            description: "Hello",
-            fallback: () => {
-              console.log("[Referrals] MiniKit fallback callback triggered");
-            },
-          })
-            .then((result) => {
-              console.log("[Referrals] payWld resolved", { result });
-            })
-            .catch((error: unknown) => {
-              console.error("[Referrals] payWld failed", { error });
-            });
-        }}
-      >
-        Pay Wld
-      </Button>
 
       <div className="relative z-10 mx-auto flex flex-col gap-5 md:max-w-[720px] xl:max-w-[860px]">
         <header className="flex items-center justify-between gap-4 pt-1">
@@ -175,10 +190,7 @@ const Referrals = () => {
             <HowItWork />
           </div>
         ) : (
-          <div className="flex flex-col gap-5 pb-4">
-            <UserRefInfo />
-            <ActiveRef />
-          </div>
+          <CREProofView />
         )}
       </div>
     </div>

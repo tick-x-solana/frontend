@@ -8,7 +8,8 @@ import { useGameStore } from "@/src/features/trade/store";
 import { cn } from "@/lib/utils";
 
 const USD_PER_WLD = 0.26;
-const BID_OPTIONS = [0.26, 0.52, 0.78, 1.04];
+const BID_OPTIONS_WLD = [1, 2, 5, 10];
+const BID_OPTIONS_USD = BID_OPTIONS_WLD.map((amount) => amount * USD_PER_WLD);
 
 const formatMoney = (amount: number) =>
   new Intl.NumberFormat("en-US", {
@@ -60,9 +61,9 @@ export default function TradeControlsPanel({
   const betAmount = useGameStore((s) => s.betAmount);
   const setBetAmount = useGameStore((s) => s.setBetAmount);
 
-  const selectedBid = BID_OPTIONS.includes(betAmount)
-    ? betAmount
-    : BID_OPTIONS[0];
+  const selectedBid =
+    BID_OPTIONS_USD.find((amount) => Math.abs(amount - betAmount) < 1e-9) ??
+    BID_OPTIONS_USD[0];
   const walletAddress = formatWalletAddress(rawAddress);
   const balanceInWld = balance / USD_PER_WLD;
   const bidSizeInWld = selectedBid / USD_PER_WLD;
@@ -143,22 +144,23 @@ export default function TradeControlsPanel({
         </section>
 
         <section className="flex items-center gap-2">
-          {BID_OPTIONS.map((amount) => {
-            const isSelected = selectedBid === amount;
+          {BID_OPTIONS_WLD.map((amountWld) => {
+            const amountUsd = amountWld * USD_PER_WLD;
+            const isSelected = selectedBid === amountUsd;
             return (
               <Button
-                key={amount}
+                key={amountWld}
                 type="button"
                 variant="outline"
                 className={cn(
-                  "h-9 flex-1 rounded-[8px] border px-0 text-sm font-medium tracking-[-0.01em] shadow-none",
+                  "h-9 flex-1 rounded-[8px] border px-0 text-sm font-medium tracking-[-0.01em] shadow-none transition-colors",
                   isSelected
-                    ? "border-border-primary bg-surface-selected text-text-link-main hover:bg-surface-selected"
-                    : "border-border-main bg-background-main text-text-main hover:bg-surface-overlay-subtle",
+                    ? "border-border-primary bg-surface-selected text-text-link-main hover:bg-surface-control-active hover:text-primary-light"
+                    : "border-border-main bg-background-main text-text-main hover:bg-surface-overlay-medium hover:text-text-heading",
                 )}
-                onClick={() => setBetAmount(amount)}
+                onClick={() => setBetAmount(amountUsd)}
               >
-                {formatMoney(amount)}
+                {amountWld} WLD
               </Button>
             );
           })}

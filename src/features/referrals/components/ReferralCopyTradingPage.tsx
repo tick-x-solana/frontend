@@ -5,9 +5,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Sheet } from "react-modal-sheet";
 import { toast } from "sonner";
 import { Button } from "@/src/components/shadcn/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/src/components/shadcn/dialog";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import CopyTradeProfileCard, {
   type CopyTradeProfile,
@@ -149,6 +154,16 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
     if (isPaying || isSubmittingFollow) return;
     setIsPayModalOpen(false);
   }, [isPaying, isSubmittingFollow]);
+  const handlePayModalOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        setIsPayModalOpen(true);
+        return;
+      }
+      handleCloseCopyTradeModal();
+    },
+    [handleCloseCopyTradeModal],
+  );
 
   const handleConfirmCopyTrade = useCallback(async () => {
     if (!selectedProfile) return;
@@ -245,33 +260,23 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
         </div>
       </div>
 
-      <Sheet
-        isOpen={isPayModalOpen}
-        onClose={handleCloseCopyTradeModal}
-        detent="full"
-        className="z-[70]"
-        unstyled
-      >
-        <Sheet.Backdrop
-          onClick={handleCloseCopyTradeModal}
-          className="bg-background-main/55 fixed inset-0 backdrop-blur-[2px]"
-        />
-        <Sheet.Container className="pointer-events-none">
-          <Sheet.Content className="bg-surface-card border-border-main pointer-events-auto rounded-t-[24px] border-t px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+16px)]">
-            <div className="flex flex-col gap-4">
-              <h2 className="text-text-heading text-lg font-semibold">
+      <Dialog open={isPayModalOpen} onOpenChange={handlePayModalOpenChange}>
+        <DialogContent className="pointer-events-none">
+          <div className="border-border-main pointer-events-auto w-full max-w-[760px] rounded-[20px] border bg-[linear-gradient(112deg,var(--background-main)_0%,var(--surface-card-strong)_62%,var(--background-main)_100%)] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)] md:p-8">
+            <div className="flex flex-col gap-5 sm:gap-7">
+              <DialogTitle className="text-text-heading text-2xl font-semibold tracking-[-0.03em] sm:text-[42px]">
                 Start Follow Trade
-              </h2>
-              <p className="text-text-sub text-sm font-medium">
+              </DialogTitle>
+              <DialogDescription className="text-text-sub text-base font-medium tracking-[-0.01em] sm:max-w-[620px] sm:text-[42px] sm:tracking-[-0.02em]">
                 You need to pay {COPY_TRADE_PAYMENT_AMOUNT_WLD} WLD to start
                 follow trading this profile.
-              </p>
+              </DialogDescription>
 
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 rounded-[8px]"
+                  className="border-border-main bg-white text-text-inverse hover:bg-white/90 hover:text-text-inverse h-12 rounded-[12px] text-base font-medium tracking-[-0.01em] sm:h-16 sm:rounded-[16px] sm:text-[42px] sm:tracking-[-0.02em]"
                   onClick={handleCloseCopyTradeModal}
                   disabled={isPaying || isSubmittingFollow}
                 >
@@ -279,7 +284,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
                 </Button>
                 <Button
                   type="button"
-                  className="h-10 rounded-[8px]"
+                  className="border-border-main bg-surface-overlay text-text-heading hover:bg-surface-overlay-medium h-12 rounded-[12px] border text-base font-medium tracking-[-0.01em] sm:h-16 sm:rounded-[16px] sm:text-[42px] sm:tracking-[-0.02em]"
                   onClick={() => void handleConfirmCopyTrade()}
                   disabled={isPaying || isSubmittingFollow}
                 >
@@ -289,9 +294,9 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
                 </Button>
               </div>
             </div>
-          </Sheet.Content>
-        </Sheet.Container>
-      </Sheet>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 };

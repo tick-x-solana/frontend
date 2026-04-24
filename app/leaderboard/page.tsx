@@ -7,8 +7,17 @@ type LeaderboardEntry = {
   initials: string;
   wallet: string;
   volume: string;
-  pnl: string;
+  pnl: number;
 };
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const randomPnlUnder5k = () => Number((Math.random() * 4800 + 120).toFixed(2));
 
 const leaderboardEntries: LeaderboardEntry[] = [
   {
@@ -16,35 +25,49 @@ const leaderboardEntries: LeaderboardEntry[] = [
     initials: "AS",
     wallet: "0x4891...281nbvm1",
     volume: "$192,190,290.19",
-    pnl: "$621,224,168.29",
+    pnl: randomPnlUnder5k(),
   },
   {
     rank: 2,
     initials: "BS",
     wallet: "0x8723...fgh54jkl",
-    volume: "$150,250,172.45",
-    pnl: "$513,145,989.75",
+    volume: "$5,443.18",
+    pnl: randomPnlUnder5k(),
   },
   {
     rank: 3,
     initials: "CS",
     wallet: "0x2345...mno67pqr",
-    volume: "$320,185,405.67",
-    pnl: "$740,998,115.00",
+    volume: "$3,854.13",
+    pnl: randomPnlUnder5k(),
   },
   {
     rank: 4,
     initials: "DS",
     wallet: "0x6789...stu12vwx",
-    volume: "$250,490,845.90",
-    pnl: "$890,335,760.12",
+    volume: "$3,100.41",
+    pnl: randomPnlUnder5k(),
   },
   {
     rank: 5,
     initials: "ES",
     wallet: "0x4567...yzab34cde",
-    volume: "$198,765,432.10",
-    pnl: "$634,123,456.78",
+    volume: "$2,550.25",
+    pnl: randomPnlUnder5k(),
+  },
+  {
+    rank: 6,
+    initials: "FS",
+    wallet: "0x9512...lmn90qrs",
+    volume: "$2,110.98",
+    pnl: randomPnlUnder5k(),
+  },
+  {
+    rank: 7,
+    initials: "FS",
+    wallet: "0x9512...lmn90qrs",
+    volume: "$2,110.98",
+    pnl: randomPnlUnder5k(),
   },
 ];
 
@@ -56,32 +79,38 @@ function LeaderboardRow({
   pnl,
 }: LeaderboardEntry) {
   return (
-    <div className="flex items-center gap-[10px] px-4 py-2">
-      <p className="w-4 shrink-0 text-[14px] tracking-[-0.14px] text-white">
-        {rank}
-      </p>
+    <div className="grid grid-cols-[minmax(0,1fr)_150px] items-center gap-4 px-4 py-2">
+      <div className="flex min-w-0 items-center gap-[10px]">
+        <p className="w-4 shrink-0 text-[14px] tracking-[-0.14px] text-white">
+          {rank}
+        </p>
 
-      <div className="bg-primary-light text-text-inverse flex size-8 shrink-0 items-center justify-center rounded-full px-[3px] text-[14px] font-medium tracking-[-0.14px]">
-        {initials}
+        <div className="bg-primary-light text-text-inverse flex size-8 shrink-0 items-center justify-center rounded-full px-[3px] text-[14px] font-medium tracking-[-0.14px]">
+          {initials}
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-text-main truncate text-[14px] font-semibold tracking-[-0.14px]">
+            {wallet}
+          </p>
+          <p className="text-text-sub truncate text-[14px] tracking-[-0.14px]">
+            {volume}
+          </p>
+        </div>
       </div>
 
-      <div className="min-w-0 flex-1">
-        <p className="text-text-main truncate text-[14px] font-semibold tracking-[-0.14px]">
-          {wallet}
-        </p>
-        <p className="text-text-sub truncate text-[14px] tracking-[-0.14px]">
-          {volume}
-        </p>
-      </div>
-
-      <p className="text-success-light shrink-0 text-right text-[14px] tracking-[-0.14px]">
-        {pnl}
+      <p className="text-success-light text-right text-[14px] tracking-[-0.14px] tabular-nums">
+        {currencyFormatter.format(pnl)}
       </p>
     </div>
   );
 }
 
 export default function LeaderboardPage() {
+  const listEntries = leaderboardEntries
+    .slice(3)
+    .map((entry, index) => ({ ...entry, rank: index + 4 }));
+
   return (
     <div className="bg-background-main h-full w-full">
       <div className="relative mx-auto w-full overflow-hidden">
@@ -153,13 +182,13 @@ export default function LeaderboardPage() {
         </section>
 
         <section className="border-border-main bg-surface-card/20 relative z-10 mt-4 border-y">
-          <div className="bg-surface-overlay-subtle border-border-main flex h-8 items-center border-b">
-            <div className="w-[244px] px-4">
+          <div className="bg-surface-overlay-subtle border-border-main grid h-8 grid-cols-[minmax(0,1fr)_150px] items-center gap-4 border-b px-4">
+            <div>
               <p className="text-text-sub text-[14px] tracking-[-0.14px]">
                 Account
               </p>
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
+            <div className="flex min-w-0 items-center justify-end gap-2">
               <p className="text-text-sub text-[14px] tracking-[-0.14px]">
                 PNL
               </p>
@@ -170,7 +199,7 @@ export default function LeaderboardPage() {
           </div>
 
           <div className="bg-background-main">
-            {leaderboardEntries.map((entry) => (
+            {listEntries.map((entry) => (
               <LeaderboardRow key={entry.rank} {...entry} />
             ))}
           </div>

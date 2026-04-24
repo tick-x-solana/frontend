@@ -403,7 +403,7 @@ export const useGameStore = create<GameState>((set) => ({
         const hasBet = (nextBets[cell.id] || 0) > 0;
         const hasSettledOutcome = nextSettledOutcomes[cell.id] !== undefined;
         const isPast = now >= cell.timeWindowEnd;
-        const chartReachedCell = now >= cell.timeWindowStart;
+        const chartPassedCellEnd = now >= cell.timeWindowEnd;
         let nextStatus: CellData["status"] = isPast ? "past" : "active";
         const settledOutcome = nextSettledOutcomes[cell.id];
 
@@ -429,7 +429,10 @@ export const useGameStore = create<GameState>((set) => ({
               changed = true;
             }
           } else {
-            nextStatus = "lose";
+            // Keep losing cells neutral until the chart actually reaches them.
+            // This avoids painting other same-row bets red too early when the
+            // backend settles outcomes ahead of the visual chart head.
+            nextStatus = chartPassedCellEnd ? "lose" : isPast ? "past" : "active";
             if (!settledOutcome.revealed) {
               nextSettledOutcomes[cell.id] = {
                 ...settledOutcome,
@@ -438,8 +441,8 @@ export const useGameStore = create<GameState>((set) => ({
               changed = true;
             }
           }
-        } else if (chartReachedCell) {
-          // Show immediate loss feedback when chart reaches the bet cell but
+        } else if (chartPassedCellEnd) {
+          // Show immediate loss feedback when chart passes the bet cell end but
           // no settled outcome has arrived yet; a later WIN update can still
           // override this to "hit".
           nextStatus = "lose";
@@ -494,6 +497,7 @@ export const useGameStore = create<GameState>((set) => ({
       const nextBets = { ...state.bets };
       const nextPendingWins = { ...state.pendingWins };
       const nextSettledOutcomes = { ...state.settledOutcomes };
+      const now = getServerNow(state.serverTimeOffset);
       let changed = false;
 
       if (status === "OPEN") {
@@ -564,6 +568,7 @@ export const useGameStore = create<GameState>((set) => ({
         if (cell.id !== cellId) return cell;
 
         const nextCell: CellData = { ...cell };
+        const chartPassedCellEnd = now >= cell.timeWindowEnd;
         if (rewardRate) {
           const resolvedMultiplier =
             rewardRateNum !== null ? rewardRateNum : cell.multiplier;
@@ -575,7 +580,12 @@ export const useGameStore = create<GameState>((set) => ({
         }
 
         if (isSettled) {
-          nextCell.status = nextSettledOutcomes[cellId]?.isWin ? "hit" : "lose";
+          const settled = nextSettledOutcomes[cellId];
+          if (settled?.isWin) {
+            nextCell.status = "hit";
+          } else if (chartPassedCellEnd) {
+            nextCell.status = "lose";
+          }
         }
 
         changed = true;

@@ -20,13 +20,13 @@ import React, {
 import { WalletIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
 import { cn } from "@/lib/utils";
-import { Copy, Eye, Info, LocateFixed, Share2 } from "lucide-react";
+import { Copy, Eye, Info, LocateFixed, Rocket, Share2 } from "lucide-react";
+import Image from "next/image";
 import { Sheet } from "react-modal-sheet";
 import { io } from "socket.io-client";
 import { useAccount } from "wagmi";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { useAuth } from "@/src/components/providers/AuthProvider";
-import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
 import OverlayModePanel from "@/src/features/trade/components/OverlayModePanel";
 import TradeControlsPanel from "@/src/features/trade/components/TradeControlsPanel";
 import { WinShareCard } from "@/src/features/trade/components/WinShareCard";
@@ -36,10 +36,9 @@ import {
   extractWssKey,
 } from "@/src/features/trade/orderFollow";
 import { getLatestChartTime } from "@/src/features/trade/gridTiming";
-import type { RemoteCell } from "@/src/features/trade/store";
+import type { CellData, RemoteCell } from "@/src/features/trade/store";
 import { BACKEND_URL } from "@/src/features/trade/constant";
 import { useGameStore } from "@/src/features/trade/store";
-import { appToast } from "@/src/features/trade/toast";
 import {
   authControllerGetWssKey,
   authControllerGetChallenge,
@@ -66,6 +65,7 @@ import {
   drawZoomIndicator,
 } from "@/src/utils/canvasDraw";
 import { useGridInteraction } from "@/src/hooks/useGridInteraction";
+import useWinShareActions from "@/src/hooks/useWinShareActions";
 import { getAddress } from "viem";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -76,7 +76,8 @@ const MIN_PRICE_MOTION_MS = 250;
 const MAX_PRICE_MOTION_MS = 5000;
 const TICK_CADENCE_SMOOTHING = 0.2;
 const RESIZE_COMMIT_DEBOUNCE_MS = 180;
-const OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS = 4000;
+const FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS = 4000;
+const SUGGESTED_STRATEGY_MIN_HOLD_MS = 3000;
 const FOLLOW_ORDER_EVENTS = [
   "order_follow",
   "order_follow_update",
@@ -108,11 +109,27 @@ const shareTimeFormatter = new Intl.DateTimeFormat("en-US", {
   second: "2-digit",
   hour12: true,
 });
+const winAmountFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const FAKE_WIN_TOAST_MIN_DELAY_MS = 5000;
+const FAKE_WIN_TOAST_MAX_DELAY_MS = 20000;
+const FAKE_WIN_TOAST_VISIBLE_MS = 1000;
+const WIN_EFFECT_VISIBLE_MS = 2000;
+const HEX_DIGITS = "0123456789abcdef";
 const MARKET_SYMBOL = "BTC/USD";
 type ShareOverlayTarget = {
   cellId: string;
   left: number;
   top: number;
+  centerLeft: number;
+  centerTop: number;
+};
+type FakeWinToastData = {
+  walletAddress: string;
+  amount: number;
+  isHumanVerified: boolean;
 };
 type FollowOverlayActivity = ReturnType<
   typeof extractFollowedOrderActivities
@@ -252,8 +269,30 @@ function formatWalletShort(address: string): string {
 }
 
 function normalizeTimestampToMs(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  return value > 1_000_000_000_000 ? value : value * 1000;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 1_000_000_000_000 ? value : value * 1000;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return parsed > 1_000_000_000_000 ? parsed : parsed * 1000;
+  }
+
+  return null;
+}
+
+function normalizePriceNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
 }
 
 function normalizePriceString(value: unknown): string | null {
@@ -268,7 +307,10 @@ function normalizePriceString(value: unknown): string | null {
   return null;
 }
 
-function extractSuggestedStrategyCellIds(payload: unknown): string[] {
+function extractSuggestedStrategyCellIds(
+  payload: unknown,
+  currentCells: CellData[],
+): string[] | null {
   const payloadRecord =
     payload && typeof payload === "object" && !Array.isArray(payload)
       ? (payload as Record<string, unknown>)
@@ -280,6 +322,7 @@ function extractSuggestedStrategyCellIds(payload: unknown): string[] {
       : [];
 
   const cellIds = new Set<string>();
+  let parseFailureCount = 0;
   rawCells.forEach((rawCell) => {
     if (!rawCell || typeof rawCell !== "object" || Array.isArray(rawCell)) {
       return;
@@ -290,18 +333,50 @@ function extractSuggestedStrategyCellIds(payload: unknown): string[] {
     const endTs = normalizeTimestampToMs(cell.endTs);
     const lowerPrice = normalizePriceString(cell.lowerPrice);
     const upperPrice = normalizePriceString(cell.upperPrice);
+    const lowerPriceNumber = normalizePriceNumber(cell.lowerPrice);
+    const upperPriceNumber = normalizePriceNumber(cell.upperPrice);
 
     if (
       startTs === null ||
       endTs === null ||
       lowerPrice === null ||
-      upperPrice === null
+      upperPrice === null ||
+      lowerPriceNumber === null ||
+      upperPriceNumber === null
     ) {
+      parseFailureCount += 1;
+      return;
+    }
+
+    const matchedGridCell = currentCells.find((gridCell) => {
+      if (
+        gridCell.timeWindowStart !== startTs ||
+        gridCell.timeWindowEnd !== endTs
+      ) {
+        return false;
+      }
+
+      const gridLower = normalizePriceNumber(gridCell.original.lowerPrice);
+      const gridUpper = normalizePriceNumber(gridCell.original.upperPrice);
+      if (gridLower === null || gridUpper === null) return false;
+
+      return (
+        Math.abs(gridLower - lowerPriceNumber) < 1e-8 &&
+        Math.abs(gridUpper - upperPriceNumber) < 1e-8
+      );
+    });
+
+    if (matchedGridCell) {
+      cellIds.add(matchedGridCell.id);
       return;
     }
 
     cellIds.add(`${startTs}:${endTs}:${lowerPrice}:${upperPrice}`);
   });
+
+  if (rawCells.length > 0 && cellIds.size === 0 && parseFailureCount > 0) {
+    return null;
+  }
 
   return [...cellIds];
 }
@@ -348,6 +423,71 @@ function buildDisplayHistory(
   }
 
   return [...history, { time: displayTime, price: displayPrice }];
+}
+
+function randomInt(minInclusive: number, maxInclusive: number): number {
+  const min = Math.ceil(minInclusive);
+  const max = Math.floor(maxInclusive);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function buildRandomWalletAddress(): string {
+  let value = "0x";
+  for (let index = 0; index < 40; index += 1) {
+    value += HEX_DIGITS[randomInt(0, HEX_DIGITS.length - 1)];
+  }
+  return value;
+}
+
+function buildFakeWinToastData(): FakeWinToastData {
+  const isLowerRange = Math.random() < 0.8;
+  const minAmount = isLowerRange ? 2 : 50;
+  const maxAmount = isLowerRange ? 50 : 70;
+  const amount = Number(
+    (Math.random() * (maxAmount - minAmount) + minAmount).toFixed(2),
+  );
+
+  return {
+    walletAddress: buildRandomWalletAddress(),
+    amount,
+    isHumanVerified: Math.random() < 0.22,
+  };
+}
+
+function WinBetBanner({ data }: { data: FakeWinToastData }) {
+  const displayAddress = formatWalletShort(data.walletAddress);
+
+  return (
+    <div className="pumpfun-jitter bg-background-main/95 border-success-border flex max-w-[min(88vw,360px)] items-center gap-2 rounded-[12px] border px-2 py-1.5 shadow-[0_0_0_1px_rgb(17_211_68_/_0.12)_inset,0_8px_20px_rgb(3_9_16_/_0.42)]">
+      <div className="bg-surface-overlay-medium border-border-main flex size-8 shrink-0 items-center justify-center rounded-[9px] border">
+        <Rocket aria-hidden className="text-grid-accent size-4" />
+      </div>
+
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1">
+          <span className="text-text-heading truncate text-[14px] font-semibold tracking-[-0.01em]">
+            {displayAddress}
+          </span>
+          {data.isHumanVerified ? (
+            <Image
+              src="/onboarding/verified-badge.svg"
+              alt="Verified human"
+              width={16}
+              height={16}
+              className="h-4 w-4 shrink-0"
+            />
+          ) : null}
+        </div>
+        <span className="bg-success-background text-success-light border-success-border rounded-[9px] border px-1.5 py-0.5 text-xs font-bold tracking-[-0.01em]">
+          WIN
+        </span>
+      </div>
+
+      <span className="pumpfun-flicker text-success-medium text-[14px] font-semibold tracking-[-0.02em] whitespace-nowrap">
+        +${winAmountFormatter.format(data.amount)}
+      </span>
+    </div>
+  );
 }
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -432,9 +572,14 @@ export const TradingGrid: React.FC = () => {
   const resolvedWssKey = extractWssKey(wssKeyResponse);
   const activeFollowings = useMemo(
     () =>
-      extractOrderFollowings(followingResponse).filter(
-        (item) => item.status === "ACTIVE",
-      ),
+      extractOrderFollowings(followingResponse).filter((item) => {
+        const normalizedStatus = item.status?.trim().toUpperCase();
+        return (
+          normalizedStatus === undefined ||
+          normalizedStatus.length === 0 ||
+          normalizedStatus === "ACTIVE"
+        );
+      }),
     [followingResponse],
   );
   const availableFollowTargets = useMemo(() => {
@@ -594,9 +739,16 @@ export const TradingGrid: React.FC = () => {
   const [shareOverlayTargets, setShareOverlayTargets] = useState<
     ShareOverlayTarget[]
   >([]);
+  const [activeWinEffectByCellId, setActiveWinEffectByCellId] = useState<
+    Record<string, number>
+  >({});
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
   const [shareCellId, setShareCellId] = useState<string | null>(null);
-  const [isSharing, setIsSharing] = useState(false);
+  const { isSharing, shareUrl, copyShareLink, share, shareToWorldChat } =
+    useWinShareActions({
+      walletAddress,
+      resolvedUserAddress,
+    });
   const shareTargetsRef = useRef<ShareOverlayTarget[]>([]);
   const shareTargetIdsHashRef = useRef("");
   const lastFollowOverlayUpdateAtRef = useRef(0);
@@ -611,6 +763,9 @@ export const TradingGrid: React.FC = () => {
   const suggestedStrategyFlushTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const winEffectTimersRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
   const shareOverlayButtonRefs = useRef(
     new Map<string, HTMLButtonElement | null>(),
   );
@@ -619,6 +774,44 @@ export const TradingGrid: React.FC = () => {
   const isSuggestedStrategyVisible = suggestedStrategyEnabled;
   const isFollowTradeConfigVisibleDraft =
     isOverlaySheetOpen && followTradeEnabledDraft;
+  const [fakeWinToastData, setFakeWinToastData] =
+    useState<FakeWinToastData | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+    let nextToastTimerId: ReturnType<typeof setTimeout> | null = null;
+    let hideToastTimerId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNextToast = () => {
+      if (isCancelled) return;
+
+      nextToastTimerId = setTimeout(
+        () => {
+          if (isCancelled) return;
+
+          setFakeWinToastData(buildFakeWinToastData());
+          if (hideToastTimerId) {
+            clearTimeout(hideToastTimerId);
+          }
+          hideToastTimerId = setTimeout(() => {
+            if (isCancelled) return;
+            setFakeWinToastData(null);
+          }, FAKE_WIN_TOAST_VISIBLE_MS);
+
+          scheduleNextToast();
+        },
+        randomInt(FAKE_WIN_TOAST_MIN_DELAY_MS, FAKE_WIN_TOAST_MAX_DELAY_MS),
+      );
+    };
+
+    scheduleNextToast();
+
+    return () => {
+      isCancelled = true;
+      if (nextToastTimerId) clearTimeout(nextToastTimerId);
+      if (hideToastTimerId) clearTimeout(hideToastTimerId);
+    };
+  }, []);
 
   const enabledFollowTargetIds = useMemo(
     () =>
@@ -634,6 +827,10 @@ export const TradingGrid: React.FC = () => {
   const enabledFollowTargetIdsSet = useMemo(
     () => new Set(enabledFollowTargetIds),
     [enabledFollowTargetIds],
+  );
+  const activeWinEffectCellIdSet = useMemo(
+    () => new Set(Object.keys(activeWinEffectByCellId)),
+    [activeWinEffectByCellId],
   );
   const ensureFollowTargetConfig = useCallback(
     (source: Record<string, boolean>) => {
@@ -680,7 +877,7 @@ export const TradingGrid: React.FC = () => {
       const now = Date.now();
       const elapsed = now - lastFollowOverlayUpdateAtRef.current;
 
-      if (elapsed >= OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS) {
+      if (elapsed >= FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS) {
         applyFollowOverlayActivities(activities);
         return;
       }
@@ -688,7 +885,7 @@ export const TradingGrid: React.FC = () => {
       followOverlayPendingActivitiesRef.current = activities;
       if (followOverlayFlushTimerRef.current) return;
 
-      const waitMs = OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS - elapsed;
+      const waitMs = FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS - elapsed;
       followOverlayFlushTimerRef.current = setTimeout(() => {
         followOverlayFlushTimerRef.current = null;
         const nextActivities = followOverlayPendingActivitiesRef.current;
@@ -710,7 +907,7 @@ export const TradingGrid: React.FC = () => {
       const now = Date.now();
       const elapsed = now - lastSuggestedStrategyUpdateAtRef.current;
 
-      if (elapsed >= OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS) {
+      if (elapsed >= SUGGESTED_STRATEGY_MIN_HOLD_MS) {
         applySuggestedStrategyCellIds(nextCellIds);
         return;
       }
@@ -718,7 +915,7 @@ export const TradingGrid: React.FC = () => {
       suggestedStrategyPendingCellIdsRef.current = nextCellIds;
       if (suggestedStrategyFlushTimerRef.current) return;
 
-      const waitMs = OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS - elapsed;
+      const waitMs = SUGGESTED_STRATEGY_MIN_HOLD_MS - elapsed;
       suggestedStrategyFlushTimerRef.current = setTimeout(() => {
         suggestedStrategyFlushTimerRef.current = null;
         const queuedCellIds = suggestedStrategyPendingCellIdsRef.current;
@@ -1119,7 +1316,13 @@ export const TradingGrid: React.FC = () => {
     const handleSuggestedStrategyUpdate = (
       payload: SuggestedStrategyMessage | unknown,
     ) => {
-      queueSuggestedStrategyCellIds(extractSuggestedStrategyCellIds(payload));
+      const nextCellIds = extractSuggestedStrategyCellIds(
+        payload,
+        storeRef.current.cells,
+      );
+      // Ignore malformed payload bursts to avoid clearing the current highlight set.
+      if (nextCellIds === null) return;
+      queueSuggestedStrategyCellIds(nextCellIds);
     };
 
     socketClient.on(
@@ -1259,9 +1462,41 @@ export const TradingGrid: React.FC = () => {
       if (cell.status !== "hit") return;
       const hasBet =
         (bets[cell.id] || 0) > 0 || (pendingBets[cell.id] || 0) > 0;
-      if (hasBet) triggeredWinsRef.current.add(cell.id);
+      if (!hasBet || triggeredWinsRef.current.has(cell.id)) return;
+
+      triggeredWinsRef.current.add(cell.id);
+      const effectStartedAt = Date.now();
+      setActiveWinEffectByCellId((currentValue) => ({
+        ...currentValue,
+        [cell.id]: effectStartedAt,
+      }));
+
+      const existingTimer = winEffectTimersRef.current.get(cell.id);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+      const timerId = setTimeout(() => {
+        setActiveWinEffectByCellId((currentValue) => {
+          if (!(cell.id in currentValue)) return currentValue;
+          const nextValue = { ...currentValue };
+          delete nextValue[cell.id];
+          return nextValue;
+        });
+        winEffectTimersRef.current.delete(cell.id);
+      }, WIN_EFFECT_VISIBLE_MS);
+      winEffectTimersRef.current.set(cell.id, timerId);
     });
   }, [cells, bets, pendingBets]);
+
+  useEffect(
+    () => () => {
+      for (const timerId of winEffectTimersRef.current.values()) {
+        clearTimeout(timerId);
+      }
+      winEffectTimersRef.current.clear();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (history.length === 0) return;
@@ -1410,84 +1645,11 @@ export const TradingGrid: React.FC = () => {
       new Date(selectedShareCell.timeWindowStart),
     );
   }, [selectedShareCell]);
-  const shareUrl = buildMiniAppReferralLink(MiniKit.user?.username);
 
   const handleOpenShareSheet = useCallback((cellId: string) => {
     setShareCellId(cellId);
     setIsShareSheetOpen(true);
   }, []);
-
-  const handleCopyShareLink = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      appToast.success("Copied share link", { icon: "🔗" });
-    } catch (error) {
-      console.error("Failed to copy share link", error);
-      appToast.error("Failed to copy share link", { icon: "⚠️" });
-    }
-  }, [shareUrl]);
-
-  const handleShare = useCallback(async () => {
-    try {
-      setIsSharing(true);
-      if (
-        typeof navigator !== "undefined" &&
-        typeof navigator.share === "function"
-      ) {
-        await navigator.share({
-          title: "Join TickX",
-          text: "Use my referral link to join TickX on World App.",
-          url: shareUrl,
-        });
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        appToast.success("Copied share link", { icon: "🔗" });
-      }
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        console.error("Failed to share", error);
-        appToast.error("Failed to share", { icon: "⚠️" });
-      }
-    } finally {
-      setIsSharing(false);
-    }
-  }, [shareUrl]);
-
-  const handleShareToWorldChat = useCallback(async () => {
-    try {
-      if (!MiniKit.isInWorldApp()) {
-        appToast.error("WorldChat share is only available in World App", {
-          icon: "⚠️",
-        });
-        return;
-      }
-
-      const resolvedAddress =
-        MiniKit.user?.walletAddress ?? walletAddress ?? resolvedUserAddress;
-      const miniAppUsername =
-        MiniKit.user?.username?.trim() ??
-        (resolvedAddress
-          ? (await MiniKit.getUserByAddress(resolvedAddress)).username?.trim()
-          : undefined);
-
-      if (!miniAppUsername) {
-        appToast.error("Missing World username", { icon: "⚠️" });
-        return;
-      }
-
-      const referralLink = buildMiniAppReferralLink(miniAppUsername);
-      const message = [
-        "Use my referral to follow trade on TickX.",
-        `Referral code: ${miniAppUsername}`,
-        `Link: ${referralLink}`,
-      ].join("\n");
-
-      await MiniKit.chat({ message });
-    } catch (error) {
-      console.error("Failed to share to WorldChat", error);
-      appToast.error("Failed to share to WorldChat", { icon: "⚠️" });
-    }
-  }, [resolvedUserAddress, walletAddress]);
 
   const setShareOverlayButtonRef = useCallback(
     (cellId: string, node: HTMLButtonElement | null) => {
@@ -1564,8 +1726,10 @@ export const TradingGrid: React.FC = () => {
 
       nextShareTargets.push({
         cellId: cell.id,
-        left: Math.max(4, Math.min(layout.w - 34, x + w - 30)),
+        left: Math.min(layout.w - 34, x + w - 30),
         top: Math.max(4, Math.min(layout.h - 34, y + 4)),
+        centerLeft: x + w / 2,
+        centerTop: y + h / 2,
       });
     }
     shareTargetsRef.current = nextShareTargets;
@@ -1716,11 +1880,11 @@ export const TradingGrid: React.FC = () => {
     cells.length > 0 || history.length > 0 || currentPrice > 0;
   const showLoadingState = !hasLiveData;
   const loadingLabel = socket
-    ? "Waiting for live market grid..."
+    ? "Loading live market grid, please wait..."
     : isLoggingIn
-      ? "Authenticating wallet..."
+      ? "Authenticating wallet, please wait..."
       : address
-        ? "Reconnecting to market feed..."
+        ? "Reconnecting to market feed, please wait..."
         : "Connect wallet to load the market feed";
   const displayPrice =
     currentPrice > 0 ? livePriceFormatter.format(currentPrice) : "--";
@@ -1868,6 +2032,27 @@ export const TradingGrid: React.FC = () => {
           style={{ display: "block" }}
         />
         <div className="pointer-events-none absolute inset-0 z-20">
+          {shareOverlayTargets
+            .filter((target) => activeWinEffectCellIdSet.has(target.cellId))
+            .map((target) => (
+              <div
+                key={`${target.cellId}-win-icon`}
+                className="absolute top-0 left-0 will-change-transform"
+                style={{
+                  transform: `translate3d(${target.centerLeft}px, ${target.centerTop}px, 0) translate(-50%, -50%)`,
+                }}
+                aria-hidden
+              >
+                <Image
+                  src={`/bet-win.svg?v=${activeWinEffectByCellId[target.cellId] ?? 0}`}
+                  alt=""
+                  width={200}
+                  height={200}
+                  unoptimized
+                  className="h-[200px] w-[200px]"
+                />
+              </div>
+            ))}
           {shareOverlayTargets.map((target) => (
             <button
               key={target.cellId}
@@ -1887,6 +2072,12 @@ export const TradingGrid: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {fakeWinToastData ? (
+          <div className="pointer-events-none absolute top-11 left-3 z-20 sm:top-12 sm:left-4">
+            <WinBetBanner data={fakeWinToastData} />
+          </div>
+        ) : null}
 
         {showLoadingState && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -2006,7 +2197,7 @@ export const TradingGrid: React.FC = () => {
                         <button
                           type="button"
                           className="text-text-sub hover:text-text-heading flex size-5 items-center justify-center"
-                          onClick={handleCopyShareLink}
+                          onClick={copyShareLink}
                           aria-label="Copy share link"
                         >
                           <Copy className="size-4" strokeWidth={1.9} />
@@ -2016,7 +2207,7 @@ export const TradingGrid: React.FC = () => {
                     <Button
                       type="button"
                       className="bg-primary-medium text-text-inverse hover:bg-primary-light h-11 rounded-[8px] text-base font-medium tracking-[-0.01em]"
-                      onClick={handleShare}
+                      onClick={share}
                       disabled={isSharing}
                     >
                       <Share2 className="mr-2 size-4" strokeWidth={1.9} />
@@ -2026,7 +2217,7 @@ export const TradingGrid: React.FC = () => {
                       type="button"
                       variant="outline"
                       className="border-primary-light text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[8px] bg-transparent text-base font-medium tracking-[-0.01em]"
-                      onClick={handleShareToWorldChat}
+                      onClick={shareToWorldChat}
                     >
                       <Share2 className="mr-2 size-4" strokeWidth={1.9} />
                       WorldChat

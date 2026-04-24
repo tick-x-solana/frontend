@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Copy, Share2 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { Sheet } from "react-modal-sheet";
 import {
   Table,
   TableBody,
@@ -11,8 +13,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/src/components/shadcn/table";
+import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
+import useWinShareActions from "@/src/hooks/useWinShareActions";
+import { WinShareCard } from "@/src/features/trade/components/WinShareCard";
 import { useOrderControllerGetUserOrders } from "@/src/services/queries";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +32,7 @@ interface TradingHistoryItem {
   amountWld: number | null;
   multiplier: number | null;
   pnl: number | null;
+  settledWin: boolean | null;
   inProgress: boolean;
   whenLabel: string;
   timestampMs: number;
@@ -62,6 +68,16 @@ function asNumber(value: unknown): number | null {
   if (typeof value === "string") {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function asBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
   }
   return null;
 }
@@ -149,6 +165,11 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
 
   const status = asString(record.status)?.toUpperCase();
   const inProgress = status === "OPEN";
+  const settledWin =
+    asBoolean(record.settledWin) ??
+    asBoolean(record.isWin) ??
+    asBoolean(record.win) ??
+    null;
 
   const directPnl =
     asNumber(record.pnl) ??
@@ -171,11 +192,15 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
 
   const pnl =
     directPnl ??
-    (statusIsLose && amountUsd !== null
+    (settledWin === false && amountUsd !== null
       ? -Math.abs(amountUsd)
-      : statusIsWin
+      : settledWin === true
         ? fallbackPnl
-        : fallbackPnl);
+        : statusIsLose && amountUsd !== null
+          ? -Math.abs(amountUsd)
+          : statusIsWin
+            ? fallbackPnl
+            : null);
 
   const timestampMs =
     readTimestampMs(record.createdAt) ??
@@ -200,7 +225,7 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
     (asString(record.baseAsset) && asString(record.quoteAsset)
       ? `${asString(record.baseAsset)}/${asString(record.quoteAsset)}`
       : null) ??
-    "WLD/USD";
+    "BTC/USD";
 
   const currentPrice =
     asNumber(record.currentPrice) ?? asNumber(record.entryPrice) ?? null;
@@ -233,6 +258,7 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
     amountWld,
     multiplier,
     pnl,
+    settledWin,
     inProgress,
     whenLabel: formatRelativeTime(whenTimestampMs),
     timestampMs,
@@ -250,9 +276,19 @@ function pnlText(item: TradingHistoryItem): string {
   return formatMoney(item.pnl);
 }
 
+function isWinRow(item: TradingHistoryItem): boolean {
+  if (item.settledWin === false) return false;
+  if (item.settledWin === true) return true;
+  return !item.inProgress && item.pnl !== null && item.pnl > 0;
+}
+
 const TradingHistoryTable = () => {
-  const { isAuthenticated, isLoggingIn } = useAuth();
+  const { isAuthenticated, isLoggingIn, walletAddress } = useAuth();
   const { data: wldUsdPrice } = useWldUsdPrice(isAuthenticated && !isLoggingIn);
+  const { isSharing, shareUrl, copyShareLink, share, shareToWorldChat } =
+    useWinShareActions({ walletAddress });
+  const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
+  const [shareItemId, setShareItemId] = useState<string | null>(null);
 
   const { data, isLoading } = useOrderControllerGetUserOrders<unknown>(
     {
@@ -291,6 +327,18 @@ const TradingHistoryTable = () => {
   }, [data, wldUsdPrice]);
 
   const emptyState = !isLoading && items.length === 0;
+  const selectedShareItem = useMemo(
+    () => items.find((item) => item.id === shareItemId) ?? null,
+    [items, shareItemId],
+  );
+  const selectedShareMultiplier = selectedShareItem?.multiplier ?? 1;
+  const selectedShareAmount = selectedShareItem?.amountUsd ?? 0;
+  const selectedShareProfit = Math.max(selectedShareItem?.pnl ?? 0, 0);
+
+  const handleOpenShareSheet = (itemId: string) => {
+    setShareItemId(itemId);
+    setIsShareSheetOpen(true);
+  };
 
   return (
     <div className="bg-background-surface border-border-main relative z-10 overflow-hidden rounded-[8px] border">
@@ -308,10 +356,10 @@ const TradingHistoryTable = () => {
             <TableHead className="text-text-sub w-[70px] px-4 py-3 text-[14px] font-normal">
               Mult
             </TableHead>
-            <TableHead className="text-text-sub w-[90px] px-4 py-3 text-[14px] font-normal">
+            <TableHead className="text-text-sub w-[130px] px-4 py-3 text-[14px] font-normal">
               PNL
             </TableHead>
-            <TableHead className="text-text-sub bg-surface-overlay-subtle sticky right-0 z-20 px-4 py-3 text-[14px] font-normal">
+            <TableHead className="text-text-sub bg-surface-overlay-subtle w-[170px] px-4 py-3 text-[14px] font-normal whitespace-nowrap">
               When
             </TableHead>
           </TableRow>
@@ -344,22 +392,96 @@ const TradingHistoryTable = () => {
               <FragmentRow
                 key={item.id}
                 item={item}
+                onShare={handleOpenShareSheet}
               />
             );
           })}
         </TableBody>
       </Table>
+
+      <Sheet
+        isOpen={isShareSheetOpen}
+        onClose={() => setIsShareSheetOpen(false)}
+        detent="content"
+        unstyled
+      >
+        <Sheet.Backdrop
+          onTap={() => setIsShareSheetOpen(false)}
+          className="bg-background-main/55 backdrop-blur-[2px]"
+        />
+        <Sheet.Container className="pointer-events-none">
+          <Sheet.Content
+            disableDrag={false}
+            className="bg-background-main border-border-main pointer-events-auto rounded-t-[16px] border-t"
+          >
+            {selectedShareItem ? (
+              <div className="mx-auto w-full max-w-[400px]">
+                <WinShareCard
+                  marketSymbol={selectedShareItem.market}
+                  multiplier={selectedShareMultiplier}
+                  amount={selectedShareAmount}
+                  openedAt={selectedShareItem.createdAtLabel}
+                  profit={selectedShareProfit}
+                />
+                <div className="px-5 pb-5">
+                  <div className="flex flex-col gap-4">
+                    <p className="text-hint text-sm font-medium tracking-[-0.01em]">
+                      Share your win
+                    </p>
+                    <div className="bg-surface-overlay rounded-[8px] px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <p className="text-text-heading min-w-0 flex-1 truncate text-sm font-medium tracking-[-0.01em]">
+                          {shareUrl}
+                        </p>
+                        <button
+                          type="button"
+                          className="text-text-sub hover:text-text-heading flex size-5 items-center justify-center"
+                          onClick={copyShareLink}
+                          aria-label="Copy share link"
+                        >
+                          <Copy className="size-4" strokeWidth={1.9} />
+                        </button>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      className="bg-primary-medium text-text-inverse hover:bg-primary-light h-11 rounded-[8px] text-base font-medium tracking-[-0.01em]"
+                      onClick={share}
+                      disabled={isSharing}
+                    >
+                      <Share2 className="mr-2 size-4" strokeWidth={1.9} />
+                      {isSharing ? "Sharing..." : "Share"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-primary-light text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[8px] bg-transparent text-base font-medium tracking-[-0.01em]"
+                      onClick={shareToWorldChat}
+                    >
+                      <Share2 className="mr-2 size-4" strokeWidth={1.9} />
+                      WorldChat
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </Sheet.Content>
+        </Sheet.Container>
+      </Sheet>
     </div>
   );
 };
 
 interface FragmentRowProps {
   item: TradingHistoryItem;
+  onShare: (itemId: string) => void;
 }
 
-const FragmentRow = ({ item }: FragmentRowProps) => {
+const FragmentRow = ({ item, onShare }: FragmentRowProps) => {
+  const canShareWin = isWinRow(item);
+
   return (
-    <TableRow className="border-border-main bg-background-main hover:bg-surface-overlay-subtle group border-b border-l-2 border-l-success-medium">
+    <TableRow className="border-border-main bg-background-main hover:bg-surface-overlay-subtle group border-l-success-medium border-b border-l-2">
       <TableCell className="px-4 py-2">
         <p className="text-text-main text-[14px] font-semibold">
           {formatMoney(item.amountUsd)}
@@ -374,20 +496,35 @@ const FragmentRow = ({ item }: FragmentRowProps) => {
         </p>
       </TableCell>
       <TableCell className="px-4 py-2 align-middle">
-        <p
-          className={cn(
-            "text-[14px] font-medium",
-            item.inProgress
-              ? "text-text-main"
-              : item.pnl !== null && item.pnl >= 0
-                ? "text-success-medium"
-                : "text-warning-medium",
-          )}
-        >
-          {pnlText(item)}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p
+            className={cn(
+              "min-w-0 truncate text-[14px] font-medium",
+              item.inProgress
+                ? "text-text-main"
+                : item.pnl !== null && item.pnl >= 0
+                  ? "text-success-medium"
+                  : "text-warning-medium",
+            )}
+          >
+            {pnlText(item)}
+          </p>
+          {canShareWin ? (
+            <button
+              type="button"
+              className="bg-background-main/90 border-border-main text-grid-accent hover:bg-surface-overlay-subtle flex h-7 min-h-7 w-7 min-w-7 shrink-0 items-center justify-center rounded-full border p-0"
+              onClick={(event) => {
+                event.stopPropagation();
+                onShare(item.id);
+              }}
+              aria-label="Share winning row"
+            >
+              <Share2 className="size-3.5 shrink-0" strokeWidth={2} />
+            </button>
+          ) : null}
+        </div>
       </TableCell>
-      <TableCell className="text-text-sub bg-background-main group-hover:bg-surface-overlay-subtle sticky right-0 z-10 px-4 py-2 align-middle text-[14px] font-normal">
+      <TableCell className="text-text-sub bg-background-main group-hover:bg-surface-overlay-subtle w-[170px] px-4 py-2 align-middle text-[14px] font-normal whitespace-nowrap">
         {item.whenLabel}
       </TableCell>
     </TableRow>

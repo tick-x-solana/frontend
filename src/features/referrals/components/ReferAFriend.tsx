@@ -91,7 +91,7 @@ const ReferAFriend = ({ referralLink }: ReferAFriendProps) => {
             aria-label={social.label}
           >
             <Image
-              src="/icons/facebook-mark.svg"
+              src="/world-app.avif"
               alt=""
               width={24}
               height={24}

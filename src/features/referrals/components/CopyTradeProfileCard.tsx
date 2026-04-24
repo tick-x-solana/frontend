@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Star, UsersRound } from "lucide-react";
 import { Button } from "@/src/components/shadcn/button";
 import { cn } from "@/lib/utils";
@@ -36,9 +37,13 @@ const CopyTradeProfileCard = ({
           <div className="bg-primary-light text-text-inverse flex size-8 items-center justify-center rounded-full text-sm font-medium tracking-[-0.01em]">
             {profile.initials}
           </div>
-          <span className="bg-accent-blue absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full border border-background-main text-[11px] font-semibold text-white">
-            +
-          </span>
+          <Image
+            src="/onboarding/verified-badge.svg"
+            alt="Verified badge"
+            width={16}
+            height={16}
+            className="absolute -right-1 -bottom-1 size-4"
+          />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -65,7 +70,11 @@ const CopyTradeProfileCard = ({
           )}
           aria-label={`Favorite ${profile.name}`}
         >
-          <Star className="size-4" aria-hidden="true" fill={isFavorite ? "currentColor" : "none"} />
+          <Star
+            className="size-4"
+            aria-hidden="true"
+            fill={isFavorite ? "currentColor" : "none"}
+          />
         </Button>
       </div>
 
@@ -81,7 +90,9 @@ const CopyTradeProfileCard = ({
           </p>
         </div>
         <div className="flex flex-col gap-0.5">
-          <p className="text-text-sub text-sm font-medium tracking-[-0.01em]">ROI</p>
+          <p className="text-text-sub text-sm font-medium tracking-[-0.01em]">
+            ROI
+          </p>
           <p className="text-text-heading text-sm font-semibold tracking-[-0.01em]">
             {profile.roi}
           </p>
@@ -109,7 +120,11 @@ const CopyTradeProfileCard = ({
               : "bg-primary-light text-text-inverse hover:bg-primary-light/90",
         )}
       >
-        {isFollowing ? "Following" : isSubmitting ? "Processing..." : "Follow Trade"}
+        {isFollowing
+          ? "Following"
+          : isSubmitting
+            ? "Processing..."
+            : "Follow Trade"}
       </Button>
     </article>
   );

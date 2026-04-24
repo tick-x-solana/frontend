@@ -200,11 +200,6 @@ export default function OverlayModePanel({
                         <p className="text-text-heading truncate text-xs font-semibold tracking-[-0.01em]">
                           {target.label}
                         </p>
-                        {target.subtitle ? (
-                          <p className="text-text-sub truncate text-[11px] tracking-[-0.01em]">
-                            {target.subtitle}
-                          </p>
-                        ) : null}
                       </div>
 
                       <button

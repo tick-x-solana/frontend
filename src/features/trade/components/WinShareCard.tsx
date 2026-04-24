@@ -22,8 +22,21 @@ const percentFormatter = new Intl.NumberFormat("en-US", {
 });
 
 export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
-  function WinShareCard({ marketSymbol, multiplier, amount, openedAt, profit }, ref) {
+  function WinShareCard(
+    { marketSymbol, multiplier, amount, openedAt, profit },
+    ref,
+  ) {
     const pnlPercent = Math.max((multiplier - 1) * 100, 0);
+    const fadedRates = [
+      { value: "1.1x", col: 2, row: 0 },
+      { value: "2.42x", col: 3, row: 0 },
+      { value: "4.42x", col: 4, row: 0 },
+      { value: "0.5x", col: 3, row: 1 },
+      { value: "1.42x", col: 4, row: 1 },
+      { value: "1.5x", col: 2, row: 2 },
+      { value: "1.6x", col: 3, row: 2 },
+      { value: "1.1x", col: 4, row: 2 },
+    ] as const;
 
     return (
       <div
@@ -81,50 +94,42 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
             </div>
           </div>
 
-          <div className="relative h-[207px] overflow-hidden rounded-[12px] border border-border-main bg-background-grid">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_54%_42%,rgb(17_211_68_/_0.22)_0%,transparent_52%)]" />
-            <div className="bg-grid-line/40 absolute inset-0 bg-[linear-gradient(to_right,transparent_0,transparent_24.5%,var(--color-grid-line)_25%,transparent_25.5%,transparent_49.5%,var(--color-grid-line)_50%,transparent_50.5%,transparent_74.5%,var(--color-grid-line)_75%,transparent_75.5%),linear-gradient(to_bottom,transparent_0,transparent_32.5%,var(--color-grid-line)_33%,transparent_33.5%,transparent_66.5%,var(--color-grid-line)_67%,transparent_67.5%)] opacity-50" />
+          <div className="border-border-main bg-background-grid relative h-[207px] overflow-hidden rounded-[16px] border">
+            <div className="absolute inset-0 bg-[radial-gradient(90%_120%_at_50%_45%,rgb(18_221_255_/_0.14)_0%,transparent_58%)]" />
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--color-grid-line)_1px,transparent_1px),linear-gradient(to_bottom,var(--color-grid-line)_1px,transparent_1px)] bg-[size:25%_100%,100%_33.333%] opacity-45" />
+            <div className="absolute inset-0 shadow-[inset_-8px_-8px_16px_#040b18,inset_8px_8px_16px_#040b18]" />
 
-            <svg
-              viewBox="0 0 360 207"
-              className="absolute inset-0 h-full w-full"
-              aria-hidden="true"
-            >
-              <defs>
-                <filter id="share-curve-glow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="3.5" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-              <path
-                d="M6 160 C16 200,48 200,70 150 C90 102,120 96,152 122"
-                stroke="var(--color-success-light)"
-                strokeWidth="3.2"
-                fill="none"
-                filter="url(#share-curve-glow)"
-                strokeLinecap="round"
-              />
-              <circle cx="152" cy="122" r="5.5" fill="var(--color-success-light)" />
-            </svg>
+            <div className="absolute top-[54px] left-[124px] h-[104px] w-[106px] rounded-[20px] bg-[rgb(17_211_68_/_0.20)] blur-[4.7px]" />
+            <div className="absolute top-[64px] left-[135px] h-[84px] w-[86px] rounded-[16px] bg-[rgb(17_211_68_/_0.20)]" />
+            {fadedRates.map((rate) => (
+              <p
+                key={`${rate.value}-${rate.col}-${rate.row}`}
+                aria-hidden
+                className="text-grid-axis pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 text-[12px] font-medium tracking-[-0.01em] opacity-30"
+                style={{
+                  left: `calc((100% / 4) * ${rate.col - 0.5})`,
+                  top: `calc((100% / 3) * ${rate.row + 0.5})`,
+                }}
+              >
+                {rate.value}
+              </p>
+            ))}
 
-            <div className="absolute top-1/2 left-1/2 flex h-[74px] w-[78px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-[9px] border border-success-medium bg-background-main shadow-[0_0_20px_rgb(17_211_68_/_0.36),0_0_28px_rgb(18_221_255_/_0.28),inset_0_0_18px_rgb(18_221_255_/_0.22)]">
+            <div className="border-success-medium absolute top-[70px] left-[140px] flex h-[68px] w-[71px] flex-col items-center justify-center rounded-[8px] border bg-[#0a151a] shadow-[0_0_16.5px_rgb(0_229_255_/_0.25),0_0_24.8px_rgb(0_229_255_/_0.25),inset_0_0_16.8px_rgb(0_229_255_/_0.25)]">
               <p className="text-success-medium text-[16px] font-extrabold tracking-[-0.01em]">
                 ${amountFormatter.format(amount)}
               </p>
-              <p className="text-text-sub text-xs tracking-[-0.01em]">
+              <p className="text-text-disabled text-[11px] tracking-[-0.01em]">
                 {multiplier.toFixed(2)}x
               </p>
             </div>
 
             <Image
-              src="/penguin.png"
-              alt="Penguin mascot"
-              width={80}
-              height={80}
-              className="absolute bottom-2 left-2 h-20 w-20 object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.45)]"
+              src="/penguin-moscot.png"
+              alt="TickX penguin mascot"
+              width={150}
+              height={150}
+              className="pointer-events-none absolute bottom-1 left-[-12px] h-[150px] w-[150px] object-contain opacity-95 drop-shadow-[0_6px_14px_rgba(0,0,0,0.45)]"
             />
           </div>
         </div>

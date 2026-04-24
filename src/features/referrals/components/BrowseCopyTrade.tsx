@@ -27,7 +27,9 @@ const BrowseCopyTrade = () => {
   return (
     <section className="flex flex-col gap-4 pb-4">
       <header className="flex items-center justify-between">
-        <h2 className="text-text-heading text-base font-semibold">Follow Trade</h2>
+        <h2 className="text-text-heading text-base font-semibold">
+          Follow Trade
+        </h2>
         <Button
           type="button"
           variant="ghost"
@@ -40,7 +42,10 @@ const BrowseCopyTrade = () => {
       </header>
 
       {COPY_TRADE_PROFILES.map((profile, index) => (
-        <CopyTradeProfileCard key={`${profile.name}-${index}`} profile={profile} />
+        <CopyTradeProfileCard
+          key={`${profile.name}-${index}`}
+          profile={profile}
+        />
       ))}
     </section>
   );

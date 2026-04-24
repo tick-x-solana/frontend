@@ -4,7 +4,7 @@ import { getAddress } from "viem";
 
 export interface OrderFollowingItem {
   id?: string;
-  subscriberUserId: string;
+  subscriberUserId: string | null;
   targetUserId: string;
   targetUsername?: string | null;
   status?: string | null;
@@ -93,8 +93,10 @@ function normalizeCellId(cell: UnknownRecord | null): string | null {
 
   const startTs = normalizeTsToMsString(cell.startTs);
   const endTs = normalizeTsToMsString(cell.endTs);
-  const lowerPrice = asString(cell.lowerPrice);
-  const upperPrice = asString(cell.upperPrice);
+  const lowerPrice =
+    asString(cell.lowerPrice) ?? asNumber(cell.lowerPrice)?.toString();
+  const upperPrice =
+    asString(cell.upperPrice) ?? asNumber(cell.upperPrice)?.toString();
 
   if (!startTs || !endTs || !lowerPrice || !upperPrice) return null;
   return `${startTs}:${endTs}:${lowerPrice}:${upperPrice}`;
@@ -111,6 +113,22 @@ function normalizeCellIdString(value: unknown): string | null {
   const endTs = normalizeTsToMsString(parts[parts.length - 3]);
   const lowerPrice = asString(parts[parts.length - 2]);
   const upperPrice = asString(parts[parts.length - 1]);
+
+  if (!startTs || !endTs || !lowerPrice || !upperPrice) return null;
+  return `${startTs}:${endTs}:${lowerPrice}:${upperPrice}`;
+}
+
+function normalizeCellIdFromRecord(
+  record: UnknownRecord | null,
+): string | null {
+  if (!record) return null;
+
+  const startTs = normalizeTsToMsString(record.startTs ?? record.cellTimeStart);
+  const endTs = normalizeTsToMsString(record.endTs ?? record.cellTimeEnd);
+  const lowerPrice =
+    asString(record.lowerPrice) ?? asNumber(record.lowerPrice)?.toString();
+  const upperPrice =
+    asString(record.upperPrice) ?? asNumber(record.upperPrice)?.toString();
 
   if (!startTs || !endTs || !lowerPrice || !upperPrice) return null;
   return `${startTs}:${endTs}:${lowerPrice}:${upperPrice}`;
@@ -153,10 +171,18 @@ function toFollowingItem(value: unknown): OrderFollowingItem | null {
   const record = asRecord(value);
   if (!record) return null;
 
-  const subscriberUserId = parseAddress(record.subscriberUserId);
-  const targetUserId = parseAddress(record.targetUserId);
+  const subscriberUserId =
+    parseAddress(record.subscriberUserId) ??
+    parseAddress(record.userId) ??
+    parseAddress(record.subscriberAddress) ??
+    null;
+  const targetUserId =
+    parseAddress(record.targetUserId) ??
+    parseAddress(record.target_user_id) ??
+    parseAddress(record.targetAddress) ??
+    parseAddress(record.targetWalletAddress);
 
-  if (!subscriberUserId || !targetUserId) return null;
+  if (!targetUserId) return null;
 
   return {
     id: asString(record.id) ?? undefined,
@@ -176,13 +202,26 @@ function toFollowingItem(value: unknown): OrderFollowingItem | null {
 export function extractOrderFollowings(
   response: unknown,
 ): OrderFollowingItem[] {
+  const responseRecord = asRecord(response);
+  const nestedData = readNestedRecord(responseRecord, "data");
+
   const rawItems = Array.isArray(response)
     ? response
-    : Array.isArray(asRecord(response)?.data)
-      ? (asRecord(response)?.data as unknown[])
-      : Array.isArray(readNestedRecord(asRecord(response), "data")?.items)
-        ? (readNestedRecord(asRecord(response), "data")?.items as unknown[])
-        : [];
+    : Array.isArray(responseRecord?.data)
+      ? (responseRecord?.data as unknown[])
+      : Array.isArray(responseRecord?.items)
+        ? (responseRecord?.items as unknown[])
+        : Array.isArray(responseRecord?.results)
+          ? (responseRecord?.results as unknown[])
+          : Array.isArray(responseRecord?.followings)
+            ? (responseRecord?.followings as unknown[])
+            : Array.isArray(nestedData?.items)
+              ? (nestedData?.items as unknown[])
+              : Array.isArray(nestedData?.results)
+                ? (nestedData?.results as unknown[])
+                : Array.isArray(nestedData?.followings)
+                  ? (nestedData?.followings as unknown[])
+                  : [];
 
   return rawItems
     .map(toFollowingItem)
@@ -205,15 +244,25 @@ function toActivity(
 
   const directTargetUserId =
     parseAddress(record.targetUserId) ??
+    parseAddress(record.target_user_id) ??
+    parseAddress(record.targetAddress) ??
+    parseAddress(record.targetWalletAddress) ??
     parseAddress(record.traderUserId) ??
+    parseAddress(record.trader_user_id) ??
     parseAddress(record.followedUserId) ??
     parseAddress(nestedOrder?.targetUserId) ??
+    parseAddress(nestedOrder?.target_user_id) ??
     parseAddress(nestedData?.targetUserId);
 
   const sourceUserId =
     parseAddress(record.userId) ??
     parseAddress(record.walletAddress) ??
+    parseAddress(record.address) ??
+    parseAddress(record.traderAddress) ??
+    parseAddress(record.traderWalletAddress) ??
     parseAddress(nestedOrder?.userId) ??
+    parseAddress(nestedOrder?.walletAddress) ??
+    parseAddress(nestedOrder?.address) ??
     parseAddress(nestedData?.userId);
 
   const targetUserId =
@@ -240,6 +289,9 @@ function toActivity(
       asString(nestedData?.amount),
     cellId:
       normalizeCellId(cell) ??
+      normalizeCellIdFromRecord(record) ??
+      normalizeCellIdFromRecord(nestedOrder) ??
+      normalizeCellIdFromRecord(nestedData) ??
       normalizeCellIdString(record.cellId) ??
       normalizeCellIdString(nestedOrder?.cellId) ??
       normalizeCellIdString(nestedData?.cellId),
