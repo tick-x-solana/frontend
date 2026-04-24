@@ -185,6 +185,13 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
     readTimestampMs(record.startTs) ??
     readTimestampMs(cell?.startTs) ??
     Date.now();
+  const whenTimestampMs =
+    readTimestampMs(record.settleAt) ??
+    readTimestampMs(record.settledAt) ??
+    readTimestampMs(record.cellTimeEnd) ??
+    readTimestampMs(record.endTs) ??
+    readTimestampMs(cell?.endTs) ??
+    timestampMs;
 
   const market =
     asString(record.marketSymbol) ??
@@ -227,7 +234,7 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
     multiplier,
     pnl,
     inProgress,
-    whenLabel: formatRelativeTime(record),
+    whenLabel: formatRelativeTime(whenTimestampMs),
     timestampMs,
     currentPrice,
     targetPrice,
