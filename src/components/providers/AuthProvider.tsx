@@ -8,21 +8,31 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { MiniKit } from "@worldcoin/minikit-js";
+import type {
+  MiniKitWalletAuthOptions,
+  WalletAuthResult,
+} from "@worldcoin/minikit-js/commands";
 import { useAccount, useSignMessage } from "wagmi";
 import { useGameStore } from "@/src/features/trade/store";
 import {
   accountControllerGetBalance,
   authControllerGetChallenge,
   authControllerLogin,
+  authControllerMiniAppLogin,
   getAccountControllerGetBalanceQueryKey,
+  useAuthControllerGetMiniAppNonce,
 } from "@/src/services/queries";
+import type { MiniAppLoginDto } from "@/src/services/models";
 
 type AuthContextValue = {
   isAuthenticated: boolean;
   isLoggingIn: boolean;
+  isMiniApp: boolean;
   login: () => Promise<void>;
   logout: () => void;
   token: string | null;
@@ -43,6 +53,39 @@ function getStoredToken() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem("token");
 }
+
+function getStoredWalletAddress() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("wallet-address");
+}
+
+function extractAccessToken(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+
+  const record = response as Record<string, unknown>;
+  const directToken = record.accessToken ?? record.token;
+
+  if (typeof directToken === "string" && directToken.trim().length > 0) {
+    return directToken;
+  }
+
+  if (record.data && typeof record.data === "object") {
+    return extractAccessToken(record.data);
+  }
+
+  return null;
+}
+
+const ONBOARDING_COMPLETE_KEY = "tickx-onboarding-complete";
+
+const walletAuthInput = (nonce: string): MiniKitWalletAuthOptions => ({
+  nonce,
+  requestId: "0",
+  expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  notBefore: new Date(Date.now() - 24 * 60 * 60 * 1000),
+  statement:
+    "This is my statement and here is a link https://worldcoin.com/apps",
+});
 
 function extractBalance(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -68,11 +111,58 @@ function extractBalance(value: unknown): number | null {
   );
 }
 
+function extractMiniAppNonce(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const directNonce = record.nonce;
+  if (typeof directNonce === "string" && directNonce.trim().length > 0) {
+    return directNonce;
+  }
+
+  const data = record.data;
+  if (data && typeof data === "object") {
+    const nestedData = data as Record<string, unknown>;
+    const nestedNonce = nestedData.nonce;
+
+    if (typeof nestedNonce === "string" && nestedNonce.trim().length > 0) {
+      return nestedNonce;
+    }
+  }
+
+  return null;
+}
+
+const subscribeMiniAppStatus = () => () => {};
+
+const getMiniAppStatusSnapshot = () => {
+  if (typeof window === "undefined") return false;
+  return MiniKit.isInWorldApp();
+};
+
+const getMiniAppStatusServerSnapshot = () => false;
+
 const AuthProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
+  const { refetch: refetchMiniAppNonce } = useAuthControllerGetMiniAppNonce({
+    query: {
+      enabled: false,
+      retry: false,
+    },
+  });
   const { address, isConnected, isConnecting, isReconnecting } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const [token, setToken] = useState<string | null>(() => getStoredToken());
+  const [authWalletAddress, setAuthWalletAddress] = useState<string | null>(
+    () => getStoredWalletAddress(),
+  );
+  const isMiniApp = useSyncExternalStore(
+    subscribeMiniAppStatus,
+    getMiniAppStatusSnapshot,
+    getMiniAppStatusServerSnapshot,
+  );
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const isLoggingInRef = useRef(false);
   const previousConnectionRef = useRef<{
@@ -110,7 +200,10 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (typeof window === "undefined") return;
 
     window.localStorage.removeItem("token");
+    window.localStorage.removeItem("wallet-address");
+    window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
     setToken(null);
+    setAuthWalletAddress(null);
     clearBalance();
   }, [clearBalance]);
 
@@ -119,11 +212,104 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     window.localStorage.removeItem("token");
     window.localStorage.removeItem("wallet-address");
+    window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
     setToken(null);
+    setAuthWalletAddress(null);
     clearBalance();
   }, [clearBalance]);
 
+  const storeAuthSession = useCallback(
+    async (accessToken: string, walletAddress: string) => {
+      if (typeof window === "undefined") return;
+
+      window.localStorage.setItem("token", accessToken);
+      window.localStorage.setItem("wallet-address", walletAddress);
+      setToken(accessToken);
+      setAuthWalletAddress(walletAddress);
+      await syncBalance();
+    },
+    [syncBalance],
+  );
+
+  const loginWithMiniApp = useCallback(async () => {
+    if (isLoggingInRef.current) return;
+    if (typeof window === "undefined") return;
+
+    const storedToken = window.localStorage.getItem("token");
+    const storedAddress = window.localStorage.getItem("wallet-address");
+    const miniKitAddress = MiniKit.user?.walletAddress;
+
+    if (
+      storedToken &&
+      storedAddress &&
+      (!miniKitAddress ||
+        miniKitAddress.toLowerCase() === storedAddress.toLowerCase())
+    ) {
+      setToken(storedToken);
+      setAuthWalletAddress(storedAddress);
+      await syncBalance();
+      return;
+    }
+
+    isLoggingInRef.current = true;
+    setIsLoggingIn(true);
+
+    try {
+      const nonceResponse = await refetchMiniAppNonce();
+      const nonce = extractMiniAppNonce(nonceResponse.data);
+      if (!nonce) {
+        throw new Error("Missing mini-app nonce");
+      }
+
+      const result = await MiniKit.walletAuth<WalletAuthResult>(
+        walletAuthInput(nonce),
+      );
+      console.log("result: ", result);
+
+      if (result.executedWith === "fallback") {
+        throw new Error("Mini App wallet authentication is unavailable");
+      }
+
+      const miniAppLoginDto: MiniAppLoginDto = {
+        nonce,
+        miniAppUserId:
+          MiniKit.user?.walletAddress ??
+          MiniKit.user?.username ??
+          result.data.address,
+        miniAppUsername: MiniKit.user?.username ?? undefined,
+        payload: {
+          status: "success",
+          message: result.data.message,
+          signature: result.data.signature,
+          address: result.data.address,
+          version: result.data.version ?? 1,
+        },
+      };
+
+      const loginResponse = await authControllerMiniAppLogin(miniAppLoginDto);
+      const accessToken = extractAccessToken(loginResponse);
+
+      if (!accessToken) {
+        throw new Error("Missing access token");
+      }
+
+      await storeAuthSession(accessToken, result.data.address);
+    } catch (error) {
+      console.error("Mini App login failed:", error);
+      window.localStorage.removeItem("token");
+      setToken(null);
+    } finally {
+      isLoggingInRef.current = false;
+      setIsLoggingIn(false);
+    }
+  }, [refetchMiniAppNonce, storeAuthSession, syncBalance]);
+
   const login = useCallback(async () => {
+    if (isMiniApp) {
+      await loginWithMiniApp();
+      return;
+    }
+
     if (!isConnected || !address || isLoggingInRef.current) return;
     if (typeof window === "undefined") return;
 
@@ -163,16 +349,14 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address, signature }),
       })) as unknown as LoginResponse;
-      const accessToken = loginResponse.accessToken;
+      const accessToken =
+        loginResponse.accessToken ?? extractAccessToken(loginResponse);
 
       if (!accessToken) {
         throw new Error("Missing access token");
       }
 
-      window.localStorage.setItem("token", accessToken);
-      window.localStorage.setItem("wallet-address", address);
-      setToken(accessToken);
-      await syncBalance();
+      await storeAuthSession(accessToken, address);
     } catch (error) {
       console.error("Login failed:", error);
       window.localStorage.removeItem("token");
@@ -181,9 +365,18 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       isLoggingInRef.current = false;
       setIsLoggingIn(false);
     }
-  }, [address, isConnected, signMessageAsync, syncBalance]);
+  }, [
+    address,
+    isConnected,
+    isMiniApp,
+    loginWithMiniApp,
+    signMessageAsync,
+    storeAuthSession,
+    syncBalance,
+  ]);
 
   useEffect(() => {
+    if (isMiniApp) return;
     if (!isConnected || !address) return;
 
     const frame = window.requestAnimationFrame(() => {
@@ -191,9 +384,11 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [address, isConnected, login]);
+  }, [address, isConnected, isMiniApp, login]);
 
   useEffect(() => {
+    if (isMiniApp) return;
+
     const previousConnection = previousConnectionRef.current;
     const didDisconnect =
       previousConnection.isConnected &&
@@ -212,6 +407,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [
     address,
     handleWalletDisconnect,
+    isMiniApp,
     isConnected,
     isConnecting,
     isReconnecting,
@@ -222,24 +418,35 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const handleLogout = () => {
       window.localStorage.removeItem("token");
+      window.localStorage.removeItem("wallet-address");
+      window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
       setToken(null);
-      void login();
+      setAuthWalletAddress(null);
+
+      if (!isMiniApp) {
+        void login();
+      }
     };
 
     window.addEventListener("auth:logout", handleLogout);
     return () => window.removeEventListener("auth:logout", handleLogout);
-  }, [login]);
+  }, [isMiniApp, login]);
+
+  const resolvedWalletAddress = isMiniApp
+    ? authWalletAddress
+    : (address ?? null);
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      isAuthenticated: Boolean(token && address),
+      isAuthenticated: Boolean(token && resolvedWalletAddress),
       isLoggingIn,
+      isMiniApp,
       login,
       logout,
       token,
-      walletAddress: address ?? null,
+      walletAddress: resolvedWalletAddress,
     }),
-    [address, isLoggingIn, login, logout, token],
+    [isLoggingIn, isMiniApp, login, logout, resolvedWalletAddress, token],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

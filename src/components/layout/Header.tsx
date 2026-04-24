@@ -31,7 +31,14 @@ const Header = () => {
   const { connect, connectors, isPending: isConnectPending } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain, isPending: isSwitchPending } = useSwitchChain();
-  const { isLoggingIn } = useAuth();
+  const {
+    isAuthenticated,
+    isLoggingIn,
+    isMiniApp,
+    login,
+    logout,
+    walletAddress,
+  } = useAuth();
 
   const isActivePath = (href: string) => {
     if (href === "#") return false;
@@ -45,6 +52,16 @@ const Header = () => {
   const primaryConnector = connectors[0];
 
   const handleWalletAction = () => {
+    if (isMiniApp) {
+      if (isAuthenticated) {
+        logout();
+        return;
+      }
+
+      void login();
+      return;
+    }
+
     if (isWrongNetwork) {
       switchChain({ chainId: sepolia.id });
       return;
@@ -65,6 +82,13 @@ const Header = () => {
 
   const walletButtonLabel = (() => {
     if (isLoggingIn) return "Signing in...";
+    if (isMiniApp) {
+      if (isAuthenticated && walletAddress) {
+        return formatWalletAddress(walletAddress);
+      }
+
+      return "Sign in";
+    }
     if (isSwitchPending) return "Switching...";
     if (isConnectPending) return "Connecting...";
     if (isWrongNetwork) return "Switch to Sepolia";
@@ -132,10 +156,12 @@ const Header = () => {
           size="lg"
           onClick={handleWalletAction}
           disabled={
-            !primaryConnector ||
-            isConnectPending ||
-            isSwitchPending ||
-            isLoggingIn
+            isMiniApp
+              ? isLoggingIn
+              : !primaryConnector ||
+                isConnectPending ||
+                isSwitchPending ||
+                isLoggingIn
           }
           className="bg-primary-light text-text-inverse hover:bg-primary-medium ml-auto h-10 rounded-[8px] px-3 py-1.5 text-sm font-medium tracking-[-0.01em] shadow-none disabled:opacity-60"
         >

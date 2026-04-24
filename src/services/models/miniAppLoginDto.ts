@@ -4,12 +4,11 @@
  * Tapl Bot API
  * OpenAPI spec version: 0.0.12
  */
-import type { MiniAppVerifyHumanDto } from './miniAppVerifyHumanDto';
 import type { MiniAppWalletAuthSuccessPayloadDto } from './miniAppWalletAuthSuccessPayloadDto';
 
 export interface MiniAppLoginDto {
   nonce: string;
   payload: MiniAppWalletAuthSuccessPayloadDto;
   miniAppUserId: string;
-  humanProof?: MiniAppVerifyHumanDto;
+  miniAppUsername?: string;
 }

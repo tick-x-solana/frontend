@@ -28,6 +28,7 @@ import type {
   ExpireTimeoutDto,
   FinalizeWithdrawalDto,
   MiniAppLoginDto,
+  MiniAppVerifyHumanDto,
   OhlcControllerGetOhlc200,
   OhlcControllerGetOhlc401,
   OhlcControllerGetOhlc503,
@@ -633,6 +634,291 @@ export const useAuthControllerMiniAppLogin = <
     queryClient,
   );
 };
+
+/**
+ * @summary Verify Worldchain mini-app human proof for the current user
+ */
+export type authControllerVerifyMiniAppHumanResponse201 = {
+  data: void;
+  status: 201;
+};
+
+export type authControllerVerifyMiniAppHumanResponseSuccess =
+  authControllerVerifyMiniAppHumanResponse201 & {
+    headers: Headers;
+  };
+export type authControllerVerifyMiniAppHumanResponse =
+  authControllerVerifyMiniAppHumanResponseSuccess;
+
+export const getAuthControllerVerifyMiniAppHumanUrl = () => {
+  return `/api/auth/miniapp/verify-human`;
+};
+
+export const authControllerVerifyMiniAppHuman = async (
+  miniAppVerifyHumanDto: MiniAppVerifyHumanDto,
+  options?: RequestInit,
+): Promise<authControllerVerifyMiniAppHumanResponse> => {
+  return customClient<authControllerVerifyMiniAppHumanResponse>(
+    getAuthControllerVerifyMiniAppHumanUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(miniAppVerifyHumanDto),
+    },
+  );
+};
+
+export const getAuthControllerVerifyMiniAppHumanMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authControllerVerifyMiniAppHuman>>,
+    TError,
+    { data: BodyType<MiniAppVerifyHumanDto> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customClient>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof authControllerVerifyMiniAppHuman>>,
+  TError,
+  { data: BodyType<MiniAppVerifyHumanDto> },
+  TContext
+> => {
+  const mutationKey = ["authControllerVerifyMiniAppHuman"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof authControllerVerifyMiniAppHuman>>,
+    { data: BodyType<MiniAppVerifyHumanDto> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return authControllerVerifyMiniAppHuman(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AuthControllerVerifyMiniAppHumanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof authControllerVerifyMiniAppHuman>>
+>;
+export type AuthControllerVerifyMiniAppHumanMutationBody =
+  BodyType<MiniAppVerifyHumanDto>;
+export type AuthControllerVerifyMiniAppHumanMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Verify Worldchain mini-app human proof for the current user
+ */
+export const useAuthControllerVerifyMiniAppHuman = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof authControllerVerifyMiniAppHuman>>,
+      TError,
+      { data: BodyType<MiniAppVerifyHumanDto> },
+      TContext
+    >;
+    request?: SecondParameter<typeof customClient>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof authControllerVerifyMiniAppHuman>>,
+  TError,
+  { data: BodyType<MiniAppVerifyHumanDto> },
+  TContext
+> => {
+  return useMutation(
+    getAuthControllerVerifyMiniAppHumanMutationOptions(options),
+    queryClient,
+  );
+};
+
+/**
+ * @summary Get a one-time nonce for Worldchain mini-app login
+ */
+export type authControllerGetMiniAppNonceResponse200 = {
+  data: void;
+  status: 200;
+};
+
+export type authControllerGetMiniAppNonceResponseSuccess =
+  authControllerGetMiniAppNonceResponse200 & {
+    headers: Headers;
+  };
+export type authControllerGetMiniAppNonceResponse =
+  authControllerGetMiniAppNonceResponseSuccess;
+
+export const getAuthControllerGetMiniAppNonceUrl = () => {
+  return `/api/auth/miniapp/nonce`;
+};
+
+export const authControllerGetMiniAppNonce = async (
+  options?: RequestInit,
+): Promise<authControllerGetMiniAppNonceResponse> => {
+  return customClient<authControllerGetMiniAppNonceResponse>(
+    getAuthControllerGetMiniAppNonceUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getAuthControllerGetMiniAppNonceQueryKey = () => {
+  return [`/api/auth/miniapp/nonce`] as const;
+};
+
+export const getAuthControllerGetMiniAppNonceQueryOptions = <
+  TData = Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+      TError,
+      TData
+    >
+  >;
+  request?: SecondParameter<typeof customClient>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getAuthControllerGetMiniAppNonceQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>
+  > = ({ signal }) =>
+    authControllerGetMiniAppNonce({ signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    staleTime: 10000,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type AuthControllerGetMiniAppNonceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>
+>;
+export type AuthControllerGetMiniAppNonceQueryError = ErrorType<unknown>;
+
+export function useAuthControllerGetMiniAppNonce<
+  TData = Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+  TError = ErrorType<unknown>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+          TError,
+          Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customClient>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useAuthControllerGetMiniAppNonce<
+  TData = Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+          TError,
+          Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customClient>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useAuthControllerGetMiniAppNonce<
+  TData = Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customClient>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary Get a one-time nonce for Worldchain mini-app login
+ */
+
+export function useAuthControllerGetMiniAppNonce<
+  TData = Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof authControllerGetMiniAppNonce>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customClient>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getAuthControllerGetMiniAppNonceQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get a new WSS key (requires JWT)

@@ -1,0 +1,402 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { MiniKit } from "@worldcoin/minikit-js";
+import {
+  createPublicClient,
+  encodeFunctionData,
+  formatUnits,
+  http,
+  isAddress,
+  parseUnits,
+  type Address,
+} from "viem";
+import { toast } from "sonner";
+import { TICK_X_ABI } from "@/src/constants/abi";
+import { useAuth } from "@/src/components/providers/AuthProvider";
+import {
+  getAccountControllerGetBalanceQueryKey,
+  paymentControllerDebugDeposit,
+  paymentControllerRequestWithdrawal,
+} from "@/src/services/queries";
+
+const WORLD_CHAIN_ID = 480;
+const COINGECKO_WLD_PRICE_URL =
+  "https://api.coingecko.com/api/v3/simple/price?ids=worldcoin&vs_currencies=usd";
+const WORLDCHAIN_RPC_URL = "https://worldchain-mainnet.g.alchemy.com/public";
+
+const worldPublicClient = createPublicClient({
+  transport: http(WORLDCHAIN_RPC_URL),
+});
+
+export const TICK_X_POOL_ADDRESS =
+  "0x6351b3006aAE72a36006614310928930Ac229d0e" as Address;
+export const WLD_TOKEN_ADDRESS =
+  "0x8603a12c549007a3afe026efad797640bda30760" as Address;
+
+type DepositWldToUsdParams = {
+  amountWld: string;
+  tokenDecimals?: number;
+  poolAddress?: Address;
+  tokenAddress?: Address;
+};
+
+type WithdrawUsdToWldParams = {
+  amountUsd: string;
+};
+
+type GetAvailableWldBalanceParams = {
+  tokenAddress?: Address;
+  tokenDecimals?: number;
+};
+
+type CoinGeckoSimplePriceResponse = {
+  worldcoin?: {
+    usd?: number;
+  };
+};
+
+type UserOpStatusResponse = {
+  status?: string;
+  transaction_hash?: string;
+};
+
+function trimTrailingZeros(value: string): string {
+  if (!value.includes(".")) return value;
+  return value.replace(/\.?0+$/, "");
+}
+
+function parsePositiveNumber(value: string, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive number`);
+  }
+
+  return parsed;
+}
+
+function extractUserOpHash(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const directUserOpHash = record.userOpHash;
+
+  if (
+    typeof directUserOpHash === "string" &&
+    directUserOpHash.startsWith("0x")
+  ) {
+    return directUserOpHash;
+  }
+
+  if (record.data && typeof record.data === "object") {
+    const nestedUserOpHash = extractUserOpHash(record.data);
+    if (nestedUserOpHash) {
+      return nestedUserOpHash;
+    }
+  }
+
+  return null;
+}
+
+async function fetchWldUsdPrice(): Promise<number> {
+  const response = await fetch(COINGECKO_WLD_PRICE_URL, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to fetch WLD/USD price from CoinGecko");
+  }
+
+  const json = (await response.json()) as CoinGeckoSimplePriceResponse;
+  const price = json.worldcoin?.usd;
+
+  if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+    throw new Error("Invalid WLD/USD price from CoinGecko");
+  }
+
+  return price;
+}
+
+async function fetchWldBalance({
+  tokenAddress,
+  walletAddress,
+  tokenDecimals,
+}: {
+  tokenAddress: Address;
+  walletAddress: Address;
+  tokenDecimals: number;
+}): Promise<{ raw: bigint; formatted: string }> {
+  const rawBalance = (await worldPublicClient.readContract({
+    address: tokenAddress,
+    abi: [
+      {
+        type: "function",
+        name: "balanceOf",
+        stateMutability: "view",
+        inputs: [{ name: "owner", type: "address" }],
+        outputs: [{ name: "", type: "uint256" }],
+      },
+    ],
+    functionName: "balanceOf",
+    args: [walletAddress],
+  })) as bigint;
+
+  return {
+    raw: rawBalance,
+    formatted: formatUnits(rawBalance, tokenDecimals),
+  };
+}
+
+async function resolveTransactionHash(
+  userOpHash: string,
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://developer.world.org/api/v2/minikit/userop/${userOpHash}`,
+      {
+        method: "GET",
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const json = (await response.json()) as UserOpStatusResponse;
+    if (json.status === "success" && typeof json.transaction_hash === "string") {
+      return json.transaction_hash;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+const useDepositWithdraw = () => {
+  const queryClient = useQueryClient();
+  const { walletAddress } = useAuth();
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  const getWldUsdPrice = useCallback(async () => fetchWldUsdPrice(), []);
+
+  const getAvailableWldBalance = useCallback(
+    async ({
+      tokenAddress = WLD_TOKEN_ADDRESS,
+      tokenDecimals = 18,
+    }: GetAvailableWldBalanceParams = {}) => {
+      if (!walletAddress) {
+        throw new Error("Wallet not connected");
+      }
+
+      if (!isAddress(walletAddress)) {
+        throw new Error("Invalid wallet address");
+      }
+
+      return fetchWldBalance({
+        tokenAddress,
+        walletAddress,
+        tokenDecimals,
+      });
+    },
+    [walletAddress],
+  );
+
+  const depositWldToUsd = useCallback(
+    async ({
+      amountWld,
+      tokenDecimals = 18,
+      poolAddress = TICK_X_POOL_ADDRESS,
+      tokenAddress = WLD_TOKEN_ADDRESS,
+    }: DepositWldToUsdParams) => {
+      if (!walletAddress) {
+        throw new Error("Wallet not connected");
+      }
+
+      if (!isAddress(walletAddress)) {
+        throw new Error("Invalid wallet address");
+      }
+
+      if (!MiniKit.isInWorldApp()) {
+        throw new Error("WLD deposit is only available in World App");
+      }
+
+      const parsedAmountWld = parsePositiveNumber(amountWld, "WLD amount");
+
+      setIsDepositing(true);
+
+      try {
+        const amountWei = parseUnits(amountWld, tokenDecimals);
+        const wldBalance = await fetchWldBalance({
+          tokenAddress,
+          walletAddress,
+          tokenDecimals,
+        });
+
+        if (wldBalance.raw < amountWei) {
+          throw new Error(
+            `Insufficient WLD balance. Available: ${trimTrailingZeros(wldBalance.formatted)} WLD`,
+          );
+        }
+
+        const approveCalldata = encodeFunctionData({
+          abi: [
+            {
+              name: "approve",
+              type: "function",
+              stateMutability: "nonpayable",
+              inputs: [
+                { name: "spender", type: "address" },
+                { name: "value", type: "uint256" },
+              ],
+              outputs: [{ name: "", type: "bool" }],
+            },
+          ],
+          functionName: "approve",
+          args: [poolAddress, amountWei],
+        });
+
+        const depositCalldata = encodeFunctionData({
+          abi: TICK_X_ABI.abi,
+          functionName: "depositTrader",
+          args: [amountWei],
+        });
+
+        const txResult = await MiniKit.sendTransaction({
+          chainId: WORLD_CHAIN_ID,
+          transactions: [
+            {
+              to: tokenAddress,
+              data: approveCalldata,
+              value: "0x0",
+            },
+            {
+              to: poolAddress,
+              data: depositCalldata,
+              value: "0x0",
+            },
+          ],
+        });
+
+        const wldUsdPrice = await fetchWldUsdPrice();
+        const usdAmount = trimTrailingZeros(
+          (parsedAmountWld * wldUsdPrice).toFixed(6),
+        );
+
+        const userOpHash = extractUserOpHash(txResult);
+        const finalTxHash = userOpHash
+          ? (await resolveTransactionHash(userOpHash)) ?? userOpHash
+          : undefined;
+
+        await paymentControllerDebugDeposit({
+          amount: usdAmount,
+          txHash: finalTxHash,
+        });
+
+        await queryClient.invalidateQueries({
+          queryKey: getAccountControllerGetBalanceQueryKey(),
+        });
+
+        toast.success("Deposit submitted and backend balance synced");
+
+        return {
+          txResult,
+          userOpHash,
+          txHash: finalTxHash,
+          wldUsdPrice,
+          wldAmount: amountWld,
+          usdAmount,
+          wldBalance,
+        };
+      } catch (error) {
+        console.error("Deposit flow failed", error);
+        toast.error("Deposit failed");
+        throw error;
+      } finally {
+        setIsDepositing(false);
+      }
+    },
+    [queryClient, walletAddress],
+  );
+
+  const withdrawUsdToWld = useCallback(
+    async ({ amountUsd }: WithdrawUsdToWldParams) => {
+      const parsedAmountUsd = parsePositiveNumber(amountUsd, "USD amount");
+      setIsWithdrawing(true);
+
+      try {
+        const wldUsdPrice = await fetchWldUsdPrice();
+        const amountWld = trimTrailingZeros(
+          (parsedAmountUsd / wldUsdPrice).toFixed(8),
+        );
+        const withdrawTokenAmountRaw = parseUnits(amountWld, 18);
+
+        await paymentControllerRequestWithdrawal({
+          amount: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
+        });
+
+        const claimTraderCalldata = encodeFunctionData({
+          abi: [
+            {
+              type: "function",
+              name: "claimTrader",
+              stateMutability: "nonpayable",
+              inputs: [{ name: "", type: "uint256" }],
+              outputs: [],
+            },
+          ],
+          functionName: "claimTrader",
+          args: [withdrawTokenAmountRaw],
+        });
+
+        const txResult = await MiniKit.sendTransaction({
+          chainId: WORLD_CHAIN_ID,
+          transactions: [
+            {
+              to: TICK_X_POOL_ADDRESS,
+              data: claimTraderCalldata,
+              value: "0x0",
+            },
+          ],
+        });
+
+        await queryClient.invalidateQueries({
+          queryKey: getAccountControllerGetBalanceQueryKey(),
+        });
+
+        toast.success("Withdrawal submitted and on-chain claim sent");
+
+        return {
+          amountUsd: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
+          amountWld,
+          wldUsdPrice,
+          txResult,
+        };
+      } catch (error) {
+        console.error("Withdrawal flow failed", error);
+        toast.error("Withdrawal failed");
+        throw error;
+      } finally {
+        setIsWithdrawing(false);
+      }
+    },
+    [queryClient],
+  );
+
+  return {
+    isDepositing,
+    isWithdrawing,
+    getWldUsdPrice,
+    getAvailableWldBalance,
+    depositWldToUsd,
+    withdrawUsdToWld,
+  };
+};
+
+export default useDepositWithdraw;

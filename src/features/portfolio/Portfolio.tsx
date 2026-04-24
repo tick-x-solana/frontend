@@ -1,19 +1,17 @@
-import ActiveTab from "@/src/components/common/ActiveTab";
 import Title from "@/src/components/common/Title";
 import ActivePredictionCard from "@/src/features/portfolio/components/ActivePredictionCard";
 import OverviewCard from "@/src/features/portfolio/components/OverviewCard";
+import WalletActionPanel from "@/src/features/portfolio/components/WalletActionPanel";
 import Image from "next/image";
-import { Suspense } from "react";
-
-const portfolioTabs = [
-  { label: "Active Predictions", value: "active" },
-  { label: "Trading History", value: "signals" },
-];
 
 const overviewCards = [
   { label: "Total Vol", value: "$4,250" },
-  { label: "Win Rate", value: "68.4%", valueColor: "#11d344" },
-  { label: "+Edge Earned", value: "$14.20", valueColor: "#a8e8bb" },
+  { label: "Win Rate", value: "68.4%", valueClassName: "text-success-medium" },
+  {
+    label: "+Edge Earned",
+    value: "$14.20",
+    valueClassName: "text-primary-medium",
+  },
 ];
 
 const Portfolio = () => {
@@ -26,18 +24,12 @@ const Portfolio = () => {
         height={100}
         className="pointer-events-none absolute top-[100px] z-0 h-full w-full object-cover opacity-50"
       />
-      <div className="flex flex-col gap-4 md:flex-row md:items-center xl:gap-10">
-        <Title>Portfolio</Title>
-        <Suspense
-          fallback={
-            <div className="h-10 w-[280px] rounded-xl bg-[rgba(255,255,255,0.04)]" />
-          }
-        >
-          <ActiveTab listTabs={portfolioTabs} />
-        </Suspense>
+      <div className="flex flex-col gap-4">
+        <Title>Portfolio123123</Title>
+        <WalletActionPanel />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2">
         {overviewCards.map((card) => (
           <OverviewCard key={card.label} {...card} />
         ))}

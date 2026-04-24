@@ -2,6 +2,7 @@ import Axios, {
   AxiosError,
   type AxiosResponse,
   type InternalAxiosRequestConfig,
+  type RawAxiosRequestHeaders,
 } from "axios";
 
 type CancelablePromise<T> = Promise<T> & { cancel: () => void };
@@ -25,31 +26,35 @@ export const AXIOS_INSTANCE = Axios.create({
   baseURL: "https://api-tap-fun-chainlink.nysm.work",
 });
 
-AXIOS_INSTANCE.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  if (!isBrowser) {
+AXIOS_INSTANCE.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    if (!isBrowser) {
+      return config;
+    }
+
+    const storageAddress = window.localStorage.getItem("wallet-address");
+    if (storageAddress) {
+      setHeader(config, "wallet-address", storageAddress);
+    }
+
     return config;
-  }
+  },
+);
 
-  const storageAddress = window.localStorage.getItem("wallet-address");
-  if (storageAddress) {
-    setHeader(config, "wallet-address", storageAddress);
-  }
+AXIOS_INSTANCE.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    if (!isBrowser) {
+      return config;
+    }
 
-  return config;
-});
+    const token = window.localStorage.getItem("token");
+    if (token) {
+      setHeader(config, "Authorization", `Bearer ${token}`);
+    }
 
-AXIOS_INSTANCE.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  if (!isBrowser) {
     return config;
-  }
-
-  const token = window.localStorage.getItem("token");
-  if (token) {
-    setHeader(config, "Authorization", `Bearer ${token}`);
-  }
-
-  return config;
-});
+  },
+);
 
 // Response interceptor to handle 401 unauthorized
 AXIOS_INSTANCE.interceptors.response.use(
@@ -57,6 +62,13 @@ AXIOS_INSTANCE.interceptors.response.use(
   (error: AxiosError) => {
     // Check if response status is 401
     if (error.response?.status === 401) {
+      const requestUrl = error.config?.url ?? "";
+      const isAuthRequest = requestUrl.startsWith("/api/auth/");
+
+      if (isAuthRequest) {
+        return Promise.reject(error);
+      }
+
       // Expired sessions should only clear the access token.
       // The wallet can still be connected and should be able to re-login.
       if (isBrowser) {
@@ -83,9 +95,9 @@ export const customClient = <T>(
   const promise = AXIOS_INSTANCE<T>({
     url,
     method: options?.method,
-    headers: options?.headers as any,
+    headers: options?.headers as RawAxiosRequestHeaders,
     data: options?.body,
-    signal: options?.signal as any,
+    signal: options?.signal ?? undefined,
     cancelToken: source.token,
   }).then((response) => response.data) as CancelablePromise<T>;
 

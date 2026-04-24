@@ -17,6 +17,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { WalletIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
 import { cn } from "@/lib/utils";
 import { ChevronDown, Eye, Globe, Info, LocateFixed } from "lucide-react";
@@ -76,6 +77,12 @@ const livePriceFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const balanceFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 const ETHEREUM_LOGO_SRC =
   "https://www.figma.com/api/mcp/asset/5b2e0c8b-1140-4470-a234-0d3b7057a3f5";
 const MARKET_SYMBOL = "BTC/USD";
@@ -105,6 +112,25 @@ function GridActionButton({
     >
       {children}
     </Button>
+  );
+}
+
+type BalanceChipProps = {
+  balance: number;
+};
+
+function BalanceChip({ balance }: BalanceChipProps) {
+  const safeBalance = Number.isFinite(balance) ? balance : 0;
+
+  return (
+    <div className="bg-surface-overlay-subtle border-border-main inline-flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 backdrop-blur-[4px]">
+      <span className="text-primary-light flex size-5 items-center justify-center">
+        <WalletIcon className="size-3.5" aria-hidden="true" />
+      </span>
+      <p className="text-primary-light text-center text-xs font-bold tracking-[-0.01em] whitespace-nowrap">
+        {balanceFormatter.format(safeBalance)}
+      </p>
+    </div>
   );
 }
 
@@ -940,6 +966,10 @@ export const TradingGrid: React.FC = () => {
             </div>
           </div>
         )}
+
+        <div className="pointer-events-none absolute bottom-3 left-3 z-20 sm:bottom-4 sm:left-4">
+          <BalanceChip balance={balance} />
+        </div>
       </div>
 
       <Sheet
