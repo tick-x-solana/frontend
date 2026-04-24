@@ -20,10 +20,9 @@ import {
   paymentControllerDebugDeposit,
   paymentControllerRequestWithdrawal,
 } from "@/src/services/queries";
+import { fetchWldUsdPrice } from "@/src/hooks/useWldUsdPrice";
 
 const WORLD_CHAIN_ID = 480;
-const COINGECKO_WLD_PRICE_URL =
-  "https://api.coingecko.com/api/v3/simple/price?ids=worldcoin&vs_currencies=usd";
 const WORLDCHAIN_RPC_URL = "https://worldchain-mainnet.g.alchemy.com/public";
 
 const worldPublicClient = createPublicClient({
@@ -49,12 +48,6 @@ type WithdrawUsdToWldParams = {
 type GetAvailableWldBalanceParams = {
   tokenAddress?: Address;
   tokenDecimals?: number;
-};
-
-type CoinGeckoSimplePriceResponse = {
-  worldcoin?: {
-    usd?: number;
-  };
 };
 
 type UserOpStatusResponse = {
@@ -99,26 +92,6 @@ function extractUserOpHash(value: unknown): string | null {
   }
 
   return null;
-}
-
-async function fetchWldUsdPrice(): Promise<number> {
-  const response = await fetch(COINGECKO_WLD_PRICE_URL, {
-    method: "GET",
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error("Unable to fetch WLD/USD price from CoinGecko");
-  }
-
-  const json = (await response.json()) as CoinGeckoSimplePriceResponse;
-  const price = json.worldcoin?.usd;
-
-  if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
-    throw new Error("Invalid WLD/USD price from CoinGecko");
-  }
-
-  return price;
 }
 
 async function fetchWldBalance({

@@ -12,7 +12,6 @@ import {
   getCellHideThresholdTime,
   getLatestChartTime,
 } from "@/src/features/trade/gridTiming";
-import { getUserInitials } from "@/src/features/trade/orderFollow";
 
 const timeLabelFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
@@ -45,9 +44,7 @@ export const COLOR_GREEN = "#A8E8BB";
 export const COLOR_RED = "#F6465D";
 export const COLOR_DOT = "#B2EBDF";
 export const COLOR_WARNING = "#FD7F26";
-export const COLOR_WARNING_TEXT = "rgba(253,127,38,0.7)";
 export const COLOR_WARNING_SURFACE = "rgba(253,127,38,0.10)";
-export const COLOR_BORDER_SUBTLE = "rgba(228,228,228,0.40)";
 export const COLOR_RED_SOFT = "#FF5A6E";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -240,18 +237,16 @@ export function drawBetCells(
   const { cells, bets, history, pendingBets } = store;
   const followedActivitiesByCellId = store.followedOrderActivities.reduce<
     Record<string, (typeof store.followedOrderActivities)[number]>
-  >(
-    (acc, activity) => {
-      if (!activity.cellId) return acc;
+  >((acc, activity) => {
+    if (!activity.cellId) return acc;
 
-      const current = acc[activity.cellId];
-      if (!current || activity.observedAt >= current.observedAt) {
-        acc[activity.cellId] = activity;
-      }
-      return acc;
-    },
-    {},
-  );
+    const current = acc[activity.cellId];
+    if (!current || activity.observedAt >= current.observedAt) {
+      acc[activity.cellId] = activity;
+    }
+    return acc;
+  }, {});
+  const suggestedStrategyCellIds = new Set(store.suggestedStrategyCellIds);
   const chartTime = getLatestChartTime(history, now);
   const hideThresholdTime = getCellHideThresholdTime(chartTime);
   const chartHeadX = toCanvasX(chartTime);
@@ -281,11 +276,15 @@ export function drawBetCells(
     const isPending = pendingBetAmountVal > 0;
     const hasAnyBet = hasBet || isPending;
     const displayBetAmount = hasBet ? betAmountVal : pendingBetAmountVal;
+    const followedActivity = followedActivitiesByCellId[cell.id] ?? null;
+    const hasFollowedActivity = followedActivity !== null;
 
     const cx = toCanvasX(cell.timeWindowStart);
     const cellTop = toCellY(cell.priceLevel + effectivePriceStep / 2);
     const chartReachedColumn = hasChartReachedColumn(chartHeadX, cx);
-    const hasTrackedState = hasAnyBet || isHit || isLose;
+    const hasSuggestedStrategy = suggestedStrategyCellIds.has(cell.id);
+    const hasOverlayActivity = hasFollowedActivity || hasSuggestedStrategy;
+    const hasTrackedState = hasAnyBet || isHit || isLose || hasOverlayActivity;
 
     if (chartReachedColumn && !hasTrackedState) continue;
 
@@ -300,8 +299,6 @@ export function drawBetCells(
       cell.timeWindowStart === selectedColumnStart;
     const isPreviewed =
       previewCellId === cell.id && !isPast && !isNext && !hasAnyBet;
-    const followedActivity = followedActivitiesByCellId[cell.id] ?? null;
-    const hasFollowedActivity = followedActivity !== null;
 
     // priceLevel is the CENTRE of the band; top edge = centre + step/2
     const cw = cellW;
@@ -335,7 +332,7 @@ export function drawBetCells(
         betAmount: store.betAmount,
         isMobile,
       });
-    } else if (!isPast && !hasAnyBet && hasFollowedActivity) {
+    } else if (!hasAnyBet && hasOverlayActivity) {
       _drawCopyTradeCell(ctx, {
         x: cx,
         y: cellTop,
@@ -346,8 +343,6 @@ export function drawBetCells(
         cellLeft: cx,
         cellRight: cx + cw,
         cellSize,
-        multiplier: followedActivity.multiplier,
-        initials: getUserInitials(followedActivity.targetUserId),
       });
     } else if (isHit) {
       _drawWinCell(ctx, {
@@ -401,7 +396,7 @@ export function drawBetCells(
     if (
       !isPreviewed &&
       !(hasAnyBet && !isHit && !isLose) &&
-      !hasFollowedActivity
+      !hasOverlayActivity
     ) {
       ctx.strokeStyle =
         isNext && !hasAnyBet
@@ -435,16 +430,16 @@ export function drawBetCells(
         : isLose && hasAnyBet
           ? COLOR_RED_SOFT
           : isHit && hasAnyBet
-          ? COLOR_GREEN
-          : isNext && !hasAnyBet
-            ? `rgba(83,117,155,${0.24 + nextCellVisualAlpha * 0.5})`
-            : cell.multiplier >= 100
-              ? COLOR_RED
-              : isSelectedColumn
-                ? COLOR_BLUE_SOFT
-                : cell.multiplier >= 10
-                  ? COLOR_BLUE
-                  : COLOR_TEXT_DIM;
+            ? COLOR_GREEN
+            : isNext && !hasAnyBet
+              ? `rgba(83,117,155,${0.24 + nextCellVisualAlpha * 0.5})`
+              : cell.multiplier >= 100
+                ? COLOR_RED
+                : isSelectedColumn
+                  ? COLOR_BLUE_SOFT
+                  : cell.multiplier >= 10
+                    ? COLOR_BLUE
+                    : COLOR_TEXT_DIM;
 
     ctx.fillStyle = multColor;
 
@@ -469,9 +464,6 @@ export function drawBetCells(
     }`;
 
     if (isPreviewed) {
-      if (needsClip) ctx.restore();
-      continue;
-    } else if (hasFollowedActivity && !hasAnyBet) {
       if (needsClip) ctx.restore();
       continue;
     } else if (hasAnyBet && !isHit) {
@@ -561,8 +553,6 @@ interface CopyTradeCellParams {
   cellLeft: number;
   cellRight: number;
   cellSize: number;
-  multiplier: number | null;
-  initials: string;
 }
 
 function _drawPreviewCell(ctx: CanvasRenderingContext2D, p: PreviewCellParams) {
@@ -678,24 +668,10 @@ function _drawCopyTradeCell(
     cellLeft,
     cellRight,
     cellSize,
-    multiplier,
-    initials,
   } = p;
-  const safeMultiplier =
-    typeof multiplier === "number" && Number.isFinite(multiplier)
-      ? multiplier
-      : 0;
-  const badgeSize = clamp(cellSize * 0.24, 15, 18);
-  const badgeRadius = badgeSize / 2;
-  const avatarFontSize = clamp(cellSize * 0.11, 6.5, 7.5);
-  const multiplierFontSize = clamp(cellSize * 0.18, 10, 12);
   const cardRadius = 0;
   const inset = 0.25;
   const dotRadius = clamp(cellSize * 0.03, 1.6, 2.1);
-  const multiplierLabel = formatMultiplier(safeMultiplier);
-  const avatarCenterX = x + width / 2;
-  const avatarCenterY = y + clamp(height * 0.28, 11, 14);
-  const multiplierY = y + height - clamp(cellSize * 0.16, 8, 10);
 
   ctx.save();
 
@@ -710,8 +686,8 @@ function _drawCopyTradeCell(
   ctx.fillStyle = COLOR_WARNING_SURFACE;
   ctx.fill();
 
-  ctx.lineWidth = 0.5;
-  ctx.strokeStyle = COLOR_BORDER_SUBTLE;
+  ctx.lineWidth = 0.75;
+  ctx.strokeStyle = "rgba(253,127,38,0.45)";
   roundRect(
     ctx,
     x + inset,
@@ -721,21 +697,6 @@ function _drawCopyTradeCell(
     cardRadius,
   );
   ctx.stroke();
-
-  ctx.fillStyle = COLOR_WARNING;
-  ctx.beginPath();
-  ctx.arc(avatarCenterX, avatarCenterY, badgeRadius, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#F8F8F8";
-  ctx.font = `500 ${avatarFontSize}px sans-serif`;
-  ctx.fillText(initials, avatarCenterX, avatarCenterY + 0.2);
-
-  ctx.fillStyle = COLOR_WARNING_TEXT;
-  ctx.font = `${multiplierFontSize}px sans-serif`;
-  ctx.fillText(multiplierLabel, x + width / 2, multiplierY);
 
   ctx.fillStyle = COLOR_WARNING;
   const corners = [

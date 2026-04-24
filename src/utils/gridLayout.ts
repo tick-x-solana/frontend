@@ -62,6 +62,7 @@ export interface StoreSnapshot {
   wssKey: string | null;
   address: string | null | undefined;
   followedOrderActivities: FollowedOrderActivity[];
+  suggestedStrategyCellIds: string[];
   /** Cached result of computeGridDimensions — updated only when cells change. */
   dims: GridDimensions | null;
 }

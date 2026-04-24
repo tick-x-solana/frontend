@@ -81,7 +81,7 @@ const Referrals = () => {
       // World Chat can unfurl URLs and hide them in the text bubble, so include a
       // plain referral code line that always remains visible.
       const message = [
-        "Use my referral to copy trade on TickX.",
+        "Use my referral to follow trade on TickX.",
         `Referral code: ${miniAppUsername}`,
         `Link: ${miniAppReferralLink}`,
       ].join("\n");

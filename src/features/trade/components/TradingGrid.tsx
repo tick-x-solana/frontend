@@ -17,16 +17,16 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import html2canvas from "html2canvas";
 import { WalletIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
 import { cn } from "@/lib/utils";
-import { Copy, Eye, Globe, Info, LocateFixed, Share2 } from "lucide-react";
+import { Copy, Eye, Info, LocateFixed, Share2 } from "lucide-react";
 import { Sheet } from "react-modal-sheet";
 import { io } from "socket.io-client";
 import { useAccount } from "wagmi";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
 import OverlayModePanel from "@/src/features/trade/components/OverlayModePanel";
 import TradeControlsPanel from "@/src/features/trade/components/TradeControlsPanel";
 import { WinShareCard } from "@/src/features/trade/components/WinShareCard";
@@ -76,6 +76,7 @@ const MIN_PRICE_MOTION_MS = 250;
 const MAX_PRICE_MOTION_MS = 5000;
 const TICK_CADENCE_SMOOTHING = 0.2;
 const RESIZE_COMMIT_DEBOUNCE_MS = 180;
+const OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS = 4000;
 const FOLLOW_ORDER_EVENTS = [
   "order_follow",
   "order_follow_update",
@@ -89,6 +90,8 @@ const ORDER_UPDATE_EVENT = "order_update";
 const BALANCE_UPDATE_EVENT = "balance_update";
 const SUBSCRIBE_ORDER_FOLLOWS_EVENT = "subscribe_order_follows";
 const UNSUBSCRIBE_ORDER_FOLLOWS_EVENT = "unsubscribe_order_follows";
+const SUBSCRIBE_SUGGESTED_STRATEGY_EVENT = "subscribe_suggested_strategy";
+const SUGGESTED_STRATEGY_UPDATE_EVENT = "suggested_strategy_update";
 const livePriceFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -99,11 +102,33 @@ const balanceFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const shareTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+});
 const MARKET_SYMBOL = "BTC/USD";
 type ShareOverlayTarget = {
   cellId: string;
   left: number;
   top: number;
+};
+type FollowOverlayActivity = ReturnType<
+  typeof extractFollowedOrderActivities
+>[number];
+type SuggestedStrategyMessage = {
+  cells: Array<{
+    startTs: number;
+    endTs: number;
+    lowerPrice: string;
+    upperPrice: string;
+    rewardRate: string;
+  }>;
+  volatilityRegime: "low" | "medium" | "high";
+  sigma: number | null;
+  atrMean: number | null;
+  timestamp: number;
 };
 
 type GridActionButtonProps = React.ComponentProps<typeof Button> & {
@@ -221,6 +246,66 @@ function parseAddress(value: string | null | undefined): string | null {
   }
 }
 
+function formatWalletShort(address: string): string {
+  if (address.length <= 12) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function normalizeTimestampToMs(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return value > 1_000_000_000_000 ? value : value * 1000;
+}
+
+function normalizePriceString(value: unknown): string | null {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toString();
+  }
+
+  return null;
+}
+
+function extractSuggestedStrategyCellIds(payload: unknown): string[] {
+  const payloadRecord =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : null;
+  const rawCells = Array.isArray(payloadRecord?.cells)
+    ? payloadRecord.cells
+    : Array.isArray(payload)
+      ? payload
+      : [];
+
+  const cellIds = new Set<string>();
+  rawCells.forEach((rawCell) => {
+    if (!rawCell || typeof rawCell !== "object" || Array.isArray(rawCell)) {
+      return;
+    }
+
+    const cell = rawCell as Record<string, unknown>;
+    const startTs = normalizeTimestampToMs(cell.startTs);
+    const endTs = normalizeTimestampToMs(cell.endTs);
+    const lowerPrice = normalizePriceString(cell.lowerPrice);
+    const upperPrice = normalizePriceString(cell.upperPrice);
+
+    if (
+      startTs === null ||
+      endTs === null ||
+      lowerPrice === null ||
+      upperPrice === null
+    ) {
+      return;
+    }
+
+    cellIds.add(`${startTs}:${endTs}:${lowerPrice}:${upperPrice}`);
+  });
+
+  return [...cellIds];
+}
+
 function extractUserOrders(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== "object") return [];
@@ -301,7 +386,8 @@ export const TradingGrid: React.FC = () => {
     ? (MiniKit.user?.walletAddress ?? null)
     : null;
   const resolvedUserAddress = useMemo(
-    () => parseAddress(miniKitWalletAddress ?? walletAddress ?? address ?? null),
+    () =>
+      parseAddress(miniKitWalletAddress ?? walletAddress ?? address ?? null),
     [address, miniKitWalletAddress, walletAddress],
   );
   const { data: wssKeyResponse } = useAuthControllerGetWssKey({
@@ -311,9 +397,13 @@ export const TradingGrid: React.FC = () => {
       refetchOnWindowFocus: false,
     },
   });
-  const { data: followingResponse } = useOrderFollowControllerListFollowing({
+  const {
+    data: followingResponse,
+    refetch: refetchFollowing,
+    isFetching: isFollowingFetching,
+  } = useOrderFollowControllerListFollowing({
     query: {
-      enabled: isAuthenticated && !isLoggingIn,
+      enabled: false,
       staleTime: 10_000,
       refetchOnWindowFocus: true,
     },
@@ -347,18 +437,33 @@ export const TradingGrid: React.FC = () => {
       ),
     [followingResponse],
   );
-  const followedTargetIds = useMemo(
-    () =>
-      activeFollowings
-        .map((item) => parseAddress(item.targetUserId))
-        .filter((item): item is string => item !== null),
-    [activeFollowings],
-  );
-  const followedTargetsKey = useMemo(
-    () => followedTargetIds.slice().sort().join("|"),
-    [followedTargetIds],
-  );
+  const availableFollowTargets = useMemo(() => {
+    const deduped = new Map<
+      string,
+      { targetUserId: string; targetUsername: string | null }
+    >();
 
+    activeFollowings.forEach((item) => {
+      const targetUserId = parseAddress(item.targetUserId);
+      if (!targetUserId || deduped.has(targetUserId)) return;
+
+      deduped.set(targetUserId, {
+        targetUserId,
+        targetUsername:
+          typeof item.targetUsername === "string" &&
+          item.targetUsername.trim().length > 0
+            ? item.targetUsername.trim()
+            : null,
+      });
+    });
+
+    return [...deduped.values()];
+  }, [activeFollowings]);
+
+  const availableFollowTargetIds = useMemo(
+    () => availableFollowTargets.map((item) => item.targetUserId),
+    [availableFollowTargets],
+  );
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -434,6 +539,7 @@ export const TradingGrid: React.FC = () => {
     wssKey,
     address: resolvedUserAddress,
     followedOrderActivities,
+    suggestedStrategyCellIds: [],
     dims: null,
   });
   useEffect(() => {
@@ -464,12 +570,25 @@ export const TradingGrid: React.FC = () => {
       wssKey,
       address: resolvedUserAddress,
       followedOrderActivities,
+      suggestedStrategyCellIds: [],
       dims: nextDims,
     };
   });
 
-  const [overlayMode, setOverlayMode] = useState(false);
-  const [overlayModeDraft, setOverlayModeDraft] = useState(false);
+  const [suggestedStrategyEnabled, setSuggestedStrategyEnabled] =
+    useState(false);
+  const [suggestedStrategyEnabledDraft, setSuggestedStrategyEnabledDraft] =
+    useState(false);
+  const [followTradeEnabled, setFollowTradeEnabled] = useState(false);
+  const [followTradeEnabledDraft, setFollowTradeEnabledDraft] = useState(false);
+  const [followTradeTargetEnabled, setFollowTradeTargetEnabled] = useState<
+    Record<string, boolean>
+  >({});
+  const [followTradeTargetEnabledDraft, setFollowTradeTargetEnabledDraft] =
+    useState<Record<string, boolean>>({});
+  const [suggestedStrategyCellIds, setSuggestedStrategyCellIds] = useState<
+    string[]
+  >([]);
   const [isOverlaySheetOpen, setIsOverlaySheetOpen] = useState(false);
   const [isInfoSheetOpen, setIsInfoSheetOpen] = useState(false);
   const [shareOverlayTargets, setShareOverlayTargets] = useState<
@@ -477,11 +596,196 @@ export const TradingGrid: React.FC = () => {
   >([]);
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
   const [shareCellId, setShareCellId] = useState<string | null>(null);
-  const [isCopyingShareImage, setIsCopyingShareImage] = useState(false);
-  const shareCardRef = useRef<HTMLDivElement | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
   const shareTargetsRef = useRef<ShareOverlayTarget[]>([]);
-  const shareTargetsHashRef = useRef("");
-  const lastShareTargetsSyncRef = useRef(0);
+  const shareTargetIdsHashRef = useRef("");
+  const lastFollowOverlayUpdateAtRef = useRef(0);
+  const lastSuggestedStrategyUpdateAtRef = useRef(0);
+  const followOverlayPendingActivitiesRef = useRef<
+    FollowOverlayActivity[] | null
+  >(null);
+  const followOverlayFlushTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const suggestedStrategyPendingCellIdsRef = useRef<string[] | null>(null);
+  const suggestedStrategyFlushTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const shareOverlayButtonRefs = useRef(
+    new Map<string, HTMLButtonElement | null>(),
+  );
+
+  const isFollowTradeVisible = followTradeEnabled;
+  const isSuggestedStrategyVisible = suggestedStrategyEnabled;
+  const isFollowTradeConfigVisibleDraft =
+    isOverlaySheetOpen && followTradeEnabledDraft;
+
+  const enabledFollowTargetIds = useMemo(
+    () =>
+      availableFollowTargetIds.filter(
+        (targetUserId) => followTradeTargetEnabled[targetUserId] ?? true,
+      ),
+    [availableFollowTargetIds, followTradeTargetEnabled],
+  );
+  const enabledFollowTargetsKey = useMemo(
+    () => enabledFollowTargetIds.slice().sort().join("|"),
+    [enabledFollowTargetIds],
+  );
+  const enabledFollowTargetIdsSet = useMemo(
+    () => new Set(enabledFollowTargetIds),
+    [enabledFollowTargetIds],
+  );
+  const ensureFollowTargetConfig = useCallback(
+    (source: Record<string, boolean>) => {
+      const nextConfig: Record<string, boolean> = {};
+      availableFollowTargetIds.forEach((targetUserId) => {
+        nextConfig[targetUserId] = source[targetUserId] ?? true;
+      });
+      return nextConfig;
+    },
+    [availableFollowTargetIds],
+  );
+  const followTradeTargetsDraft = useMemo(
+    () =>
+      availableFollowTargets.map((target) => ({
+        id: target.targetUserId,
+        label: target.targetUsername ?? formatWalletShort(target.targetUserId),
+        subtitle: formatWalletShort(target.targetUserId),
+        enabled: followTradeTargetEnabledDraft[target.targetUserId] ?? true,
+      })),
+    [availableFollowTargets, followTradeTargetEnabledDraft],
+  );
+
+  useEffect(() => {
+    storeRef.current.suggestedStrategyCellIds = isSuggestedStrategyVisible
+      ? suggestedStrategyCellIds
+      : [];
+  }, [isSuggestedStrategyVisible, suggestedStrategyCellIds]);
+
+  const applyFollowOverlayActivities = useCallback(
+    (activities: FollowOverlayActivity[]) => {
+      if (activities.length === 0) return;
+      lastFollowOverlayUpdateAtRef.current = Date.now();
+      activities.forEach((activity) => {
+        upsertFollowedOrderActivity(activity);
+      });
+    },
+    [upsertFollowedOrderActivity],
+  );
+
+  const queueFollowOverlayActivities = useCallback(
+    (activities: FollowOverlayActivity[]) => {
+      if (activities.length === 0) return;
+
+      const now = Date.now();
+      const elapsed = now - lastFollowOverlayUpdateAtRef.current;
+
+      if (elapsed >= OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS) {
+        applyFollowOverlayActivities(activities);
+        return;
+      }
+
+      followOverlayPendingActivitiesRef.current = activities;
+      if (followOverlayFlushTimerRef.current) return;
+
+      const waitMs = OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS - elapsed;
+      followOverlayFlushTimerRef.current = setTimeout(() => {
+        followOverlayFlushTimerRef.current = null;
+        const nextActivities = followOverlayPendingActivitiesRef.current;
+        followOverlayPendingActivitiesRef.current = null;
+        if (!nextActivities) return;
+        applyFollowOverlayActivities(nextActivities);
+      }, waitMs);
+    },
+    [applyFollowOverlayActivities],
+  );
+
+  const applySuggestedStrategyCellIds = useCallback((nextCellIds: string[]) => {
+    lastSuggestedStrategyUpdateAtRef.current = Date.now();
+    setSuggestedStrategyCellIds(nextCellIds);
+  }, []);
+
+  const queueSuggestedStrategyCellIds = useCallback(
+    (nextCellIds: string[]) => {
+      const now = Date.now();
+      const elapsed = now - lastSuggestedStrategyUpdateAtRef.current;
+
+      if (elapsed >= OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS) {
+        applySuggestedStrategyCellIds(nextCellIds);
+        return;
+      }
+
+      suggestedStrategyPendingCellIdsRef.current = nextCellIds;
+      if (suggestedStrategyFlushTimerRef.current) return;
+
+      const waitMs = OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS - elapsed;
+      suggestedStrategyFlushTimerRef.current = setTimeout(() => {
+        suggestedStrategyFlushTimerRef.current = null;
+        const queuedCellIds = suggestedStrategyPendingCellIdsRef.current;
+        suggestedStrategyPendingCellIdsRef.current = null;
+        if (!queuedCellIds) return;
+        applySuggestedStrategyCellIds(queuedCellIds);
+      }, waitMs);
+    },
+    [applySuggestedStrategyCellIds],
+  );
+
+  useEffect(() => {
+    if (isFollowTradeVisible) {
+      lastFollowOverlayUpdateAtRef.current = 0;
+      return;
+    }
+
+    lastFollowOverlayUpdateAtRef.current = 0;
+    followOverlayPendingActivitiesRef.current = null;
+    if (followOverlayFlushTimerRef.current) {
+      clearTimeout(followOverlayFlushTimerRef.current);
+      followOverlayFlushTimerRef.current = null;
+    }
+  }, [isFollowTradeVisible]);
+
+  useEffect(() => {
+    if (isSuggestedStrategyVisible) {
+      lastSuggestedStrategyUpdateAtRef.current = 0;
+      return;
+    }
+
+    lastSuggestedStrategyUpdateAtRef.current = 0;
+    suggestedStrategyPendingCellIdsRef.current = null;
+    if (suggestedStrategyFlushTimerRef.current) {
+      clearTimeout(suggestedStrategyFlushTimerRef.current);
+      suggestedStrategyFlushTimerRef.current = null;
+    }
+  }, [isSuggestedStrategyVisible]);
+
+  useEffect(() => {
+    return () => {
+      if (followOverlayFlushTimerRef.current) {
+        clearTimeout(followOverlayFlushTimerRef.current);
+      }
+      if (suggestedStrategyFlushTimerRef.current) {
+        clearTimeout(suggestedStrategyFlushTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      isLoggingIn ||
+      (!isFollowTradeVisible && !isFollowTradeConfigVisibleDraft)
+    ) {
+      return;
+    }
+
+    void refetchFollowing();
+  }, [
+    isAuthenticated,
+    isFollowTradeConfigVisibleDraft,
+    isFollowTradeVisible,
+    isLoggingIn,
+    refetchFollowing,
+  ]);
 
   useEffect(() => {
     setWssKey(resolvedWssKey);
@@ -584,11 +888,7 @@ export const TradingGrid: React.FC = () => {
         throw new Error("Missing socket user challenge");
       }
 
-      const signature = await signWssMessage(
-        wssKey,
-        userAddress,
-        challenge,
-      );
+      const signature = await signWssMessage(wssKey, userAddress, challenge);
       if (isDisposed) return;
 
       socketClient.emit(SUBSCRIBE_USER_EVENT, {
@@ -629,9 +929,12 @@ export const TradingGrid: React.FC = () => {
     ) {
       return;
     }
+    if (!isFollowTradeVisible) {
+      return;
+    }
     if (
       !resolvedWssKey ||
-      activeFollowings.length === 0 ||
+      enabledFollowTargetIds.length === 0 ||
       !resolvedUserAddress
     ) {
       return;
@@ -664,10 +967,7 @@ export const TradingGrid: React.FC = () => {
       const signature = await getFollowSignature();
       if (isDisposed) return;
 
-      activeFollowings.forEach((follow) => {
-        const targetUserId = parseAddress(follow.targetUserId);
-        if (!targetUserId) return;
-
+      enabledFollowTargetIds.forEach((targetUserId) => {
         socketClient.emit(SUBSCRIBE_ORDER_FOLLOWS_EVENT, {
           userId: userAddress,
           targetUserId,
@@ -692,10 +992,7 @@ export const TradingGrid: React.FC = () => {
 
       void getFollowSignature()
         .then((signature) => {
-          activeFollowings.forEach((follow) => {
-            const targetUserId = parseAddress(follow.targetUserId);
-            if (!targetUserId) return;
-
+          enabledFollowTargetIds.forEach((targetUserId) => {
             socketClient.emit(UNSUBSCRIBE_ORDER_FOLLOWS_EVENT, {
               userId: userAddress,
               targetUserId,
@@ -709,8 +1006,9 @@ export const TradingGrid: React.FC = () => {
       socketClient.off("connect", handleConnect);
     };
   }, [
-    activeFollowings,
-    followedTargetsKey,
+    enabledFollowTargetIds,
+    enabledFollowTargetsKey,
+    isFollowTradeVisible,
     resolvedWssKey,
     resolvedUserAddress,
     socket,
@@ -724,7 +1022,8 @@ export const TradingGrid: React.FC = () => {
       typeof socket.on !== "function" ||
       !("off" in socket) ||
       typeof socket.off !== "function" ||
-      followedTargetIds.length === 0
+      !isFollowTradeVisible ||
+      enabledFollowTargetIds.length === 0
     ) {
       return;
     }
@@ -737,11 +1036,9 @@ export const TradingGrid: React.FC = () => {
     const handleFollowedOrderUpdate = (payload: unknown) => {
       const activities = extractFollowedOrderActivities(
         payload,
-        followedTargetIds,
+        enabledFollowTargetIds,
       );
-      activities.forEach((activity) => {
-        upsertFollowedOrderActivity(activity);
-      });
+      queueFollowOverlayActivities(activities);
     };
 
     socketClient.on(FOLLOWED_ORDER_UPDATE_EVENT, handleFollowedOrderUpdate);
@@ -750,11 +1047,93 @@ export const TradingGrid: React.FC = () => {
       socketClient.off(FOLLOWED_ORDER_UPDATE_EVENT, handleFollowedOrderUpdate);
     };
   }, [
-    followedTargetIds,
+    enabledFollowTargetIds,
+    isFollowTradeVisible,
+    queueFollowOverlayActivities,
     socket,
-    upsertFollowedOrderActivity,
-    followedTargetsKey,
+    enabledFollowTargetsKey,
   ]);
+
+  useEffect(() => {
+    if (
+      !socket ||
+      typeof socket !== "object" ||
+      !("connected" in socket) ||
+      typeof socket.connected !== "boolean" ||
+      !("emit" in socket) ||
+      typeof socket.emit !== "function" ||
+      !("on" in socket) ||
+      typeof socket.on !== "function" ||
+      !("off" in socket) ||
+      typeof socket.off !== "function" ||
+      !isSuggestedStrategyVisible
+    ) {
+      return;
+    }
+
+    const socketClient = socket as {
+      connected: boolean;
+      emit: (event: string) => void;
+      on: (event: string, handler: () => void) => void;
+      off: (event: string, handler?: () => void) => void;
+    };
+
+    const subscribe = () => {
+      socketClient.emit(SUBSCRIBE_SUGGESTED_STRATEGY_EVENT);
+    };
+
+    if (socketClient.connected) {
+      subscribe();
+    }
+    socketClient.on("connect", subscribe);
+
+    return () => {
+      socketClient.off("connect", subscribe);
+    };
+  }, [isSuggestedStrategyVisible, socket]);
+
+  useEffect(() => {
+    if (
+      !socket ||
+      typeof socket !== "object" ||
+      !("on" in socket) ||
+      typeof socket.on !== "function" ||
+      !("off" in socket) ||
+      typeof socket.off !== "function" ||
+      !isSuggestedStrategyVisible
+    ) {
+      return;
+    }
+
+    const socketClient = socket as {
+      on: (
+        event: string,
+        handler: (payload: SuggestedStrategyMessage | unknown) => void,
+      ) => void;
+      off: (
+        event: string,
+        handler: (payload: SuggestedStrategyMessage | unknown) => void,
+      ) => void;
+    };
+
+    const handleSuggestedStrategyUpdate = (
+      payload: SuggestedStrategyMessage | unknown,
+    ) => {
+      queueSuggestedStrategyCellIds(extractSuggestedStrategyCellIds(payload));
+    };
+
+    socketClient.on(
+      SUGGESTED_STRATEGY_UPDATE_EVENT,
+      handleSuggestedStrategyUpdate,
+    );
+
+    return () => {
+      socketClient.off(
+        SUGGESTED_STRATEGY_UPDATE_EVENT,
+        handleSuggestedStrategyUpdate,
+      );
+    };
+  }, [isSuggestedStrategyVisible, queueSuggestedStrategyCellIds, socket]);
 
   useEffect(() => {
     const nextServerBalance = extractBalanceAmount(balanceResponse);
@@ -834,7 +1213,11 @@ export const TradingGrid: React.FC = () => {
   }, [updateOrder, userOrdersResponse]);
 
   useEffect(() => {
-    if (!socket) {
+    if (
+      !socket ||
+      !isFollowTradeVisible ||
+      enabledFollowTargetIds.length === 0
+    ) {
       return;
     }
 
@@ -845,12 +1228,9 @@ export const TradingGrid: React.FC = () => {
     const handleFollowedOrder = (payload: unknown) => {
       const activities = extractFollowedOrderActivities(
         payload,
-        followedTargetIds,
+        enabledFollowTargetIds,
       );
-
-      activities.forEach((activity) => {
-        upsertFollowedOrderActivity(activity);
-      });
+      queueFollowOverlayActivities(activities);
     };
 
     FOLLOW_ORDER_EVENTS.forEach((event) => {
@@ -866,10 +1246,11 @@ export const TradingGrid: React.FC = () => {
       });
     };
   }, [
-    followedTargetIds,
+    enabledFollowTargetIds,
+    isFollowTradeVisible,
+    queueFollowOverlayActivities,
     socket,
-    upsertFollowedOrderActivity,
-    followedTargetsKey,
+    enabledFollowTargetsKey,
   ]);
 
   // ── Track wins (avoid repeated effects for the same cell id) ──────────────
@@ -1017,55 +1398,122 @@ export const TradingGrid: React.FC = () => {
       pendingBets[selectedShareCell.id] ||
       betAmount
     : betAmount;
+  const selectedShareProfit = useMemo(
+    () =>
+      selectedShareAmount *
+      Math.max((selectedShareCell?.multiplier ?? 0) - 1, 0),
+    [selectedShareAmount, selectedShareCell?.multiplier],
+  );
+  const selectedShareTime = useMemo(() => {
+    if (!selectedShareCell) return "--:--:--";
+    return shareTimeFormatter.format(
+      new Date(selectedShareCell.timeWindowStart),
+    );
+  }, [selectedShareCell]);
+  const shareUrl = buildMiniAppReferralLink(MiniKit.user?.username);
 
   const handleOpenShareSheet = useCallback((cellId: string) => {
     setShareCellId(cellId);
     setIsShareSheetOpen(true);
   }, []);
 
-  const handleCopyShareImage = useCallback(async () => {
-    const shareNode = shareCardRef.current;
-    if (!shareNode) return;
-
+  const handleCopyShareLink = useCallback(async () => {
     try {
-      setIsCopyingShareImage(true);
-      const capture = await html2canvas(shareNode, {
-        useCORS: true,
-        scale: 2,
-        backgroundColor: null,
-      });
-      const blob = await new Promise<Blob | null>((resolve) => {
-        capture.toBlob((nextBlob) => resolve(nextBlob), "image/png");
-      });
-      if (!blob) throw new Error("Could not create image blob");
+      await navigator.clipboard.writeText(shareUrl);
+      appToast.success("Copied share link", { icon: "🔗" });
+    } catch (error) {
+      console.error("Failed to copy share link", error);
+      appToast.error("Failed to copy share link", { icon: "⚠️" });
+    }
+  }, [shareUrl]);
 
+  const handleShare = useCallback(async () => {
+    try {
+      setIsSharing(true);
       if (
-        navigator.clipboard &&
-        "write" in navigator.clipboard &&
-        typeof ClipboardItem !== "undefined"
+        typeof navigator !== "undefined" &&
+        typeof navigator.share === "function"
       ) {
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            "image/png": blob,
-          }),
-        ]);
-        appToast.success("Copied share image to clipboard", { icon: "📸" });
+        await navigator.share({
+          title: "Join TickX",
+          text: "Use my referral link to join TickX on World App.",
+          url: shareUrl,
+        });
       } else {
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = objectUrl;
-        link.download = `tickx-win-${Date.now()}.png`;
-        link.click();
-        URL.revokeObjectURL(objectUrl);
-        appToast.success("Image downloaded", { icon: "📥" });
+        await navigator.clipboard.writeText(shareUrl);
+        appToast.success("Copied share link", { icon: "🔗" });
       }
     } catch (error) {
-      console.error("Failed to copy share image", error);
-      appToast.error("Failed to copy image", { icon: "⚠️" });
+      if ((error as Error).name !== "AbortError") {
+        console.error("Failed to share", error);
+        appToast.error("Failed to share", { icon: "⚠️" });
+      }
     } finally {
-      setIsCopyingShareImage(false);
+      setIsSharing(false);
     }
-  }, []);
+  }, [shareUrl]);
+
+  const handleShareToWorldChat = useCallback(async () => {
+    try {
+      if (!MiniKit.isInWorldApp()) {
+        appToast.error("WorldChat share is only available in World App", {
+          icon: "⚠️",
+        });
+        return;
+      }
+
+      const resolvedAddress =
+        MiniKit.user?.walletAddress ?? walletAddress ?? resolvedUserAddress;
+      const miniAppUsername =
+        MiniKit.user?.username?.trim() ??
+        (resolvedAddress
+          ? (await MiniKit.getUserByAddress(resolvedAddress)).username?.trim()
+          : undefined);
+
+      if (!miniAppUsername) {
+        appToast.error("Missing World username", { icon: "⚠️" });
+        return;
+      }
+
+      const referralLink = buildMiniAppReferralLink(miniAppUsername);
+      const message = [
+        "Use my referral to follow trade on TickX.",
+        `Referral code: ${miniAppUsername}`,
+        `Link: ${referralLink}`,
+      ].join("\n");
+
+      await MiniKit.chat({ message });
+    } catch (error) {
+      console.error("Failed to share to WorldChat", error);
+      appToast.error("Failed to share to WorldChat", { icon: "⚠️" });
+    }
+  }, [resolvedUserAddress, walletAddress]);
+
+  const setShareOverlayButtonRef = useCallback(
+    (cellId: string, node: HTMLButtonElement | null) => {
+      if (!node) {
+        shareOverlayButtonRefs.current.delete(cellId);
+        return;
+      }
+      shareOverlayButtonRefs.current.set(cellId, node);
+    },
+    [],
+  );
+
+  const syncShareOverlayPositions = useCallback(
+    (targets: ShareOverlayTarget[]) => {
+      const targetById = new Map(
+        targets.map((target) => [target.cellId, target]),
+      );
+      for (const [cellId, node] of shareOverlayButtonRefs.current.entries()) {
+        if (!node) continue;
+        const nextTarget = targetById.get(cellId);
+        if (!nextTarget) continue;
+        node.style.transform = `translate3d(${nextTarget.left}px, ${nextTarget.top}px, 0)`;
+      }
+    },
+    [],
+  );
 
   // ── Draw ───────────────────────────────────────────────────────────────────
   const draw = useCallback(() => {
@@ -1092,6 +1540,14 @@ export const TradingGrid: React.FC = () => {
         nowRef.current,
         cameraPriceRef.current,
       ),
+      followedOrderActivities: isFollowTradeVisible
+        ? store.followedOrderActivities.filter((activity) =>
+            enabledFollowTargetIdsSet.has(activity.targetUserId),
+          )
+        : [],
+      suggestedStrategyCellIds: isSuggestedStrategyVisible
+        ? store.suggestedStrategyCellIds
+        : [],
     };
     const nextShareTargets: ShareOverlayTarget[] = [];
     for (const cell of store.cells) {
@@ -1124,14 +1580,24 @@ export const TradingGrid: React.FC = () => {
     drawBackgroundGrid(ctx, layout, store);
     // Bet-cell visibility/selection must track real server ticks, not the
     // interpolated display point used for smoother line animation.
-    drawBetCells(ctx, layout, store, isMobile, previewCellIdRef.current);
+    drawBetCells(
+      ctx,
+      layout,
+      animatedPriceStore,
+      isMobile,
+      previewCellIdRef.current,
+    );
     drawPriceLine(ctx, layout, animatedPriceStore);
     drawPriceAxis(ctx, layout, animatedPriceStore, isMobile);
     drawTimeAxis(ctx, layout, isMobile);
     drawZoomIndicator(ctx, layout, tf.zoom);
 
     ctx.restore();
-  }, []);
+  }, [
+    enabledFollowTargetIdsSet,
+    isFollowTradeVisible,
+    isSuggestedStrategyVisible,
+  ]);
 
   // Keep drawRef in sync so the resize observer always calls the latest draw
   useEffect(() => {
@@ -1193,26 +1659,19 @@ export const TradingGrid: React.FC = () => {
       }
 
       draw();
-      if (loopNow - lastShareTargetsSyncRef.current > 120) {
-        const nextTargets = shareTargetsRef.current;
-        const nextHash = nextTargets
-          .map(
-            (item) =>
-              `${item.cellId}:${Math.round(item.left)}:${Math.round(item.top)}`,
-          )
-          .join("|");
-        if (nextHash !== shareTargetsHashRef.current) {
-          shareTargetsHashRef.current = nextHash;
-          setShareOverlayTargets(nextTargets);
-        }
-        lastShareTargetsSyncRef.current = loopNow;
+      const nextTargets = shareTargetsRef.current;
+      syncShareOverlayPositions(nextTargets);
+      const nextIdsHash = nextTargets.map((item) => item.cellId).join("|");
+      if (nextIdsHash !== shareTargetIdsHashRef.current) {
+        shareTargetIdsHashRef.current = nextIdsHash;
+        setShareOverlayTargets(nextTargets);
       }
       rafRef.current = requestAnimationFrame(loop);
     };
 
     loop();
     return () => cancelAnimationFrame(rafRef.current);
-  }, [draw]);
+  }, [draw, syncShareOverlayPositions]);
 
   // ── Interaction ────────────────────────────────────────────────────────────
   const {
@@ -1272,17 +1731,55 @@ export const TradingGrid: React.FC = () => {
     resetTransform();
   }, [clearPreviewCell, resetTransform]);
   const handleOpenOverlaySheet = useCallback(() => {
-    setOverlayModeDraft(overlayMode);
+    setSuggestedStrategyEnabledDraft(suggestedStrategyEnabled);
+    setFollowTradeEnabledDraft(followTradeEnabled);
+    setFollowTradeTargetEnabledDraft(followTradeTargetEnabled);
     setIsOverlaySheetOpen(true);
-  }, [overlayMode]);
+  }, [followTradeEnabled, followTradeTargetEnabled, suggestedStrategyEnabled]);
   const handleCloseOverlaySheet = useCallback(() => {
-    setOverlayModeDraft(overlayMode);
+    setSuggestedStrategyEnabledDraft(suggestedStrategyEnabled);
+    setFollowTradeEnabledDraft(followTradeEnabled);
+    setFollowTradeTargetEnabledDraft(followTradeTargetEnabled);
     setIsOverlaySheetOpen(false);
-  }, [overlayMode]);
+  }, [followTradeEnabled, followTradeTargetEnabled, suggestedStrategyEnabled]);
+  const handleSuggestedStrategyDraftChange = useCallback(
+    (nextValue: boolean) => {
+      setSuggestedStrategyEnabledDraft(nextValue);
+    },
+    [],
+  );
+  const handleFollowTradeDraftChange = useCallback((nextValue: boolean) => {
+    setFollowTradeEnabledDraft(nextValue);
+  }, []);
+  const handleFollowTradeTargetDraftChange = useCallback(
+    (targetUserId: string, nextValue: boolean) => {
+      setFollowTradeTargetEnabledDraft((currentValue) => ({
+        ...currentValue,
+        [targetUserId]: nextValue,
+      }));
+    },
+    [],
+  );
   const handleApplyOverlayMode = useCallback(() => {
-    setOverlayMode(overlayModeDraft);
+    const nextSuggestedStrategyEnabled = suggestedStrategyEnabledDraft;
+    const nextFollowTradeEnabled = followTradeEnabledDraft;
+    const nextFollowTradeTargetEnabled = ensureFollowTargetConfig(
+      followTradeTargetEnabledDraft,
+    );
+
+    setSuggestedStrategyEnabled(nextSuggestedStrategyEnabled);
+    setFollowTradeEnabled(nextFollowTradeEnabled);
+    setFollowTradeTargetEnabled(nextFollowTradeTargetEnabled);
+    if (!nextSuggestedStrategyEnabled) {
+      setSuggestedStrategyCellIds([]);
+    }
     setIsOverlaySheetOpen(false);
-  }, [overlayModeDraft]);
+  }, [
+    ensureFollowTargetConfig,
+    followTradeEnabledDraft,
+    followTradeTargetEnabledDraft,
+    suggestedStrategyEnabledDraft,
+  ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -1319,12 +1816,12 @@ export const TradingGrid: React.FC = () => {
           </GridActionButton>
           <GridActionButton
             aria-label={
-              overlayMode
-                ? "Overlay mode enabled. Open overlay settings"
+              isSuggestedStrategyVisible || isFollowTradeVisible
+                ? "Overlay filters enabled. Open overlay settings"
                 : "Open overlay settings"
             }
             aria-haspopup="dialog"
-            active={overlayMode}
+            active={isSuggestedStrategyVisible || isFollowTradeVisible}
             onClick={handleOpenOverlaySheet}
           >
             <Eye className="size-4" strokeWidth={1.75} />
@@ -1335,9 +1832,9 @@ export const TradingGrid: React.FC = () => {
           >
             <LocateFixed className="size-4" strokeWidth={1.75} />
           </GridActionButton>
-          <GridActionButton aria-label="Change market region">
+          {/* <GridActionButton aria-label="Change market region">
             <Globe className="size-4" strokeWidth={1.75} />
-          </GridActionButton>
+          </GridActionButton> */}
         </div>
       </div>
 
@@ -1374,9 +1871,12 @@ export const TradingGrid: React.FC = () => {
           {shareOverlayTargets.map((target) => (
             <button
               key={target.cellId}
+              ref={(node) => setShareOverlayButtonRef(target.cellId, node)}
               type="button"
-              className="bg-background-main/90 border-border-main text-grid-accent pointer-events-auto absolute flex size-7 items-center justify-center rounded-md border shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
-              style={{ left: `${target.left}px`, top: `${target.top}px` }}
+              className="bg-background-main/90 border-border-main text-grid-accent pointer-events-auto absolute top-0 left-0 flex size-7 items-center justify-center rounded-md border shadow-[0_6px_18px_rgba(0,0,0,0.35)] will-change-transform"
+              style={{
+                transform: `translate3d(${target.left}px, ${target.top}px, 0)`,
+              }}
               onClick={(event) => {
                 event.stopPropagation();
                 handleOpenShareSheet(target.cellId);
@@ -1404,7 +1904,7 @@ export const TradingGrid: React.FC = () => {
           </div>
         )}
 
-        <div className="pointer-events-none absolute bottom-3 left-3 z-20 sm:bottom-4 sm:left-4">
+        <div className="pointer-events-none absolute bottom-6 left-3 z-20 sm:bottom-4 sm:left-4">
           <BalanceChip balance={balance} />
         </div>
       </div>
@@ -1452,8 +1952,17 @@ export const TradingGrid: React.FC = () => {
             className="border-border-main bg-background-main pointer-events-auto rounded-t-[16px] border-t px-5 pt-3 pb-5"
           >
             <OverlayModePanel
-              overlayMode={overlayModeDraft}
-              onOverlayModeChange={setOverlayModeDraft}
+              suggestedStrategyEnabled={suggestedStrategyEnabledDraft}
+              followTradeEnabled={followTradeEnabledDraft}
+              followTradeTargets={followTradeTargetsDraft}
+              isFollowTradeLoading={isFollowingFetching}
+              onSuggestedStrategyEnabledChange={
+                handleSuggestedStrategyDraftChange
+              }
+              onFollowTradeEnabledChange={handleFollowTradeDraftChange}
+              onFollowTradeTargetEnabledChange={
+                handleFollowTradeTargetDraftChange
+              }
               onApply={handleApplyOverlayMode}
             />
           </Sheet.Content>
@@ -1473,25 +1982,57 @@ export const TradingGrid: React.FC = () => {
         <Sheet.Container className="pointer-events-none">
           <Sheet.Content
             disableDrag={false}
-            className="bg-background-main border-border-main pointer-events-auto rounded-t-[16px] border-t px-4 pt-4 pb-6"
+            className="bg-background-main border-border-main pointer-events-auto rounded-t-[16px] border-t"
           >
             {selectedShareCell ? (
-              <div className="mx-auto flex w-full max-w-[380px] flex-col gap-3">
+              <div className="mx-auto w-full max-w-[400px]">
                 <WinShareCard
-                  ref={shareCardRef}
                   marketSymbol={MARKET_SYMBOL}
                   multiplier={selectedShareCell.multiplier}
                   amount={selectedShareAmount}
+                  openedAt={selectedShareTime}
+                  profit={selectedShareProfit}
                 />
-                <Button
-                  type="button"
-                  className="bg-primary-light hover:bg-primary-light/90 text-[#06220f]"
-                  onClick={handleCopyShareImage}
-                  disabled={isCopyingShareImage}
-                >
-                  <Copy className="mr-2 size-4" />
-                  {isCopyingShareImage ? "Copying image..." : "Copy as Image"}
-                </Button>
+                <div className="px-5 pb-5">
+                  <div className="flex flex-col gap-4">
+                    <p className="text-hint text-sm font-medium tracking-[-0.01em]">
+                      Share your win
+                    </p>
+                    <div className="bg-surface-overlay rounded-[8px] px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <p className="text-text-heading min-w-0 flex-1 truncate text-sm font-medium tracking-[-0.01em]">
+                          {shareUrl}
+                        </p>
+                        <button
+                          type="button"
+                          className="text-text-sub hover:text-text-heading flex size-5 items-center justify-center"
+                          onClick={handleCopyShareLink}
+                          aria-label="Copy share link"
+                        >
+                          <Copy className="size-4" strokeWidth={1.9} />
+                        </button>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      className="bg-primary-medium text-text-inverse hover:bg-primary-light h-11 rounded-[8px] text-base font-medium tracking-[-0.01em]"
+                      onClick={handleShare}
+                      disabled={isSharing}
+                    >
+                      <Share2 className="mr-2 size-4" strokeWidth={1.9} />
+                      {isSharing ? "Sharing..." : "Share"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-primary-light text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[8px] bg-transparent text-base font-medium tracking-[-0.01em]"
+                      onClick={handleShareToWorldChat}
+                    >
+                      <Share2 className="mr-2 size-4" strokeWidth={1.9} />
+                      WorldChat
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : null}
           </Sheet.Content>

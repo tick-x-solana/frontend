@@ -6,6 +6,7 @@ export interface OrderFollowingItem {
   id?: string;
   subscriberUserId: string;
   targetUserId: string;
+  targetUsername?: string | null;
   status?: string | null;
   eligibilityStatus?: string | null;
   eligibilityReason?: string | null;
@@ -79,13 +80,37 @@ function readTimestamp(value: unknown): number | null {
   return null;
 }
 
+function normalizeTsToMsString(value: unknown): string | null {
+  const numeric = asNumber(value);
+  if (numeric === null) return null;
+  const normalized = numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
+  if (!Number.isFinite(normalized)) return null;
+  return Math.trunc(normalized).toString();
+}
+
 function normalizeCellId(cell: UnknownRecord | null): string | null {
   if (!cell) return null;
 
-  const startTs = asString(cell.startTs) ?? asNumber(cell.startTs)?.toString();
-  const endTs = asString(cell.endTs) ?? asNumber(cell.endTs)?.toString();
+  const startTs = normalizeTsToMsString(cell.startTs);
+  const endTs = normalizeTsToMsString(cell.endTs);
   const lowerPrice = asString(cell.lowerPrice);
   const upperPrice = asString(cell.upperPrice);
+
+  if (!startTs || !endTs || !lowerPrice || !upperPrice) return null;
+  return `${startTs}:${endTs}:${lowerPrice}:${upperPrice}`;
+}
+
+function normalizeCellIdString(value: unknown): string | null {
+  const raw = asString(value);
+  if (!raw) return null;
+
+  const parts = raw.split(":");
+  if (parts.length < 4) return null;
+
+  const startTs = normalizeTsToMsString(parts[parts.length - 4]);
+  const endTs = normalizeTsToMsString(parts[parts.length - 3]);
+  const lowerPrice = asString(parts[parts.length - 2]);
+  const upperPrice = asString(parts[parts.length - 1]);
 
   if (!startTs || !endTs || !lowerPrice || !upperPrice) return null;
   return `${startTs}:${endTs}:${lowerPrice}:${upperPrice}`;
@@ -109,6 +134,21 @@ export function extractWssKey(response: unknown): string | null {
   );
 }
 
+function readFollowingUsername(record: UnknownRecord): string | null {
+  const targetUser = asRecord(record.targetUser);
+  const user = asRecord(record.user);
+  return (
+    asString(record.targetUsername) ??
+    asString(record.username) ??
+    asString(record.targetUserName) ??
+    asString(targetUser?.username) ??
+    asString(targetUser?.displayName) ??
+    asString(targetUser?.name) ??
+    asString(user?.username) ??
+    null
+  );
+}
+
 function toFollowingItem(value: unknown): OrderFollowingItem | null {
   const record = asRecord(value);
   if (!record) return null;
@@ -122,6 +162,7 @@ function toFollowingItem(value: unknown): OrderFollowingItem | null {
     id: asString(record.id) ?? undefined,
     subscriberUserId,
     targetUserId,
+    targetUsername: readFollowingUsername(record),
     status: asString(record.status),
     eligibilityStatus: asString(record.eligibilityStatus),
     eligibilityReason: asString(record.eligibilityReason),
@@ -199,9 +240,9 @@ function toActivity(
       asString(nestedData?.amount),
     cellId:
       normalizeCellId(cell) ??
-      asString(record.cellId) ??
-      asString(nestedOrder?.cellId) ??
-      asString(nestedData?.cellId),
+      normalizeCellIdString(record.cellId) ??
+      normalizeCellIdString(nestedOrder?.cellId) ??
+      normalizeCellIdString(nestedData?.cellId),
     observedAt:
       readTimestamp(record.createdAt) ??
       readTimestamp(record.ts) ??

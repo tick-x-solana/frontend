@@ -135,7 +135,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
   const handleOpenCopyTradeModal = useCallback(
     (profile: CopyTradeProfile) => {
       if (!isAuthenticated || isLoggingIn) {
-        toast.error("Please sign in before starting copy trade.");
+        toast.error("Please sign in before starting follow trade.");
         return;
       }
 
@@ -187,13 +187,13 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
         queryKey: getOrderFollowControllerListFollowingQueryKey(),
       });
 
-      toast.success("Copy trade started successfully.");
+      toast.success("Follow trade started successfully.");
       setIsPayModalOpen(false);
     } catch (error) {
-      console.error("[ReferralCopyTradingPage] Failed to start copy trade", {
+      console.error("[ReferralCopyTradingPage] Failed to start follow trade", {
         error,
       });
-      toast.error("Unable to start copy trade. Please try again.");
+      toast.error("Unable to start follow trade. Please try again.");
     } finally {
       setIsSubmittingFollow(false);
     }
@@ -220,7 +220,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
         </Button>
 
         <h1 className="text-text-heading text-2xl font-semibold tracking-[-0.01em]">
-          Copy Trading
+          Follow Trading
         </h1>
       </div>
 
@@ -260,11 +260,11 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
           <Sheet.Content className="bg-surface-card border-border-main pointer-events-auto rounded-t-[24px] border-t px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+16px)]">
             <div className="flex flex-col gap-4">
               <h2 className="text-text-heading text-lg font-semibold">
-                Start Copy Trade
+                Start Follow Trade
               </h2>
               <p className="text-text-sub text-sm font-medium">
                 You need to pay {COPY_TRADE_PAYMENT_AMOUNT_WLD} WLD to start
-                copy trading this profile.
+                follow trading this profile.
               </p>
 
               <div className="grid grid-cols-2 gap-2">

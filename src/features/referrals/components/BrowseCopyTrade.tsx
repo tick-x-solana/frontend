@@ -27,13 +27,13 @@ const BrowseCopyTrade = () => {
   return (
     <section className="flex flex-col gap-4 pb-4">
       <header className="flex items-center justify-between">
-        <h2 className="text-text-heading text-base font-semibold">Copy Trade</h2>
+        <h2 className="text-text-heading text-base font-semibold">Follow Trade</h2>
         <Button
           type="button"
           variant="ghost"
           size="icon-xs"
           className="text-hint hover:bg-surface-overlay-subtle hover:text-primary-light size-6 rounded-[5px] p-0"
-          aria-label="View all copy trade profiles"
+          aria-label="View all follow trade profiles"
         >
           <ChevronRight className="size-4" aria-hidden="true" />
         </Button>

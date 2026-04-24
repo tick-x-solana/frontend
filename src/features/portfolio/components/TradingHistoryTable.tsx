@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { useMemo } from "react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import Progress from "@/src/components/common/Progress";
 import {
   Table,
   TableBody,
@@ -14,6 +12,7 @@ import {
   TableRow,
 } from "@/src/components/shadcn/table";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
 import { useOrderControllerGetUserOrders } from "@/src/services/queries";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +42,8 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
 });
 
 const compactFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
 });
 
 function asRecord(value: unknown): UnknownRecord | null {
@@ -252,7 +252,7 @@ function pnlText(item: TradingHistoryItem): string {
 
 const TradingHistoryTable = () => {
   const { isAuthenticated, isLoggingIn } = useAuth();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { data: wldUsdPrice } = useWldUsdPrice(isAuthenticated && !isLoggingIn);
 
   const { data, isLoading } = useOrderControllerGetUserOrders<unknown>(
     {
@@ -272,8 +272,23 @@ const TradingHistoryTable = () => {
     return extractOrders(data)
       .map(toHistoryItem)
       .filter((item): item is TradingHistoryItem => item !== null)
+      .map((item) => {
+        if (
+          item.amountWld !== null ||
+          item.amountUsd === null ||
+          !wldUsdPrice ||
+          wldUsdPrice <= 0
+        ) {
+          return item;
+        }
+
+        return {
+          ...item,
+          amountWld: item.amountUsd / wldUsdPrice,
+        };
+      })
       .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [data]);
+  }, [data, wldUsdPrice]);
 
   const emptyState = !isLoading && items.length === 0;
 
@@ -296,7 +311,7 @@ const TradingHistoryTable = () => {
             <TableHead className="text-text-sub w-[90px] px-4 py-3 text-[14px] font-normal">
               PNL
             </TableHead>
-            <TableHead className="text-text-sub px-4 py-3 text-[14px] font-normal">
+            <TableHead className="text-text-sub bg-surface-overlay-subtle sticky right-0 z-20 px-4 py-3 text-[14px] font-normal">
               When
             </TableHead>
           </TableRow>
@@ -325,14 +340,10 @@ const TradingHistoryTable = () => {
           ) : null}
 
           {items.map((item) => {
-            const isExpanded = expandedId === item.id;
-
             return (
               <FragmentRow
                 key={item.id}
                 item={item}
-                isExpanded={isExpanded}
-                onToggle={() => setExpandedId(isExpanded ? null : item.id)}
               />
             );
           })}
@@ -344,102 +355,42 @@ const TradingHistoryTable = () => {
 
 interface FragmentRowProps {
   item: TradingHistoryItem;
-  isExpanded: boolean;
-  onToggle: () => void;
 }
 
-const FragmentRow = ({ item, isExpanded, onToggle }: FragmentRowProps) => {
+const FragmentRow = ({ item }: FragmentRowProps) => {
   return (
-    <>
-      <TableRow
-        className={cn(
-          "border-border-main bg-background-main hover:bg-surface-overlay-subtle cursor-pointer border-b border-l-2",
-          isExpanded
-            ? "bg-background-surface border-l-success-medium"
-            : "border-l-success-medium",
-        )}
-        onClick={onToggle}
-      >
-        <TableCell className="px-4 py-2">
-          <p className="text-text-main text-[14px] font-semibold">
-            {formatMoney(item.amountUsd)}
-          </p>
-          <p className="text-hint text-[12px] font-semibold uppercase">
-            {formatWld(item.amountWld)}
-          </p>
-        </TableCell>
-        <TableCell className="px-4 py-2 align-middle">
-          <p className="text-success-light text-[14px] font-normal">
-            {formatMultiplier(item.multiplier)}
-          </p>
-        </TableCell>
-        <TableCell className="px-4 py-2 align-middle">
-          <p
-            className={cn(
-              "text-[14px] font-medium",
-              item.inProgress
-                ? "text-text-main"
-                : item.pnl !== null && item.pnl >= 0
-                  ? "text-success-medium"
-                  : "text-warning-medium",
-            )}
-          >
-            {pnlText(item)}
-          </p>
-        </TableCell>
-        <TableCell className="text-text-sub px-4 py-2 align-middle text-[14px] font-normal">
-          {item.whenLabel}
-        </TableCell>
-      </TableRow>
-
-      {isExpanded ? (
-        <TableRow className="bg-background-surface border-border-main hover:bg-background-surface">
-          <TableCell colSpan={4} className="p-0">
-            <div className="bg-background-surface border-border-main flex flex-col gap-3 border-b px-4 py-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-text-main text-[18px] font-semibold">
-                      {item.market}
-                    </p>
-                    <span className="bg-surface-overlay-strong text-text-sub rounded-[6px] px-1.5 py-[3px] text-[12px] font-semibold uppercase">
-                      {item.createdAtLabel}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="text-text-main flex items-center gap-1 text-[14px] font-medium underline"
-                >
-                  Details
-                  <ArrowUpRight className="size-4" />
-                </button>
-              </div>
-
-              <div className="border-border-main border-t" />
-
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-text-sub text-[14px] font-medium">
-                    Current:{" "}
-                    <span className="text-text-main font-mono text-[14px] font-bold">
-                      {formatMoney(item.currentPrice)}
-                    </span>
-                  </p>
-                  <p className="text-text-sub text-[14px] font-medium">
-                    Target Price:{" "}
-                    <span className="text-text-main font-mono text-[14px] font-bold">
-                      {formatMoney(item.targetPrice)}
-                    </span>
-                  </p>
-                </div>
-                <Progress value={item.progress} />
-              </div>
-            </div>
-          </TableCell>
-        </TableRow>
-      ) : null}
-    </>
+    <TableRow className="border-border-main bg-background-main hover:bg-surface-overlay-subtle group border-b border-l-2 border-l-success-medium">
+      <TableCell className="px-4 py-2">
+        <p className="text-text-main text-[14px] font-semibold">
+          {formatMoney(item.amountUsd)}
+        </p>
+        <p className="text-hint text-[12px] font-semibold uppercase">
+          {formatWld(item.amountWld)}
+        </p>
+      </TableCell>
+      <TableCell className="px-4 py-2 align-middle">
+        <p className="text-success-light text-[14px] font-normal">
+          {formatMultiplier(item.multiplier)}
+        </p>
+      </TableCell>
+      <TableCell className="px-4 py-2 align-middle">
+        <p
+          className={cn(
+            "text-[14px] font-medium",
+            item.inProgress
+              ? "text-text-main"
+              : item.pnl !== null && item.pnl >= 0
+                ? "text-success-medium"
+                : "text-warning-medium",
+          )}
+        >
+          {pnlText(item)}
+        </p>
+      </TableCell>
+      <TableCell className="text-text-sub bg-background-main group-hover:bg-surface-overlay-subtle sticky right-0 z-10 px-4 py-2 align-middle text-[14px] font-normal">
+        {item.whenLabel}
+      </TableCell>
+    </TableRow>
   );
 };
 
