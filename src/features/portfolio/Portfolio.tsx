@@ -1,6 +1,6 @@
 import Title from "@/src/components/common/Title";
-import ActivePredictionCard from "@/src/features/portfolio/components/ActivePredictionCard";
 import OverviewCard from "@/src/features/portfolio/components/OverviewCard";
+import TradingHistoryTable from "@/src/features/portfolio/components/TradingHistoryTable";
 import WalletActionPanel from "@/src/features/portfolio/components/WalletActionPanel";
 import Image from "next/image";
 
@@ -25,7 +25,7 @@ const Portfolio = () => {
         className="pointer-events-none absolute top-[100px] z-0 h-full w-full object-cover opacity-50"
       />
       <div className="flex flex-col gap-4">
-        <Title>Portfolio123123</Title>
+        <Title>Portfolio1</Title>
         <WalletActionPanel />
       </div>
 
@@ -35,27 +35,7 @@ const Portfolio = () => {
         ))}
       </div>
 
-      {/* Active Predictions */}
-      <div className="flex items-center gap-3">
-        <Title>Active Predictions</Title>
-        <p className="text-hint text-xl font-semibold">3</p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        {Array.from(new Array(3)).map((_, index) => (
-          <ActivePredictionCard
-            key={index}
-            pair="BTC/USD"
-            placedAt="10:06:00 AM"
-            expectedIn="15:00"
-            multiplier="2.5x"
-            status="In Progress"
-            currentPrice="$3,008.40"
-            targetPrice="$3,020"
-            progress={0.56}
-          />
-        ))}
-      </div>
+      <TradingHistoryTable />
     </div>
   );
 };

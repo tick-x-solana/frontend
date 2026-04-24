@@ -7,7 +7,11 @@ import { toast } from "sonner";
 
 const WORLD_ID = "2Ma85VOA";
 
-const ReferralsHeader = () => {
+type ReferralsHeaderProps = {
+  onShareToChat: () => void;
+};
+
+const ReferralsHeader = ({ onShareToChat }: ReferralsHeaderProps) => {
   const handleCopyWorldId = async () => {
     try {
       if (!navigator.clipboard) {
@@ -66,6 +70,7 @@ const ReferralsHeader = () => {
             type="button"
             variant="outline"
             className="border-primary-light text-text-heading hover:text-text-heading hover:bg-surface-overlay-subtle ml-auto h-11 flex-1 rounded-[10px] bg-transparent px-4 text-sm font-medium backdrop-blur-[8px]"
+            onClick={onShareToChat}
           >
             <Share2 className="size-4" />
             WorldChat

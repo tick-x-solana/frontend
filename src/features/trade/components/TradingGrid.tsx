@@ -17,16 +17,19 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import html2canvas from "html2canvas";
 import { WalletIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
 import { cn } from "@/lib/utils";
-import { Eye, Globe, Info, LocateFixed } from "lucide-react";
+import { Copy, Eye, Globe, Info, LocateFixed, Share2 } from "lucide-react";
 import { Sheet } from "react-modal-sheet";
 import { io } from "socket.io-client";
 import { useAccount } from "wagmi";
+import { MiniKit } from "@worldcoin/minikit-js";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import OverlayModePanel from "@/src/features/trade/components/OverlayModePanel";
 import TradeControlsPanel from "@/src/features/trade/components/TradeControlsPanel";
+import { WinShareCard } from "@/src/features/trade/components/WinShareCard";
 import {
   extractFollowedOrderActivities,
   extractOrderFollowings,
@@ -36,15 +39,17 @@ import { getLatestChartTime } from "@/src/features/trade/gridTiming";
 import type { RemoteCell } from "@/src/features/trade/store";
 import { BACKEND_URL } from "@/src/features/trade/constant";
 import { useGameStore } from "@/src/features/trade/store";
+import { appToast } from "@/src/features/trade/toast";
 import {
   authControllerGetWssKey,
   authControllerGetChallenge,
+  useAccountControllerGetBalance,
   useAuthControllerGetWssKey,
   useOrderControllerGetUserOrders,
   useOrderFollowControllerListFollowing,
 } from "@/src/services/queries";
 import { signWssMessage } from "@/src/features/trade/socketSignature";
-import { computeLayout, hitTestCell } from "@/src/utils/gridLayout";
+import { computeLayout, hitTestAnyCell, hitTestCell } from "@/src/utils/gridLayout";
 import type { Transform, StoreSnapshot } from "@/src/utils/gridLayout";
 import { computeGridDimensions } from "@/src/utils/gridDimensions";
 import {
@@ -90,6 +95,11 @@ const balanceFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 const MARKET_SYMBOL = "BTC/USD";
+type ShareOverlayTarget = {
+  cellId: string;
+  left: number;
+  top: number;
+};
 
 type GridActionButtonProps = React.ComponentProps<typeof Button> & {
   active?: boolean;
@@ -179,6 +189,27 @@ function extractBalanceAmount(value: unknown): number | null {
   );
 }
 
+function extractBalanceUserId(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const directUserId = record.userId ?? record.userAddress ?? record.address;
+
+  if (typeof directUserId === "string" && directUserId.trim().length > 0) {
+    return directUserId;
+  }
+
+  return extractBalanceUserId(record.data);
+}
+
+function normalizeAddress(value: string | null | undefined): string | null {
+  if (!value || typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function extractUserOrders(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== "object") return [];
@@ -254,6 +285,10 @@ export const TradingGrid: React.FC = () => {
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
   const { address } = useAccount();
   const { isAuthenticated, isLoggingIn, walletAddress } = useAuth();
+  const isMiniApp = MiniKit.isInWorldApp();
+  const miniKitWalletAddress = isMiniApp ? (MiniKit.user?.walletAddress ?? null) : null;
+  const resolvedUserAddress =
+    miniKitWalletAddress ?? walletAddress ?? address ?? null;
   const { data: wssKeyResponse } = useAuthControllerGetWssKey({
     query: {
       enabled: isAuthenticated && !isLoggingIn,
@@ -281,6 +316,13 @@ export const TradingGrid: React.FC = () => {
       },
     },
   );
+  const { data: balanceResponse } = useAccountControllerGetBalance({
+    query: {
+      enabled: isAuthenticated && !isLoggingIn,
+      staleTime: 10_000,
+      refetchOnWindowFocus: true,
+    },
+  });
 
   const resolvedWssKey = extractWssKey(wssKeyResponse);
   const activeFollowings = useMemo(
@@ -372,7 +414,7 @@ export const TradingGrid: React.FC = () => {
     balance,
     socket,
     wssKey,
-    address,
+    address: resolvedUserAddress,
     followedOrderActivities,
     dims: null,
   });
@@ -402,7 +444,7 @@ export const TradingGrid: React.FC = () => {
       balance,
       socket,
       wssKey,
-      address,
+      address: resolvedUserAddress,
       followedOrderActivities,
       dims: nextDims,
     };
@@ -412,6 +454,16 @@ export const TradingGrid: React.FC = () => {
   const [overlayModeDraft, setOverlayModeDraft] = useState(false);
   const [isOverlaySheetOpen, setIsOverlaySheetOpen] = useState(false);
   const [isInfoSheetOpen, setIsInfoSheetOpen] = useState(false);
+  const [shareOverlayTargets, setShareOverlayTargets] = useState<
+    ShareOverlayTarget[]
+  >([]);
+  const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
+  const [shareCellId, setShareCellId] = useState<string | null>(null);
+  const [isCopyingShareImage, setIsCopyingShareImage] = useState(false);
+  const shareCardRef = useRef<HTMLDivElement | null>(null);
+  const shareTargetsRef = useRef<ShareOverlayTarget[]>([]);
+  const shareTargetsHashRef = useRef("");
+  const lastShareTargetsSyncRef = useRef(0);
 
   useEffect(() => {
     setWssKey(resolvedWssKey);
@@ -483,7 +535,7 @@ export const TradingGrid: React.FC = () => {
     ) {
       return;
     }
-    const userAddress = address ?? walletAddress;
+    const userAddress = resolvedUserAddress;
     if (!isAuthenticated || !userAddress) {
       return;
     }
@@ -539,12 +591,11 @@ export const TradingGrid: React.FC = () => {
       socketClient.off("connect", handleConnect);
     };
   }, [
-    address,
     isAuthenticated,
+    resolvedUserAddress,
     setConnection,
     setWssKey,
     socket,
-    walletAddress,
   ]);
 
   useEffect(() => {
@@ -562,9 +613,10 @@ export const TradingGrid: React.FC = () => {
     ) {
       return;
     }
-    if (!resolvedWssKey || activeFollowings.length === 0 || !walletAddress) {
+    if (!resolvedWssKey || activeFollowings.length === 0 || !resolvedUserAddress) {
       return;
     }
+    const userAddress = resolvedUserAddress;
 
     const socketClient = socket as {
       connected: boolean;
@@ -577,7 +629,7 @@ export const TradingGrid: React.FC = () => {
 
     const getFollowSignature = async () => {
       const challengeResponse = await authControllerGetChallenge({
-        address: walletAddress,
+        address: userAddress,
       });
       const challenge = extractChallenge(challengeResponse);
 
@@ -585,7 +637,7 @@ export const TradingGrid: React.FC = () => {
         throw new Error("Missing socket follow challenge");
       }
 
-      return signWssMessage(resolvedWssKey, walletAddress, challenge);
+      return signWssMessage(resolvedWssKey, userAddress, challenge);
     };
 
     const subscribeToFollows = async () => {
@@ -594,7 +646,7 @@ export const TradingGrid: React.FC = () => {
 
       activeFollowings.forEach((follow) => {
         socketClient.emit(SUBSCRIBE_ORDER_FOLLOWS_EVENT, {
-          userId: walletAddress,
+          userId: userAddress,
           targetUserId: follow.targetUserId,
           signature,
         });
@@ -619,7 +671,7 @@ export const TradingGrid: React.FC = () => {
         .then((signature) => {
           activeFollowings.forEach((follow) => {
             socketClient.emit(UNSUBSCRIBE_ORDER_FOLLOWS_EVENT, {
-              userId: walletAddress,
+              userId: userAddress,
               targetUserId: follow.targetUserId,
               signature,
             });
@@ -634,8 +686,8 @@ export const TradingGrid: React.FC = () => {
     activeFollowings,
     followedTargetsKey,
     resolvedWssKey,
+    resolvedUserAddress,
     socket,
-    walletAddress,
   ]);
 
   useEffect(() => {
@@ -679,6 +731,16 @@ export const TradingGrid: React.FC = () => {
   ]);
 
   useEffect(() => {
+    const nextServerBalance = extractBalanceAmount(balanceResponse);
+    if (nextServerBalance === null) return;
+
+    useGameStore.setState({
+      serverBalance: nextServerBalance,
+      balance: nextServerBalance,
+    });
+  }, [balanceResponse]);
+
+  useEffect(() => {
     if (!socket) {
       return;
     }
@@ -688,7 +750,17 @@ export const TradingGrid: React.FC = () => {
       off: (event: string, handler: (payload: unknown) => void) => void;
     };
 
+    const normalizedCurrentUser = normalizeAddress(resolvedUserAddress);
+
     const handleBalanceUpdate = (payload: unknown) => {
+      const payloadUserId = normalizeAddress(extractBalanceUserId(payload));
+      if (
+        payloadUserId &&
+        (!normalizedCurrentUser || payloadUserId !== normalizedCurrentUser)
+      ) {
+        return;
+      }
+
       const nextServerBalance = extractBalanceAmount(payload);
       if (nextServerBalance === null) return;
 
@@ -698,13 +770,12 @@ export const TradingGrid: React.FC = () => {
       });
     };
 
-    console.log("listen balance");
     socketClient.on(BALANCE_UPDATE_EVENT, handleBalanceUpdate);
 
     return () => {
       socketClient.off(BALANCE_UPDATE_EVENT, handleBalanceUpdate);
     };
-  }, [socket]);
+  }, [resolvedUserAddress, socket]);
 
   useEffect(() => {
     if (!socket) {
@@ -900,6 +971,76 @@ export const TradingGrid: React.FC = () => {
     return hitTestCell(cx, cy, layout, storeRef.current, nowRef.current);
   }, []);
 
+  const hitTestAny = useCallback((cx: number, cy: number) => {
+    const layout = computeLayout(
+      transformRef.current,
+      sizeRef.current,
+      nowRef.current,
+      cameraPriceRef.current,
+      storeRef.current,
+    );
+    return hitTestAnyCell(cx, cy, layout, storeRef.current);
+  }, []);
+
+  const selectedShareCell = useMemo(
+    () => cells.find((cell) => cell.id === shareCellId) ?? null,
+    [cells, shareCellId],
+  );
+  const selectedShareAmount = selectedShareCell
+    ? bets[selectedShareCell.id] ||
+      pendingBets[selectedShareCell.id] ||
+      betAmount
+    : betAmount;
+
+  const handleOpenShareSheet = useCallback((cellId: string) => {
+    setShareCellId(cellId);
+    setIsShareSheetOpen(true);
+  }, []);
+
+  const handleCopyShareImage = useCallback(async () => {
+    const shareNode = shareCardRef.current;
+    if (!shareNode) return;
+
+    try {
+      setIsCopyingShareImage(true);
+      const capture = await html2canvas(shareNode, {
+        useCORS: true,
+        scale: 2,
+        backgroundColor: null,
+      });
+      const blob = await new Promise<Blob | null>((resolve) => {
+        capture.toBlob((nextBlob) => resolve(nextBlob), "image/png");
+      });
+      if (!blob) throw new Error("Could not create image blob");
+
+      if (
+        navigator.clipboard &&
+        "write" in navigator.clipboard &&
+        typeof ClipboardItem !== "undefined"
+      ) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "image/png": blob,
+          }),
+        ]);
+        appToast.success("Copied share image to clipboard", { icon: "📸" });
+      } else {
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = `tickx-win-${Date.now()}.png`;
+        link.click();
+        URL.revokeObjectURL(objectUrl);
+        appToast.success("Image downloaded", { icon: "📥" });
+      }
+    } catch (error) {
+      console.error("Failed to copy share image", error);
+      appToast.error("Failed to copy image", { icon: "⚠️" });
+    } finally {
+      setIsCopyingShareImage(false);
+    }
+  }, []);
+
   // ── Draw ───────────────────────────────────────────────────────────────────
   const draw = useCallback(() => {
     const cv = canvasRef.current;
@@ -926,6 +1067,27 @@ export const TradingGrid: React.FC = () => {
         cameraPriceRef.current,
       ),
     };
+    const nextShareTargets: ShareOverlayTarget[] = [];
+    for (const cell of store.cells) {
+      if (cell.status !== "hit") continue;
+      const hasAnyBet =
+        (store.bets[cell.id] || 0) > 0 || (store.pendingBets[cell.id] || 0) > 0;
+      if (!hasAnyBet) continue;
+
+      const x = layout.toCanvasX(cell.timeWindowStart);
+      const y = layout.toCellY(cell.priceLevel + layout.effectivePriceStep / 2);
+      const w = layout.cellW;
+      const h = layout.cellH;
+      if (x + w < 0 || x > layout.w || y + h < 0 || y > layout.h) continue;
+
+      nextShareTargets.push({
+        cellId: cell.id,
+        left: Math.max(4, Math.min(layout.w - 34, x + w - 30)),
+        top: Math.max(4, Math.min(layout.h - 34, y + 4)),
+      });
+    }
+    shareTargetsRef.current = nextShareTargets;
+
     ctx.save();
     ctx.scale(dpr, dpr);
 
@@ -1005,6 +1167,20 @@ export const TradingGrid: React.FC = () => {
       }
 
       draw();
+      if (loopNow - lastShareTargetsSyncRef.current > 120) {
+        const nextTargets = shareTargetsRef.current;
+        const nextHash = nextTargets
+          .map(
+            (item) =>
+              `${item.cellId}:${Math.round(item.left)}:${Math.round(item.top)}`,
+          )
+          .join("|");
+        if (nextHash !== shareTargetsHashRef.current) {
+          shareTargetsHashRef.current = nextHash;
+          setShareOverlayTargets(nextTargets);
+        }
+        lastShareTargetsSyncRef.current = loopNow;
+      }
       rafRef.current = requestAnimationFrame(loop);
     };
 
@@ -1033,6 +1209,7 @@ export const TradingGrid: React.FC = () => {
     storeRef,
     previewCellIdRef,
     hitTest,
+    hitTestAnyCell: hitTestAny,
     placeBet,
     getMinZoom,
   });
@@ -1167,6 +1344,23 @@ export const TradingGrid: React.FC = () => {
           className="absolute inset-0"
           style={{ display: "block" }}
         />
+        <div className="pointer-events-none absolute inset-0 z-20">
+          {shareOverlayTargets.map((target) => (
+            <button
+              key={target.cellId}
+              type="button"
+              className="bg-background-main/90 border-border-main text-grid-accent pointer-events-auto absolute flex size-7 items-center justify-center rounded-md border shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+              style={{ left: `${target.left}px`, top: `${target.top}px` }}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleOpenShareSheet(target.cellId);
+              }}
+              aria-label="Share winning cell"
+            >
+              <Share2 className="size-3.5" strokeWidth={2} />
+            </button>
+          ))}
+        </div>
 
         {showLoadingState && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -1236,6 +1430,44 @@ export const TradingGrid: React.FC = () => {
               onOverlayModeChange={setOverlayModeDraft}
               onApply={handleApplyOverlayMode}
             />
+          </Sheet.Content>
+        </Sheet.Container>
+      </Sheet>
+
+      <Sheet
+        isOpen={isShareSheetOpen}
+        onClose={() => setIsShareSheetOpen(false)}
+        detent="content"
+        unstyled
+      >
+        <Sheet.Backdrop
+          onTap={() => setIsShareSheetOpen(false)}
+          className="bg-background-main/55 backdrop-blur-[2px]"
+        />
+        <Sheet.Container className="pointer-events-none">
+          <Sheet.Content
+            disableDrag={false}
+            className="bg-background-main border-border-main pointer-events-auto rounded-t-[16px] border-t px-4 pt-4 pb-6"
+          >
+            {selectedShareCell ? (
+              <div className="mx-auto flex w-full max-w-[380px] flex-col gap-3">
+                <WinShareCard
+                  ref={shareCardRef}
+                  marketSymbol={MARKET_SYMBOL}
+                  multiplier={selectedShareCell.multiplier}
+                  amount={selectedShareAmount}
+                />
+                <Button
+                  type="button"
+                  className="bg-primary-light hover:bg-primary-light/90 text-[#06220f]"
+                  onClick={handleCopyShareImage}
+                  disabled={isCopyingShareImage}
+                >
+                  <Copy className="mr-2 size-4" />
+                  {isCopyingShareImage ? "Copying image..." : "Copy as Image"}
+                </Button>
+              </div>
+            ) : null}
           </Sheet.Content>
         </Sheet.Container>
       </Sheet>

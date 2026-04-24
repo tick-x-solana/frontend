@@ -94,6 +94,16 @@ function getClosingFadeAlpha(
   return 0.35 + ratio * 0.65;
 }
 
+function getClosingPulseAlpha(
+  cellStartTs: number,
+  now: number,
+  closingMs: number,
+): number {
+  const fade = getClosingFadeAlpha(cellStartTs, now, closingMs);
+  const pulse = 0.78 + 0.22 * (0.5 + 0.5 * Math.sin(now / 180));
+  return clamp(fade * pulse, 0.2, 1);
+}
+
 function getPriceAxisMetrics(
   ctx: CanvasRenderingContext2D,
   layout: GridLayout,
@@ -281,9 +291,9 @@ export function drawBetCells(
 
     const isFuture = cell.timeWindowStart > hideThresholdTime;
     const isNext = isFuture && cell.timeWindowStart - now <= CLOSING_MS;
-    const nextCellFadeAlpha =
+    const nextCellVisualAlpha =
       isNext && !hasAnyBet
-        ? getClosingFadeAlpha(cell.timeWindowStart, now, CLOSING_MS)
+        ? getClosingPulseAlpha(cell.timeWindowStart, now, CLOSING_MS)
         : 1;
     const isSelectedColumn =
       selectedColumnStart !== null &&
@@ -393,7 +403,10 @@ export function drawBetCells(
       !(hasAnyBet && !isHit && !isLose) &&
       !hasFollowedActivity
     ) {
-      ctx.strokeStyle = COLOR_GRID;
+      ctx.strokeStyle =
+        isNext && !hasAnyBet
+          ? `rgba(22,46,71,${0.2 + nextCellVisualAlpha * 0.4})`
+          : COLOR_GRID;
       ctx.lineWidth = 0.5;
       ctx.strokeRect(rx, ry, rw, rh);
     }
@@ -421,10 +434,10 @@ export function drawBetCells(
         ? COLOR_BLUE
         : isLose && hasAnyBet
           ? COLOR_RED_SOFT
-        : isHit && hasAnyBet
+          : isHit && hasAnyBet
           ? COLOR_GREEN
           : isNext && !hasAnyBet
-            ? `rgba(83,117,155,${0.42 + nextCellFadeAlpha * 0.3})`
+            ? `rgba(83,117,155,${0.24 + nextCellVisualAlpha * 0.5})`
             : cell.multiplier >= 100
               ? COLOR_RED
               : isSelectedColumn
@@ -477,7 +490,7 @@ export function drawBetCells(
     } else {
       // Plain multiplier
       if (isNext && !hasAnyBet) {
-        ctx.globalAlpha = nextCellFadeAlpha;
+        ctx.globalAlpha = nextCellVisualAlpha;
       }
       ctx.font = `${fontSize}px monospace`;
       ctx.fillStyle = multColor;
@@ -774,7 +787,7 @@ function _drawWinCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
   const radius = clamp(cellSize * 0.16, 6, 8);
   const innerInset = 0.75;
   const titleSize = clamp(Math.round(cellSize * 0.25), 10, 12);
-  const detailSize = clamp(Math.round(cellSize * 0.17), 7, 8);
+  const detailSize = clamp(Math.round(cellSize * 0.22), 10, 14);
   const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
   const titleY = y + height * 0.44;
   const detailY = y + height * 0.68;
@@ -862,7 +875,7 @@ function _drawLoseCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
   const radius = clamp(cellSize * 0.16, 6, 8);
   const innerInset = 0.75;
   const titleSize = clamp(Math.round(cellSize * 0.25), 10, 12);
-  const detailSize = clamp(Math.round(cellSize * 0.17), 7, 8);
+  const detailSize = clamp(Math.round(cellSize * 0.22), 10, 14);
   const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
   const titleY = y + height * 0.44;
   const detailY = y + height * 0.68;
@@ -949,9 +962,9 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
   const inset = 0.75;
   const radius = clamp(cellSize * 0.18, 8, 12);
   const multiplierSize = clamp(Math.round(cellSize * 0.2), 11, 16);
-  const badgeBaseFontSize = clamp(Math.round(cellSize * 0.17), 10, 16);
+  const badgeBaseFontSize = clamp(Math.round(cellSize * 0.22), 12, 20);
   const badgeWidth = clamp(width * 0.46, 38, width - 20);
-  const badgeHeight = clamp(height * 0.24, 16, 24);
+  const badgeHeight = clamp(height * 0.28, 18, 28);
   const badgeRadius = clamp(cellSize * 0.14, 6, 10);
   const centerX = x + width / 2;
   const multiplierY = y + height * 0.33;
@@ -1129,14 +1142,6 @@ export function drawPriceLine(
   );
   ctx.fillStyle = COLOR_BLUE;
   ctx.fill();
-
-  // Fade-left gradient to hide chart entering from the left edge
-  const fadeW = w * 0.12;
-  const fadeGrad = ctx.createLinearGradient(0, 0, fadeW, 0);
-  fadeGrad.addColorStop(0, COLOR_BG);
-  fadeGrad.addColorStop(1, "rgba(3,12,28,0)");
-  ctx.fillStyle = fadeGrad;
-  ctx.fillRect(0, 0, fadeW, h);
 
   ctx.restore();
 }

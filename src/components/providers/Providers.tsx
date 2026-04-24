@@ -14,17 +14,22 @@ import { MiniKit } from "@worldcoin/minikit-js";
 
 const Providers = ({ children }: { children: ReactNode }) => {
   const [queryClient] = useState(() => new QueryClient());
-  useEffect(() => {
-    void import("eruda").then(({ default: eruda }) => {
-      eruda.init();
-    });
-    console.log(123);
 
-    const { success } = MiniKit.install("app_e35e8aaf83112cf2c4c4470fda05c7b2");
-    if (success) {
-      console.warn("Minikit install successfully");
-    } else {
-      console.warn("Minikit install failed");
+  useEffect(() => {
+    try {
+      void import("eruda").then(({ default: eruda }) => {
+        eruda.init();
+      });
+      console.log("MiniKit: ", MiniKit);
+
+      const { success } = MiniKit.install();
+      if (success) {
+        console.warn("Minikit install successfully");
+      } else {
+        console.warn("Minikit install failed");
+      }
+    } catch (error) {
+      console.warn("Minikit install failed", error);
     }
   }, []);
 

@@ -38,6 +38,7 @@ interface UseGridInteractionOptions {
   storeRef: React.RefObject<StoreSnapshot>;
   previewCellIdRef: React.RefObject<string | null>;
   hitTest: (cx: number, cy: number) => CellData | null;
+  hitTestAnyCell: (cx: number, cy: number) => CellData | null;
   placeBet: (cellId: string, amount: number) => void;
   getMinZoom: () => number;
 }
@@ -56,6 +57,7 @@ export function useGridInteraction({
   storeRef,
   previewCellIdRef,
   hitTest,
+  hitTestAnyCell,
   placeBet,
   getMinZoom,
 }: UseGridInteractionOptions) {
@@ -265,12 +267,39 @@ export function useGridInteraction({
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
       const cell = hitTest(cx, cy);
-      if (!cell) return;
+      const anyCell = cell ?? hitTestAnyCell(cx, cy);
+      if (!cell) {
+        if (anyCell) {
+          const { bets, pendingBets } = storeRef.current;
+          const now = nowRef.current;
+          const hasBet =
+            (bets[anyCell.id] || 0) > 0 || (pendingBets[anyCell.id] || 0) > 0;
+          const isStarted = now >= anyCell.timeWindowStart;
+          const isClosingSoon =
+            !isStarted && anyCell.timeWindowStart - now <= 5000;
+
+          if (hasBet) {
+            appToast.info("You already placed a bet on this cell.", {
+              icon: "🧾",
+            });
+          } else if (isStarted || isClosingSoon) {
+            appToast.warning("This cell is no longer available for betting.", {
+              icon: "⏳",
+            });
+          } else {
+            appToast.warning("Cannot place bet on this cell.", {
+              icon: "⚠️",
+            });
+          }
+        }
+        return;
+      }
 
       const { bets, pendingBets, betAmount, balance, socket, wssKey, address } =
         storeRef.current;
       const now = nowRef.current;
 
+      console.log("wssKey123: ", wssKey);
       try {
         // Warn if cell is in its closing window
         if (cell.timeWindowStart > now && cell.timeWindowStart - now <= 5000) {
@@ -287,12 +316,13 @@ export function useGridInteraction({
           appToast.warning("Invalid bet amount!", { icon: "⚠️" });
           return;
         }
+        console.log("balance: ", balance);
         if (betAmount > balance) {
           appToast.error("Insufficient balance!", { icon: "💸" });
           return;
         }
 
-        if (!address || !wssKey) {
+        if (!wssKey) {
           appToast.error("Missing wallet session. Reconnect and try again.", {
             icon: "🔐",
           });
@@ -313,6 +343,7 @@ export function useGridInteraction({
         const cellId = cell.id;
         const message = `${cell.original.gridTs}:${cellId}:${amount}`;
         const signature = await signWssMessage(wssKey, message);
+        console.log("address: ", address);
         const payload = {
           userId: address,
           marketId: "BTCUSDT",
@@ -329,7 +360,15 @@ export function useGridInteraction({
         console.log("handleClick() error:", err);
       }
     },
-    [canvasRef, nowRef, storeRef, hitTest, placeBet, clearPreviewCell],
+    [
+      canvasRef,
+      nowRef,
+      storeRef,
+      hitTest,
+      hitTestAnyCell,
+      placeBet,
+      clearPreviewCell,
+    ],
   );
 
   // ── Reset zoom ───────────────────────────────────────────────────────────────

@@ -244,3 +244,30 @@ export function hitTestCell(
 
   return null;
 }
+
+/**
+ * Returns the cell under canvas-space point (cx, cy), regardless of whether it is bettable.
+ */
+export function hitTestAnyCell(
+  cx: number,
+  cy: number,
+  layout: GridLayout,
+  store: StoreSnapshot,
+): CellData | null {
+  const { toTime, toPrice, effectivePriceStep } = layout;
+  const t = toTime(cx);
+  const p = toPrice(cy);
+  const { cells } = store;
+
+  for (const cell of cells) {
+    if (t < cell.timeWindowStart || t > cell.timeWindowEnd) continue;
+
+    const lo = cell.priceLevel - effectivePriceStep / 2;
+    const hi = cell.priceLevel + effectivePriceStep / 2;
+    if (p < lo || p > hi) continue;
+
+    return cell;
+  }
+
+  return null;
+}

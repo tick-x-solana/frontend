@@ -1,19 +1,36 @@
+"use client";
+
 import Header from "@/src/components/layout/Header";
 import Footer from "@/src/components/layout/Footer";
 import MobileBottomNav from "@/src/components/layout/MobileBottomNav";
 import React from "react";
+import { usePathname } from "next/navigation";
 
 const DefaultLayout = ({ children }: { children: React.ReactNode }) => {
+  const pathname = usePathname();
+  const hideLayoutChrome = pathname === "/ref" || pathname.startsWith("/ref/");
+
   return (
     <div className="bg-background-main flex min-h-screen flex-col">
-      <Header />
-      <main className="bg-background-main flex-1 pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0">
+      {!hideLayoutChrome && <Header />}
+      <main
+        className={[
+          "bg-background-main flex-1",
+          hideLayoutChrome
+            ? "pb-0"
+            : "pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0",
+        ].join(" ")}
+      >
         {children}
       </main>
-      <div className="hidden md:block">
-        <Footer />
-      </div>
-      <MobileBottomNav />
+      {!hideLayoutChrome && (
+        <>
+          <div className="hidden md:block">
+            <Footer />
+          </div>
+          <MobileBottomNav />
+        </>
+      )}
     </div>
   );
 };

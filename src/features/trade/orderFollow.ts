@@ -85,7 +85,7 @@ export function extractWssKey(response: unknown): string | null {
   if (!record) return null;
 
   return (
-    asString(record.wssKey) ??
+    asString(record.key) ??
     asString(record.signature) ??
     asString(record.key) ??
     asString(record.token) ??
@@ -119,7 +119,9 @@ function toFollowingItem(value: unknown): OrderFollowingItem | null {
   };
 }
 
-export function extractOrderFollowings(response: unknown): OrderFollowingItem[] {
+export function extractOrderFollowings(
+  response: unknown,
+): OrderFollowingItem[] {
   const rawItems = Array.isArray(response)
     ? response
     : Array.isArray(asRecord(response)?.data)

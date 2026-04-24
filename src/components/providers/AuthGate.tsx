@@ -310,7 +310,6 @@ const StepThree = ({ onEnterApp }: StepThreeProps) => (
 
 const AuthGate = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated, isLoggingIn, isMiniApp, login } = useAuth();
-  console.log("isAuthenticated: ", isAuthenticated);
   const [showSplash, setShowSplash] = useState(true);
   const [step, setStep] = useState<OnboardingStep>(1);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(
@@ -329,6 +328,8 @@ const AuthGate = ({ children }: { children: ReactNode }) => {
     return () => window.clearTimeout(timeout);
   }, [isMiniApp]);
 
+  // if (!isMiniApp || true) {
+  // if (!isMiniApp || true) {
   if (!isMiniApp || isAuthenticated) {
     if (!isMiniApp || hasCompletedOnboarding) {
       return children;

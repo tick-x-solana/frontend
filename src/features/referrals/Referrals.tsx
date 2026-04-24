@@ -11,11 +11,12 @@ import HowItWork from "@/src/features/referrals/components/HowItWork";
 import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
 import ReferralsHeader from "@/src/features/referrals/components/ReferralsHeader";
 import UserRefInfo from "@/src/features/referrals/components/UserRefInfo";
-import { REFERRAL_LINK } from "@/src/features/referrals/constants";
+import { buildReferralLink } from "@/src/features/referrals/constants";
 import useWorldMiniAppChatPay from "@/src/hooks/useWorldMiniAppChatPay";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { useGameStore } from "@/src/features/trade/store";
+import { toast } from "sonner";
 
 const tabs = [
   { value: "browse", label: "Browse" },
@@ -24,11 +25,10 @@ const tabs = [
 ] as const;
 
 type ReferralTab = (typeof tabs)[number]["value"];
-const WORLD_CHAT_SHARE_MESSAGE = `Copy this trader on TickX: ${REFERRAL_LINK}`;
 
 const Referrals = () => {
   const [activeTab, setActiveTab] = useState<ReferralTab>("browse");
-  const { walletAddress } = useAuth();
+  const { walletAddress, logout } = useAuth();
   console.log("walletAddress: ", walletAddress);
   const balance = useGameStore((state) => state.balance);
   const { payWld } = useWorldMiniAppChatPay();
@@ -52,28 +52,42 @@ const Referrals = () => {
     })}`;
   }, [balance]);
 
+  const referralLink = buildReferralLink(MiniKit.user?.username);
+
   const shareToChat = async () => {
-    if (!MiniKit.isInWorldApp()) {
-      console.warn("[Referrals] MiniKit.chat is only available in World App");
-      return;
+    try {
+      if (!MiniKit.isInWorldApp()) {
+        console.warn("[Referrals] MiniKit.chat is only available in World App");
+        return;
+      }
+
+      const miniAppUsername = MiniKit.user?.username?.trim();
+      console.log("MiniKit123: ", MiniKit);
+      console.log("miniAppUsername: ", miniAppUsername);
+      if (!miniAppUsername) {
+        toast.error("Missing World username. Please set your username first.");
+        return;
+      }
+
+      // World Chat can unfurl URLs and hide them in the text bubble, so include a
+      // plain referral code line that always remains visible.
+      const message = [
+        "Use my referral to copy trade on TickX.",
+        `Referral code: ${miniAppUsername}`,
+        `Link: ${referralLink}`,
+      ].join("\n");
+
+      const input = {
+        message,
+        to: ["andy"],
+      } satisfies MiniKitChatOptions;
+
+      console.log("send chat");
+      const result = await MiniKit.chat(input);
+      console.log("[Referrals] MiniKit.chat result", { result });
+    } catch (error) {
+      console.log("error: ", error);
     }
-
-    const recipientInput = "@andy";
-    const recipient = recipientInput?.trim().replace(/^@/, "");
-    console.log("recipient: ", recipient);
-
-    if (!recipient) {
-      console.warn("[Referrals] Share cancelled: invalid recipient");
-      return;
-    }
-
-    const input = {
-      message: WORLD_CHAT_SHARE_MESSAGE,
-      to: [recipient],
-    } satisfies MiniKitChatOptions;
-
-    const result = await MiniKit.chat(input);
-    console.log("[Referrals] MiniKit.chat result", { result });
   };
 
   return (
@@ -107,17 +121,6 @@ const Referrals = () => {
         Pay Wld
       </Button>
 
-      <Button
-        onClick={() => {
-          console.log("[Referrals] Share chat button clicked");
-          void shareToChat().catch((error: unknown) => {
-            console.error("[Referrals] MiniKit.chat failed", { error });
-          });
-        }}
-      >
-        Share chat
-      </Button>
-
       <div className="relative z-10 mx-auto flex flex-col gap-5 md:max-w-[720px] xl:max-w-[860px]">
         <header className="flex items-center justify-between gap-4 pt-1">
           <div className="flex flex-col gap-2">
@@ -139,6 +142,9 @@ const Referrals = () => {
               </p>
             </div>
           </div>
+          <Button type="button" variant="outline" onClick={logout}>
+            Logout
+          </Button>
         </header>
 
         <ActiveTab
@@ -152,8 +158,8 @@ const Referrals = () => {
           <BrowseCopyTrade />
         ) : activeTab === "referrals" ? (
           <div className="flex flex-col gap-5 pb-4">
-            <ReferralsHeader />
-            <ReferAFriend />
+            <ReferralsHeader onShareToChat={() => void shareToChat()} />
+            <ReferAFriend referralLink={referralLink} />
             <HowItWork />
           </div>
         ) : (

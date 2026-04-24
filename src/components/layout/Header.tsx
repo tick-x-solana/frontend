@@ -99,7 +99,7 @@ const Header = () => {
   return (
     <header
       className={[
-        "border-border-main bg-background-main px-4 py-3",
+        "border-border-main bg-background-main px-4 py-3 max-md:hidden!",
         hideOnExploreMobile ? "hidden md:block" : "",
       ].join(" ")}
     >

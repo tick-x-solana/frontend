@@ -14,7 +14,9 @@ const nextConfig: NextConfig = {
       }),
     },
   },
-  allowedDevOrigins: ["765d-116-96-44-1.ngrok-free.app"],
+  allowedDevOrigins: [
+    "160b-2401-d800-fe70-6810-b42d-c20e-44a1-7931.ngrok-free.app",
+  ],
 };
 
 export default nextConfig;

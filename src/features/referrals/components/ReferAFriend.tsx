@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { CopyOutlineIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
-import { REFERRAL_LINK } from "@/src/features/referrals/constants";
 import { toast } from "sonner";
 
 const SOCIAL_LINKS = [
@@ -13,13 +12,17 @@ const SOCIAL_LINKS = [
   { key: "facebook-group", href: "#", label: "Share on Facebook group" },
 ];
 
-const ReferAFriend = () => {
+type ReferAFriendProps = {
+  referralLink: string;
+};
+
+const ReferAFriend = ({ referralLink }: ReferAFriendProps) => {
   const handleCopyReferral = async () => {
     try {
       if (!navigator.clipboard) {
         throw new Error("Clipboard API is not available");
       }
-      await navigator.clipboard.writeText(REFERRAL_LINK);
+      await navigator.clipboard.writeText(referralLink);
       toast.success("Referral link copied");
     } catch {
       toast.error("Failed to copy referral link");
@@ -55,7 +58,7 @@ const ReferAFriend = () => {
         </p>
         <div className="border-border-main bg-surface-field-strong flex items-center gap-2 rounded-[10px] border px-3 py-2.5">
           <p className="min-w-0 flex-1 truncate font-mono text-sm font-medium tracking-[0.02em] text-white">
-            {REFERRAL_LINK}
+            {referralLink}
           </p>
           <Button
             type="button"

@@ -93,6 +93,11 @@
   --color-accent-blue: var(--accent-blue);
   --color-avatar-cyan: var(--avatar-cyan);
   --color-avatar-blue: var(--avatar-blue);
+  --color-avatar-cream: var(--avatar-cream);
+  --color-avatar-magenta: var(--avatar-magenta);
+  --color-podium-glow: var(--podium-glow);
+  --color-podium-title-dark: var(--podium-title-dark);
+  --color-podium-title-fade: var(--podium-title-fade);
 }
 
 :root {
@@ -173,6 +178,11 @@
   --accent-blue: #1764ff;
   --avatar-cyan: #56c5c5;
   --avatar-blue: #6998ee;
+  --avatar-cream: #fff2d2;
+  --avatar-magenta: #ff8eff;
+  --podium-glow: #a9ffc3;
+  --podium-title-dark: #192636;
+  --podium-title-fade: #0b141f;
 }
 
 .dark {

@@ -3,7 +3,7 @@
 import { Button } from "@/src/components/shadcn/button";
 import { ArrowRightCircle, ChevronRight } from "lucide-react";
 
-const OVERLAY_FILTER_LABELS = ["Strategy", "Multiplier", "Username"] as const;
+const OVERLAY_FILTER_LABELS = ["Strategy", "Username"] as const;
 
 type OverlayModePanelProps = {
   overlayMode: boolean;

@@ -30,7 +30,7 @@ const MobileBottomNav = () => {
   return (
     <nav
       aria-label="Bottom navigation"
-      className="border-stroke-main fixed right-0 bottom-0 left-0 z-40 border-t bg-[linear-gradient(90deg,rgba(255,255,255,0.04)_0%,rgba(255,255,255,0.04)_100%),linear-gradient(90deg,var(--background-main)_0%,var(--background-main)_100%)] px-0.5 pt-0.5 pb-[calc(env(safe-area-inset-bottom)+2px)] md:hidden"
+      className="border-stroke-main fixed right-0 bottom-0 left-0 z-40 border-t bg-[linear-gradient(90deg,rgba(255,255,255,0.04)_0%,rgba(255,255,255,0.04)_100%),linear-gradient(90deg,var(--background-main)_0%,var(--background-main)_100%)] px-0.5 pt-0.5 pb-[calc(env(safe-area-inset-bottom)+20px)] md:hidden"
     >
       <ul className="grid grid-cols-4 items-center">
         {navItems.map((item) => {
