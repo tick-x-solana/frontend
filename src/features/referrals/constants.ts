@@ -1,5 +1,5 @@
 export const WORLD_MINI_APP_BASE_URL = "https://worldcoin.org/mini-app";
-export const TICKX_MINI_APP_ID = "app_e35e8aaf83112cf2c4c4470fda05c7b2";
+export const TICKX_MINI_APP_ID = "app_fe8a4559be4f53707ad19a676492a4d6";
 
 export const buildReferralPath = (username?: string | null) => {
   const normalizedUsername = username?.trim();
