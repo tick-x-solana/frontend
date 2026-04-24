@@ -8,6 +8,7 @@ import { useGameStore } from "@/src/features/trade/store";
 import useDepositWithdraw from "@/src/hooks/useDepositWithdraw";
 import { useAccountControllerGetBalance } from "@/src/services/queries";
 import { ArrowLeft, ArrowUpDown, Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Sheet } from "react-modal-sheet";
 import { toast } from "sonner";
@@ -58,7 +59,7 @@ const WalletActionPanel = () => {
   const [availableWldBalance, setAvailableWldBalance] = useState<string | null>(
     null,
   );
-  const { walletAddress } = useAuth();
+  const { walletAddress, username } = useAuth();
   const storeBalance = useGameStore((state) => state.balance);
   const { data: balanceResponse, refetch: refetchBalance } =
     useAccountControllerGetBalance({
@@ -116,13 +117,17 @@ const WalletActionPanel = () => {
         maximumFractionDigits: 2,
       });
 
-  const displayWalletAddress = useMemo(() => {
+  const displayIdentity = useMemo(() => {
+    if (username) {
+      return `@${username}`;
+    }
+
     if (!walletAddress) {
       return "Not connected";
     }
 
     return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
-  }, [walletAddress]);
+  }, [username, walletAddress]);
 
   const displayBalance = useMemo(() => {
     const apiBalance = extractBalance(balanceResponse);
@@ -257,9 +262,20 @@ const WalletActionPanel = () => {
           </div>
 
           <div className="flex flex-col justify-center gap-[2px]">
-            <p className="text-text-main text-sm font-medium tracking-[-0.01em]">
-              {displayWalletAddress}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-text-main text-sm font-medium tracking-[-0.01em]">
+                {displayIdentity}
+              </p>
+              {username ? (
+                <Image
+                  src="/onboarding/verified-badge.svg"
+                  alt="Verified badge"
+                  width={16}
+                  height={16}
+                  className="size-4"
+                />
+              ) : null}
+            </div>
 
             <div className="flex items-center gap-2">
               <p className="text-hint text-xs font-semibold tracking-[-0.01em]">

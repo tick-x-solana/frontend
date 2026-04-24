@@ -278,13 +278,18 @@ export function drawBetCells(
     const displayBetAmount = hasBet ? betAmountVal : pendingBetAmountVal;
     const followedActivity = followedActivitiesByCellId[cell.id] ?? null;
     const hasFollowedActivity = followedActivity !== null;
+    const shouldHideLosingBet = isLose && hasAnyBet;
 
     const cx = toCanvasX(cell.timeWindowStart);
     const cellTop = toCellY(cell.priceLevel + effectivePriceStep / 2);
     const chartReachedColumn = hasChartReachedColumn(chartHeadX, cx);
     const hasSuggestedStrategy = suggestedStrategyCellIds.has(cell.id);
     const hasOverlayActivity = hasFollowedActivity || hasSuggestedStrategy;
-    const hasTrackedState = hasAnyBet || isHit || isLose || hasOverlayActivity;
+    const hasTrackedState =
+      (hasAnyBet && !shouldHideLosingBet) ||
+      isHit ||
+      (isLose && !shouldHideLosingBet) ||
+      hasOverlayActivity;
 
     if (chartReachedColumn && !hasTrackedState) continue;
 
@@ -312,6 +317,7 @@ export function drawBetCells(
     const rw = Math.min(cx + cw, w) - rx;
     const rh = Math.min(cellTop + ch, h) - ry;
     if (rw <= 0 || rh <= 0) continue;
+    if (shouldHideLosingBet) continue;
 
     const textX = cx + cw - clamp(cellSize * 0.13, 6, 10);
     const textY = cellTop + ch - clamp(cellSize * 0.12, 6, 10);
@@ -356,10 +362,12 @@ export function drawBetCells(
         cellRight: cx + cw,
         cellSize,
         multiplier: cell.multiplier,
-        detailTxt: formatMultiplier(Number(cell.original.rewardRate)),
+        detailTxt: hasAnyBet
+          ? `$${betAmountFormatter.format(displayBetAmount)}`
+          : formatMultiplier(Number(cell.original.rewardRate)),
         isMobile,
       });
-    } else if (isLose) {
+    } else if (isLose && !shouldHideLosingBet) {
       _drawLoseCell(ctx, {
         x: cx,
         y: cellTop,
@@ -376,7 +384,7 @@ export function drawBetCells(
           : "Settled",
         isMobile,
       });
-    } else if (!isPast && hasAnyBet) {
+    } else if (!isPast && hasAnyBet && !shouldHideLosingBet) {
       _drawBetBadge(ctx, {
         x: cx,
         y: cellTop,
@@ -1038,21 +1046,44 @@ export function drawPriceLine(
   layout: GridLayout,
   store: StoreSnapshot,
 ) {
-  const { w, h, firstTime, lastTime, toCanvasX, toCanvasY } = layout;
+  const { w, h, toCanvasX, toCanvasY, toTime } = layout;
   const { history } = store;
   if (history.length < 2) return;
 
-  const clipPaddingMs = 30_000;
-  const visibleHistory = history.filter(
-    (pt) =>
-      pt.time >= firstTime - clipPaddingMs &&
-      pt.time <= lastTime + clipPaddingMs,
-  );
-  if (visibleHistory.length < 2) return;
+  const clipPaddingPx = 80;
+  const minTime = Math.min(toTime(-clipPaddingPx), toTime(w + clipPaddingPx));
+  const maxTime = Math.max(toTime(-clipPaddingPx), toTime(w + clipPaddingPx));
+
+  const lowerBoundByTime = (value: number) => {
+    let lo = 0;
+    let hi = history.length;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (history[mid].time < value) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+
+  const upperBoundByTime = (value: number) => {
+    let lo = 0;
+    let hi = history.length;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (history[mid].time <= value) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+
+  const startIndex = Math.max(0, lowerBoundByTime(minTime) - 1);
+  const endIndex = Math.min(history.length, upperBoundByTime(maxTime) + 1);
+  if (endIndex - startIndex < 2) return;
 
   const points: Array<{ x: number; y: number }> = [];
   const minPxStep = 0.8;
-  for (const pt of visibleHistory) {
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const pt = history[index];
     const x = toCanvasX(pt.time);
     const y = toCanvasY(pt.price);
     const prev = points[points.length - 1];
@@ -1092,7 +1123,7 @@ export function drawPriceLine(
   ctx.stroke();
 
   // End-point dot
-  const latestPoint = visibleHistory[visibleHistory.length - 1];
+  const latestPoint = history[endIndex - 1];
   ctx.beginPath();
   ctx.arc(
     toCanvasX(latestPoint.time),
@@ -1173,18 +1204,25 @@ export function drawTimeAxis(
   layout: GridLayout,
   isMobile: boolean,
 ) {
-  const { w, h, firstTime, lastTime, toCanvasX } = layout;
+  const { w, h, toCanvasX, toTime } = layout;
   const labelInterval = isMobile ? 30_000 : 15_000;
   const labelColor = isMobile ? "#7A9BB5" : "#79afd5";
   const stripHeight = 24;
   const { axisX } = getPriceAxisMetrics(ctx, layout, isMobile);
   const maxLabelX = isMobile ? axisX : w;
 
+  // Use the full visible canvas range so labels are distributed across the
+  // entire bottom strip, not only the data-grid core.
+  const visibleTimeStart = Math.min(toTime(0), toTime(maxLabelX));
+  const visibleTimeEnd = Math.max(toTime(0), toTime(maxLabelX));
+
   // Collect timestamps that fall inside the visible time range
   const timeLabels: number[] = [];
-  let tLabel = Math.floor(firstTime / labelInterval) * labelInterval;
-  while (tLabel <= lastTime + labelInterval) {
-    if (tLabel >= firstTime && tLabel <= lastTime) timeLabels.push(tLabel);
+  let tLabel = Math.floor(visibleTimeStart / labelInterval) * labelInterval;
+  while (tLabel <= visibleTimeEnd + labelInterval) {
+    if (tLabel >= visibleTimeStart && tLabel <= visibleTimeEnd) {
+      timeLabels.push(tLabel);
+    }
     tLabel += labelInterval;
   }
 

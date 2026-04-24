@@ -6,8 +6,11 @@ import Providers from "@/src/components/providers/Providers";
 const interDisplay = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
-  display: "swap",
-  fallback: ["Inter Display", "Inter", "system-ui", "sans-serif"],
+  // Reduce visible font swapping on first paint.
+  display: "optional",
+  fallback: ["system-ui", "Segoe UI", "Arial", "sans-serif"],
+  preload: true,
+  adjustFontFallback: true,
 });
 
 const geistMono = Geist_Mono({
@@ -18,6 +21,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "TickX",
   description: "TickX",
+  icons: {
+    icon: "/tickX.png",
+    shortcut: "/tickX.png",
+    apple: "/tickX.png",
+  },
 };
 
 export default function RootLayout({

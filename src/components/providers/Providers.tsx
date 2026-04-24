@@ -35,12 +35,16 @@ function decodePathParamDeep(path: string) {
 
 function extractRefCodeFromMiniAppPath(pathParam: string) {
   const normalizedPath = decodePathParamDeep(pathParam).trim();
-  const referralRouteMatch = normalizedPath.match(/^\/?ref\/([^/?#]+)(?:\?.*)?$/i);
+  const referralRouteMatch = normalizedPath.match(
+    /^\/?ref\/([^/?#]+)(?:\?.*)?$/i,
+  );
   if (referralRouteMatch?.[1]) {
     return referralRouteMatch[1].trim();
   }
 
-  const draftRouteMatch = normalizedPath.match(/^\/?([^/?#]+)\/draft(?:\?.*)?$/i);
+  const draftRouteMatch = normalizedPath.match(
+    /^\/?([^/?#]+)\/draft(?:\?.*)?$/i,
+  );
   return draftRouteMatch?.[1]?.trim() || null;
 }
 
@@ -49,10 +53,9 @@ const Providers = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     try {
-      void import("eruda").then(({ default: eruda }) => {
-        eruda.init();
-      });
-      console.log("MiniKit: ", MiniKit);
+      // void import("eruda").then(({ default: eruda }) => {
+      //   eruda.init();
+      // });
 
       const { success } = MiniKit.install();
       if (success) {

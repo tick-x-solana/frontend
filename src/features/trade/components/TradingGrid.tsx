@@ -35,7 +35,9 @@ import {
   extractOrderFollowings,
   extractWssKey,
 } from "@/src/features/trade/orderFollow";
-import { getLatestChartTime } from "@/src/features/trade/gridTiming";
+import {
+  getLatestChartTime,
+} from "@/src/features/trade/gridTiming";
 import type { CellData, RemoteCell } from "@/src/features/trade/store";
 import { BACKEND_URL } from "@/src/features/trade/constant";
 import { useGameStore } from "@/src/features/trade/store";
@@ -78,6 +80,9 @@ const TICK_CADENCE_SMOOTHING = 0.2;
 const RESIZE_COMMIT_DEBOUNCE_MS = 180;
 const FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS = 4000;
 const SUGGESTED_STRATEGY_MIN_HOLD_MS = 3000;
+const SUGGESTED_STRATEGY_CLEAR_HOLD_MS = 2000;
+const SUGGESTED_STRATEGY_VISIBLE_MS = 2000;
+const SUGGESTED_STRATEGY_HIDDEN_MS = 1000;
 const FOLLOW_ORDER_EVENTS = [
   "order_follow",
   "order_follow_update",
@@ -119,6 +124,8 @@ const FAKE_WIN_TOAST_VISIBLE_MS = 1000;
 const WIN_EFFECT_VISIBLE_MS = 2000;
 const HEX_DIGITS = "0123456789abcdef";
 const MARKET_SYMBOL = "BTC/USD";
+const BINANCE_HISTORY_URL =
+  "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1s&limit=600";
 type ShareOverlayTarget = {
   cellId: string;
   left: number;
@@ -425,6 +432,30 @@ function buildDisplayHistory(
   return [...history, { time: displayTime, price: displayPrice }];
 }
 
+function extractBinanceKlineHistory(value: unknown): StoreSnapshot["history"] {
+  if (!Array.isArray(value)) return [];
+
+  const points: StoreSnapshot["history"] = [];
+  for (const row of value) {
+    if (!Array.isArray(row) || row.length < 5) continue;
+
+    const openTimeRaw = row[0];
+    const closePriceRaw = row[4];
+    const time =
+      typeof openTimeRaw === "number"
+        ? openTimeRaw
+        : Number.parseInt(String(openTimeRaw), 10);
+    const price = Number(closePriceRaw);
+
+    if (!Number.isFinite(time) || !Number.isFinite(price) || time <= 0) continue;
+    points.push({ time, price });
+  }
+
+  if (points.length < 2) return points;
+  points.sort((a, b) => a.time - b.time);
+  return points;
+}
+
 function randomInt(minInclusive: number, maxInclusive: number): number {
   const min = Math.ceil(minInclusive);
   const max = Math.floor(maxInclusive);
@@ -514,6 +545,7 @@ export const TradingGrid: React.FC = () => {
     (s) => s.upsertFollowedOrderActivity,
   );
   const updatePrice = useGameStore((s) => s.updatePrice);
+  const hydrateHistory = useGameStore((s) => s.hydrateHistory);
   const updateGrid = useGameStore((s) => s.updateGrid);
   const updateOrder = useGameStore((s) => s.updateOrder);
   const betAmount = useGameStore((s) => s.betAmount);
@@ -644,7 +676,7 @@ export const TradingGrid: React.FC = () => {
   } | null>(null);
   const drawRef = useRef<() => void>(() => {});
   const rafRef = useRef<number>(0);
-  const triggeredWinsRef = useRef<Set<string>>(new Set());
+  const previousWinningCellIdsRef = useRef<Set<string>>(new Set());
   const previewCellIdRef = useRef<string | null>(null);
   const syncCanvasSize = useCallback((canvas: HTMLCanvasElement | null) => {
     if (!canvas) return;
@@ -715,7 +747,7 @@ export const TradingGrid: React.FC = () => {
       wssKey,
       address: resolvedUserAddress,
       followedOrderActivities,
-      suggestedStrategyCellIds: [],
+      suggestedStrategyCellIds: storeRef.current.suggestedStrategyCellIds,
       dims: nextDims,
     };
   });
@@ -734,6 +766,8 @@ export const TradingGrid: React.FC = () => {
   const [suggestedStrategyCellIds, setSuggestedStrategyCellIds] = useState<
     string[]
   >([]);
+  const [isSuggestedStrategyOverlayOn, setIsSuggestedStrategyOverlayOn] =
+    useState(true);
   const [isOverlaySheetOpen, setIsOverlaySheetOpen] = useState(false);
   const [isInfoSheetOpen, setIsInfoSheetOpen] = useState(false);
   const [shareOverlayTargets, setShareOverlayTargets] = useState<
@@ -763,12 +797,20 @@ export const TradingGrid: React.FC = () => {
   const suggestedStrategyFlushTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const suggestedStrategyClearTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const suggestedStrategyBlinkTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const suggestedStrategyCellIdsRef = useRef<string[]>([]);
   const winEffectTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
   const shareOverlayButtonRefs = useRef(
     new Map<string, HTMLButtonElement | null>(),
   );
+  const winEffectIconRefs = useRef(new Map<string, HTMLDivElement | null>());
 
   const isFollowTradeVisible = followTradeEnabled;
   const isSuggestedStrategyVisible = suggestedStrategyEnabled;
@@ -854,10 +896,68 @@ export const TradingGrid: React.FC = () => {
   );
 
   useEffect(() => {
-    storeRef.current.suggestedStrategyCellIds = isSuggestedStrategyVisible
-      ? suggestedStrategyCellIds
-      : [];
+    storeRef.current.suggestedStrategyCellIds =
+      isSuggestedStrategyVisible && isSuggestedStrategyOverlayOn
+        ? suggestedStrategyCellIds
+        : [];
+  }, [
+    isSuggestedStrategyOverlayOn,
+    isSuggestedStrategyVisible,
+    suggestedStrategyCellIds,
+  ]);
+
+  useEffect(() => {
+    if (
+      !isSuggestedStrategyVisible ||
+      suggestedStrategyCellIds.length === 0
+    ) {
+      setIsSuggestedStrategyOverlayOn(true);
+      if (suggestedStrategyBlinkTimerRef.current) {
+        clearTimeout(suggestedStrategyBlinkTimerRef.current);
+        suggestedStrategyBlinkTimerRef.current = null;
+      }
+      return;
+    }
+
+    let isCancelled = false;
+    const scheduleVisiblePhase = () => {
+      if (isCancelled) return;
+      setIsSuggestedStrategyOverlayOn(true);
+      suggestedStrategyBlinkTimerRef.current = setTimeout(() => {
+        scheduleHiddenPhase();
+      }, SUGGESTED_STRATEGY_VISIBLE_MS);
+    };
+    const scheduleHiddenPhase = () => {
+      if (isCancelled) return;
+      setIsSuggestedStrategyOverlayOn(false);
+      suggestedStrategyBlinkTimerRef.current = setTimeout(() => {
+        scheduleVisiblePhase();
+      }, SUGGESTED_STRATEGY_HIDDEN_MS);
+    };
+
+    scheduleVisiblePhase();
+
+    return () => {
+      isCancelled = true;
+      if (suggestedStrategyBlinkTimerRef.current) {
+        clearTimeout(suggestedStrategyBlinkTimerRef.current);
+        suggestedStrategyBlinkTimerRef.current = null;
+      }
+    };
   }, [isSuggestedStrategyVisible, suggestedStrategyCellIds]);
+
+  useEffect(() => {
+    if (isSuggestedStrategyVisible) return;
+    setIsSuggestedStrategyOverlayOn(true);
+    if (suggestedStrategyBlinkTimerRef.current) {
+      clearTimeout(suggestedStrategyBlinkTimerRef.current);
+      suggestedStrategyBlinkTimerRef.current = null;
+    }
+  }, [isSuggestedStrategyVisible]);
+
+  useEffect(() => {
+    suggestedStrategyCellIdsRef.current = suggestedStrategyCellIds;
+  }, [suggestedStrategyCellIds]);
 
   const applyFollowOverlayActivities = useCallback(
     (activities: FollowOverlayActivity[]) => {
@@ -897,13 +997,41 @@ export const TradingGrid: React.FC = () => {
     [applyFollowOverlayActivities],
   );
 
-  const applySuggestedStrategyCellIds = useCallback((nextCellIds: string[]) => {
-    lastSuggestedStrategyUpdateAtRef.current = Date.now();
-    setSuggestedStrategyCellIds(nextCellIds);
+  const clearSuggestedStrategyClearTimer = useCallback(() => {
+    if (suggestedStrategyClearTimerRef.current) {
+      clearTimeout(suggestedStrategyClearTimerRef.current);
+      suggestedStrategyClearTimerRef.current = null;
+    }
   }, []);
+
+  const applySuggestedStrategyCellIds = useCallback(
+    (nextCellIds: string[]) => {
+      clearSuggestedStrategyClearTimer();
+      lastSuggestedStrategyUpdateAtRef.current = Date.now();
+      suggestedStrategyCellIdsRef.current = nextCellIds;
+      setSuggestedStrategyCellIds(nextCellIds);
+    },
+    [clearSuggestedStrategyClearTimer],
+  );
 
   const queueSuggestedStrategyCellIds = useCallback(
     (nextCellIds: string[]) => {
+      if (nextCellIds.length > 0) {
+        clearSuggestedStrategyClearTimer();
+      } else if (suggestedStrategyCellIdsRef.current.length > 0) {
+        suggestedStrategyPendingCellIdsRef.current = [];
+        if (!suggestedStrategyClearTimerRef.current) {
+          suggestedStrategyClearTimerRef.current = setTimeout(() => {
+            suggestedStrategyClearTimerRef.current = null;
+            if ((suggestedStrategyPendingCellIdsRef.current?.length ?? 0) > 0) {
+              return;
+            }
+            applySuggestedStrategyCellIds([]);
+          }, SUGGESTED_STRATEGY_CLEAR_HOLD_MS);
+        }
+        return;
+      }
+
       const now = Date.now();
       const elapsed = now - lastSuggestedStrategyUpdateAtRef.current;
 
@@ -924,7 +1052,7 @@ export const TradingGrid: React.FC = () => {
         applySuggestedStrategyCellIds(queuedCellIds);
       }, waitMs);
     },
-    [applySuggestedStrategyCellIds],
+    [applySuggestedStrategyCellIds, clearSuggestedStrategyClearTimer],
   );
 
   useEffect(() => {
@@ -949,11 +1077,16 @@ export const TradingGrid: React.FC = () => {
 
     lastSuggestedStrategyUpdateAtRef.current = 0;
     suggestedStrategyPendingCellIdsRef.current = null;
+    clearSuggestedStrategyClearTimer();
+    if (suggestedStrategyBlinkTimerRef.current) {
+      clearTimeout(suggestedStrategyBlinkTimerRef.current);
+      suggestedStrategyBlinkTimerRef.current = null;
+    }
     if (suggestedStrategyFlushTimerRef.current) {
       clearTimeout(suggestedStrategyFlushTimerRef.current);
       suggestedStrategyFlushTimerRef.current = null;
     }
-  }, [isSuggestedStrategyVisible]);
+  }, [clearSuggestedStrategyClearTimer, isSuggestedStrategyVisible]);
 
   useEffect(() => {
     return () => {
@@ -962,6 +1095,12 @@ export const TradingGrid: React.FC = () => {
       }
       if (suggestedStrategyFlushTimerRef.current) {
         clearTimeout(suggestedStrategyFlushTimerRef.current);
+      }
+      if (suggestedStrategyClearTimerRef.current) {
+        clearTimeout(suggestedStrategyClearTimerRef.current);
+      }
+      if (suggestedStrategyBlinkTimerRef.current) {
+        clearTimeout(suggestedStrategyBlinkTimerRef.current);
       }
     };
   }, []);
@@ -989,6 +1128,38 @@ export const TradingGrid: React.FC = () => {
   }, [resolvedWssKey, setWssKey]);
 
   // ── Live socket feed ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const abortController = new AbortController();
+
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(BINANCE_HISTORY_URL, {
+          method: "GET",
+          cache: "no-store",
+          signal: abortController.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Binance history request failed (${response.status})`);
+        }
+
+        const payload: unknown = await response.json();
+        const nextHistory = extractBinanceKlineHistory(payload);
+        if (nextHistory.length > 0) {
+          hydrateHistory(nextHistory);
+        }
+      } catch (error) {
+        if (abortController.signal.aborted) return;
+        console.error("[TradingGrid] Failed to load Binance chart history", error);
+      }
+    };
+
+    void loadHistory();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [hydrateHistory]);
+
   useEffect(() => {
     const liveSocket = io(BACKEND_URL, {
       transports: ["websocket"],
@@ -1456,15 +1627,21 @@ export const TradingGrid: React.FC = () => {
     enabledFollowTargetsKey,
   ]);
 
-  // ── Track wins (avoid repeated effects for the same cell id) ──────────────
+  // ── Track wins (fire once per hit transition, not once forever per id) ────
   useEffect(() => {
+    const nextWinningCellIds = new Set<string>();
+
     cells.forEach((cell) => {
       if (cell.status !== "hit") return;
-      const hasBet =
-        (bets[cell.id] || 0) > 0 || (pendingBets[cell.id] || 0) > 0;
-      if (!hasBet || triggeredWinsRef.current.has(cell.id)) return;
+      const hasTrackedStake =
+        (bets[cell.id] || 0) > 0 ||
+        (pendingBets[cell.id] || 0) > 0 ||
+        pendingWins[cell.id] !== undefined;
+      if (!hasTrackedStake) return;
 
-      triggeredWinsRef.current.add(cell.id);
+      nextWinningCellIds.add(cell.id);
+      if (previousWinningCellIdsRef.current.has(cell.id)) return;
+
       const effectStartedAt = Date.now();
       setActiveWinEffectByCellId((currentValue) => ({
         ...currentValue,
@@ -1486,7 +1663,9 @@ export const TradingGrid: React.FC = () => {
       }, WIN_EFFECT_VISIBLE_MS);
       winEffectTimersRef.current.set(cell.id, timerId);
     });
-  }, [cells, bets, pendingBets]);
+
+    previousWinningCellIdsRef.current = nextWinningCellIds;
+  }, [cells, bets, pendingBets, pendingWins]);
 
   useEffect(
     () => () => {
@@ -1662,6 +1841,17 @@ export const TradingGrid: React.FC = () => {
     [],
   );
 
+  const setWinEffectIconRef = useCallback(
+    (cellId: string, node: HTMLDivElement | null) => {
+      if (!node) {
+        winEffectIconRefs.current.delete(cellId);
+        return;
+      }
+      winEffectIconRefs.current.set(cellId, node);
+    },
+    [],
+  );
+
   const syncShareOverlayPositions = useCallback(
     (targets: ShareOverlayTarget[]) => {
       const targetById = new Map(
@@ -1672,6 +1862,12 @@ export const TradingGrid: React.FC = () => {
         const nextTarget = targetById.get(cellId);
         if (!nextTarget) continue;
         node.style.transform = `translate3d(${nextTarget.left}px, ${nextTarget.top}px, 0)`;
+      }
+      for (const [cellId, node] of winEffectIconRefs.current.entries()) {
+        if (!node) continue;
+        const nextTarget = targetById.get(cellId);
+        if (!nextTarget) continue;
+        node.style.transform = `translate3d(${nextTarget.centerLeft}px, ${nextTarget.centerTop}px, 0) translate(-50%, -50%)`;
       }
     },
     [],
@@ -1714,9 +1910,11 @@ export const TradingGrid: React.FC = () => {
     const nextShareTargets: ShareOverlayTarget[] = [];
     for (const cell of store.cells) {
       if (cell.status !== "hit") continue;
-      const hasAnyBet =
-        (store.bets[cell.id] || 0) > 0 || (store.pendingBets[cell.id] || 0) > 0;
-      if (!hasAnyBet) continue;
+      const hasTrackedStake =
+        (store.bets[cell.id] || 0) > 0 ||
+        (store.pendingBets[cell.id] || 0) > 0 ||
+        store.pendingWins[cell.id] !== undefined;
+      if (!hasTrackedStake) continue;
 
       const x = layout.toCanvasX(cell.timeWindowStart);
       const y = layout.toCellY(cell.priceLevel + layout.effectivePriceStep / 2);
@@ -2036,7 +2234,8 @@ export const TradingGrid: React.FC = () => {
             .filter((target) => activeWinEffectCellIdSet.has(target.cellId))
             .map((target) => (
               <div
-                key={`${target.cellId}-win-icon`}
+                key={`${target.cellId}-win-icon-${activeWinEffectByCellId[target.cellId] ?? 0}`}
+                ref={(node) => setWinEffectIconRef(target.cellId, node)}
                 className="absolute top-0 left-0 will-change-transform"
                 style={{
                   transform: `translate3d(${target.centerLeft}px, ${target.centerTop}px, 0) translate(-50%, -50%)`,
@@ -2049,6 +2248,7 @@ export const TradingGrid: React.FC = () => {
                   width={200}
                   height={200}
                   unoptimized
+                  loading="eager"
                   className="h-[200px] w-[200px]"
                 />
               </div>

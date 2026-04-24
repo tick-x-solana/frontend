@@ -36,6 +36,7 @@ type AuthContextValue = {
   login: () => Promise<void>;
   logout: () => void;
   token: string | null;
+  username: string | null;
   walletAddress: string | null;
 };
 
@@ -57,6 +58,11 @@ function getStoredToken() {
 function getStoredWalletAddress() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem("wallet-address");
+}
+
+function getStoredUsername() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("world-username");
 }
 
 function getStoredWssKey() {
@@ -204,6 +210,9 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [authWalletAddress, setAuthWalletAddress] = useState<string | null>(
     () => getStoredWalletAddress(),
   );
+  const [authUsername, setAuthUsername] = useState<string | null>(
+    () => getStoredUsername(),
+  );
   const isMiniApp = useSyncExternalStore(
     subscribeMiniAppStatus,
     getMiniAppStatusSnapshot,
@@ -247,11 +256,13 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     window.localStorage.removeItem("token");
     window.localStorage.removeItem("wallet-address");
+    window.localStorage.removeItem("world-username");
     window.localStorage.removeItem("wss-key");
     window.localStorage.removeItem("wss-key-expires-at");
     window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
     setToken(null);
     setAuthWalletAddress(null);
+    setAuthUsername(null);
     useGameStore.setState({ wssKey: null });
     clearBalance();
   }, [clearBalance]);
@@ -261,11 +272,13 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     window.localStorage.removeItem("token");
     window.localStorage.removeItem("wallet-address");
+    window.localStorage.removeItem("world-username");
     window.localStorage.removeItem("wss-key");
     window.localStorage.removeItem("wss-key-expires-at");
     window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
     setToken(null);
     setAuthWalletAddress(null);
+    setAuthUsername(null);
     useGameStore.setState({ wssKey: null });
     clearBalance();
   }, [clearBalance]);
@@ -274,12 +287,21 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     async (
       accessToken: string,
       walletAddress: string,
-      session?: { wssKey?: string | null; wssKeyExpiresAt?: number | null },
+      session?: {
+        username?: string | null;
+        wssKey?: string | null;
+        wssKeyExpiresAt?: number | null;
+      },
     ) => {
       if (typeof window === "undefined") return;
 
       window.localStorage.setItem("token", accessToken);
       window.localStorage.setItem("wallet-address", walletAddress);
+      if (session?.username) {
+        window.localStorage.setItem("world-username", session.username);
+      } else {
+        window.localStorage.removeItem("world-username");
+      }
       if (session?.wssKey) {
         window.localStorage.setItem("wss-key", session.wssKey);
         useGameStore.setState({ wssKey: session.wssKey });
@@ -298,6 +320,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       setToken(accessToken);
       setAuthWalletAddress(walletAddress);
+      setAuthUsername(session?.username?.trim() || null);
       await syncBalance();
     },
     [syncBalance],
@@ -309,6 +332,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const storedToken = window.localStorage.getItem("token");
     const storedAddress = window.localStorage.getItem("wallet-address");
+    const storedUsername = window.localStorage.getItem("world-username");
     const miniKitAddress = MiniKit.user?.walletAddress;
 
     if (
@@ -319,6 +343,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     ) {
       setToken(storedToken);
       setAuthWalletAddress(storedAddress);
+      setAuthUsername(storedUsername ?? MiniKit.user?.username?.trim() ?? null);
       await syncBalance();
       return;
     }
@@ -367,16 +392,19 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       await storeAuthSession(accessToken, result.data.address, {
+        username: MiniKit.user?.username?.trim() ?? null,
         wssKey,
         wssKeyExpiresAt,
       });
     } catch (error) {
       console.error("Mini App login failed:", error);
       window.localStorage.removeItem("token");
+      window.localStorage.removeItem("world-username");
       window.localStorage.removeItem("wss-key");
       window.localStorage.removeItem("wss-key-expires-at");
       useGameStore.setState({ wssKey: null });
       setToken(null);
+      setAuthUsername(null);
     } finally {
       isLoggingInRef.current = false;
       setIsLoggingIn(false);
@@ -439,10 +467,12 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Login failed:", error);
       window.localStorage.removeItem("token");
+      window.localStorage.removeItem("world-username");
       window.localStorage.removeItem("wss-key");
       window.localStorage.removeItem("wss-key-expires-at");
       useGameStore.setState({ wssKey: null });
       setToken(null);
+      setAuthUsername(null);
     } finally {
       isLoggingInRef.current = false;
       setIsLoggingIn(false);
@@ -507,11 +537,13 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     const handleLogout = () => {
       window.localStorage.removeItem("token");
       window.localStorage.removeItem("wallet-address");
+      window.localStorage.removeItem("world-username");
       window.localStorage.removeItem("wss-key");
       window.localStorage.removeItem("wss-key-expires-at");
       window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
       setToken(null);
       setAuthWalletAddress(null);
+      setAuthUsername(null);
       useGameStore.setState({ wssKey: null });
 
       if (!isMiniApp) {
@@ -526,6 +558,9 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   const resolvedWalletAddress = isMiniApp
     ? authWalletAddress
     : (address ?? null);
+  const resolvedUsername = isMiniApp
+    ? (authUsername ?? MiniKit.user?.username?.trim() ?? null)
+    : null;
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -535,9 +570,18 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       login,
       logout,
       token,
+      username: resolvedUsername,
       walletAddress: resolvedWalletAddress,
     }),
-    [isLoggingIn, isMiniApp, login, logout, resolvedWalletAddress, token],
+    [
+      isLoggingIn,
+      isMiniApp,
+      login,
+      logout,
+      resolvedUsername,
+      resolvedWalletAddress,
+      token,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

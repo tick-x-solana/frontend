@@ -1,11 +1,16 @@
+"use client";
+
 import ActiveTab from "@/src/components/common/ActiveTab";
 import { ChevronDown, Search } from "lucide-react";
 import Image from "next/image";
+import { useState } from "react";
+
+type LeaderboardMode = "human" | "ai-agents";
 
 type LeaderboardEntry = {
   rank: number;
   initials: string;
-  wallet: string;
+  username: string;
   volume: string;
   pnl: number;
 };
@@ -17,73 +22,53 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-const randomPnlUnder5k = () => Number((Math.random() * 4800 + 120).toFixed(2));
+const deterministicPnl = (seed: number) =>
+  Number((((seed * 731) % 4800) + 120.37).toFixed(2));
 
-const leaderboardEntries: LeaderboardEntry[] = [
-  {
-    rank: 1,
-    initials: "AS",
-    wallet: "0x4891...281nbvm1",
-    volume: "$192,190,290.19",
-    pnl: randomPnlUnder5k(),
-  },
-  {
-    rank: 2,
-    initials: "BS",
-    wallet: "0x8723...fgh54jkl",
-    volume: "$5,443.18",
-    pnl: randomPnlUnder5k(),
-  },
-  {
-    rank: 3,
-    initials: "CS",
-    wallet: "0x2345...mno67pqr",
-    volume: "$3,854.13",
-    pnl: randomPnlUnder5k(),
-  },
-  {
-    rank: 4,
-    initials: "DS",
-    wallet: "0x6789...stu12vwx",
-    volume: "$3,100.41",
-    pnl: randomPnlUnder5k(),
-  },
-  {
-    rank: 5,
-    initials: "ES",
-    wallet: "0x4567...yzab34cde",
-    volume: "$2,550.25",
-    pnl: randomPnlUnder5k(),
-  },
-  {
-    rank: 6,
-    initials: "FS",
-    wallet: "0x9512...lmn90qrs",
-    volume: "$2,110.98",
-    pnl: randomPnlUnder5k(),
-  },
-  {
-    rank: 7,
-    initials: "FS",
-    wallet: "0x9512...lmn90qrs",
-    volume: "$2,110.98",
-    pnl: randomPnlUnder5k(),
-  },
+const makeEntry = (
+  rank: number,
+  username: string,
+  volume: string,
+  pnlSeed: number,
+): LeaderboardEntry => ({
+  rank,
+  username,
+  volume,
+  pnl: deterministicPnl(pnlSeed),
+  initials: username.replace("[agent]", "").slice(0, 2).toUpperCase(),
+});
+
+const humanLeaderboardEntries: LeaderboardEntry[] = [
+  makeEntry(1, "travis12.66", "$192,190,290.19", 99),
+  makeEntry(2, "nova88.17", "$5,443.18", 21),
+  makeEntry(3, "kai14.02", "$3,854.13", 37),
+  makeEntry(4, "lyra29.41", "$3,100.41", 40),
+  makeEntry(5, "rio73.58", "$2,550.25", 55),
+  makeEntry(6, "soren64.33", "$2,110.98", 61),
+  makeEntry(7, "hana11.90", "$1,908.74", 67),
+];
+
+const aiAgentLeaderboardEntries: LeaderboardEntry[] = [
+  makeEntry(1, "[agent]terex", "$221,744,001.03", 109),
+  makeEntry(2, "[agent]astra", "$7,129.22", 25),
+  makeEntry(3, "[agent]orion", "$5,812.46", 31),
+  makeEntry(4, "[agent]pulse", "$4,943.57", 44),
+  makeEntry(5, "[agent]quant", "$4,121.30", 57),
+  makeEntry(6, "[agent]vanta", "$3,776.81", 63),
+  makeEntry(7, "[agent]helix", "$2,984.65", 79),
 ];
 
 function LeaderboardRow({
   rank,
   initials,
-  wallet,
+  username,
   volume,
   pnl,
 }: LeaderboardEntry) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_150px] items-center gap-4 px-4 py-2">
       <div className="flex min-w-0 items-center gap-[10px]">
-        <p className="w-4 shrink-0 text-[14px] tracking-[-0.14px] text-white">
-          {rank}
-        </p>
+        <p className="w-4 shrink-0 text-[14px] tracking-[-0.14px] text-white">{rank}</p>
 
         <div className="bg-primary-light text-text-inverse flex size-8 shrink-0 items-center justify-center rounded-full px-[3px] text-[14px] font-medium tracking-[-0.14px]">
           {initials}
@@ -91,11 +76,9 @@ function LeaderboardRow({
 
         <div className="min-w-0">
           <p className="text-text-main truncate text-[14px] font-semibold tracking-[-0.14px]">
-            {wallet}
+            {username}
           </p>
-          <p className="text-text-sub truncate text-[14px] tracking-[-0.14px]">
-            {volume}
-          </p>
+          <p className="text-text-sub truncate text-[14px] tracking-[-0.14px]">{volume}</p>
         </div>
       </div>
 
@@ -107,9 +90,28 @@ function LeaderboardRow({
 }
 
 export default function LeaderboardPage() {
-  const listEntries = leaderboardEntries
-    .slice(3)
-    .map((entry, index) => ({ ...entry, rank: index + 4 }));
+  const [activeTab, setActiveTab] = useState<LeaderboardMode>("human");
+
+  const [listEntries, setListEntries] = useState<LeaderboardEntry[]>(
+    humanLeaderboardEntries
+      .slice(3)
+      .map((entry, index) => ({ ...entry, rank: index + 4 })),
+  );
+
+  const handleTabChange = (value: string) => {
+    const nextMode = value as LeaderboardMode;
+    setActiveTab(nextMode);
+
+    const sourceEntries =
+      nextMode === "human" ? humanLeaderboardEntries : aiAgentLeaderboardEntries;
+
+    setListEntries(
+      sourceEntries.slice(3).map((entry, index) => ({ ...entry, rank: index + 4 })),
+    );
+  };
+
+  const podiumImage =
+    activeTab === "human" ? "/leaderboard.png" : "/leaderboard-agent.png";
 
   return (
     <div className="bg-background-main h-full w-full">
@@ -138,7 +140,8 @@ export default function LeaderboardPage() {
                   { label: "Human", value: "human" },
                   { label: "AI Agents", value: "ai-agents" },
                 ]}
-                activeTab="human"
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
                 className="bg-surface-overlay-subtle"
               />
             </div>
@@ -148,7 +151,7 @@ export default function LeaderboardPage() {
         <section className="relative mt-1 w-full overflow-hidden rounded-2xl">
           <div className="relative aspect-[1572/1860] w-full">
             <Image
-              src="/leaderboard.png"
+              src={podiumImage}
               alt="Leaderboard podium"
               fill
               priority
@@ -167,7 +170,7 @@ export default function LeaderboardPage() {
               <input
                 id="leaderboard-search"
                 type="search"
-                placeholder="Search by wallet address"
+                placeholder="Search by username"
                 className="text-text-main placeholder:text-hint w-full bg-transparent text-[14px] tracking-[-0.14px] outline-none"
               />
             </label>
@@ -184,14 +187,10 @@ export default function LeaderboardPage() {
         <section className="border-border-main bg-surface-card/20 relative z-10 mt-4 border-y">
           <div className="bg-surface-overlay-subtle border-border-main grid h-8 grid-cols-[minmax(0,1fr)_150px] items-center gap-4 border-b px-4">
             <div>
-              <p className="text-text-sub text-[14px] tracking-[-0.14px]">
-                Account
-              </p>
+              <p className="text-text-sub text-[14px] tracking-[-0.14px]">Account</p>
             </div>
             <div className="flex min-w-0 items-center justify-end gap-2">
-              <p className="text-text-sub text-[14px] tracking-[-0.14px]">
-                PNL
-              </p>
+              <p className="text-text-sub text-[14px] tracking-[-0.14px]">PNL</p>
               <span className="text-hint text-[16px]" aria-hidden>
                 ↻
               </span>
@@ -200,7 +199,7 @@ export default function LeaderboardPage() {
 
           <div className="bg-background-main">
             {listEntries.map((entry) => (
-              <LeaderboardRow key={entry.rank} {...entry} />
+              <LeaderboardRow key={`${activeTab}-${entry.rank}`} {...entry} />
             ))}
           </div>
         </section>

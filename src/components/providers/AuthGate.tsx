@@ -1,13 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronRight, Sparkles, Wallet } from "lucide-react";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const SPLASH_DURATION_MS = 1100;
+const VERIFY_LOADING_MS = 1400;
+const VERIFY_SUCCESS_MS = 900;
 const ONBOARDING_COMPLETE_KEY = "tickx-onboarding-complete";
 
 type OnboardingStep = 1 | 2 | 3;
@@ -162,42 +172,49 @@ const StepTwo = ({ isLoggingIn, onLogin }: StepTwoProps) => (
           </span>
         </WalletOption>
 
-        <WalletOption
-          onClick={onLogin}
-          disabled={isLoggingIn}
-          icon={
-            <span className="relative size-10 shrink-0 overflow-hidden">
-              <Image
-                src="/onboarding/metamask.png"
-                alt=""
-                width={147}
-                height={40}
-                className="absolute top-[-10px] left-[-10px] h-[59px] w-[217px] max-w-none"
-              />
+        {false && (
+          <WalletOption
+            onClick={onLogin}
+            disabled={isLoggingIn}
+            icon={
+              <span className="relative size-10 shrink-0 overflow-hidden">
+                <Image
+                  src="/onboarding/metamask.png"
+                  alt=""
+                  width={147}
+                  height={40}
+                  className="absolute top-[-10px] left-[-10px] h-[59px] w-[217px] max-w-none"
+                />
+              </span>
+            }
+          >
+            <span className="text-text-heading block truncate text-sm font-semibold tracking-[-0.01em]">
+              Sign in with MetaMask
             </span>
-          }
-        >
-          <span className="text-text-heading block truncate text-sm font-semibold tracking-[-0.01em]">
-            Sign in with MetaMask
-          </span>
-        </WalletOption>
+          </WalletOption>
+        )}
 
-        <WalletOption
-          onClick={onLogin}
-          disabled={isLoggingIn}
-          icon={
-            <span className="bg-background-subtle flex size-10 shrink-0 items-center justify-center rounded-[8px]">
-              <Wallet className="text-primary-light size-5" strokeWidth={1.8} />
+        {false && (
+          <WalletOption
+            onClick={onLogin}
+            disabled={isLoggingIn}
+            icon={
+              <span className="bg-background-subtle flex size-10 shrink-0 items-center justify-center rounded-[8px]">
+                <Wallet
+                  className="text-primary-light size-5"
+                  strokeWidth={1.8}
+                />
+              </span>
+            }
+          >
+            <span className="text-text-heading block truncate text-sm font-semibold tracking-[-0.01em]">
+              Connect Wallet
             </span>
-          }
-        >
-          <span className="text-text-heading block truncate text-sm font-semibold tracking-[-0.01em]">
-            Connect Wallet
-          </span>
-          <span className="text-text-sub block text-xs font-medium tracking-[-0.01em]">
-            300+ wallets
-          </span>
-        </WalletOption>
+            <span className="text-text-sub block text-xs font-medium tracking-[-0.01em]">
+              300+ wallets
+            </span>
+          </WalletOption>
+        )}
       </div>
     </div>
   </OnboardingShell>
@@ -229,87 +246,148 @@ const BenefitRow = ({
   </div>
 );
 
-const StepThree = ({ onEnterApp }: StepThreeProps) => (
-  <OnboardingShell>
-    <div className="flex flex-1 flex-col gap-10">
-      <StepIndicator step={3} />
+const StepThree = ({ onEnterApp }: StepThreeProps) => {
+  const [verifyStatus, setVerifyStatus] = useState<
+    "idle" | "loading" | "success"
+  >("idle");
+  const loadingTimerRef = useRef<number | null>(null);
+  const successTimerRef = useRef<number | null>(null);
+  const isVerifying = verifyStatus === "loading";
 
+  const handleVerify = useCallback(() => {
+    if (isVerifying) {
+      return;
+    }
+
+    setVerifyStatus("loading");
+
+    loadingTimerRef.current = window.setTimeout(() => {
+      setVerifyStatus("success");
+      toast.success("Verification successful. Welcome to TickX.");
+
+      successTimerRef.current = window.setTimeout(() => {
+        onEnterApp();
+      }, VERIFY_SUCCESS_MS);
+    }, VERIFY_LOADING_MS);
+  }, [isVerifying, onEnterApp]);
+
+  useEffect(() => {
+    return () => {
+      if (loadingTimerRef.current) {
+        window.clearTimeout(loadingTimerRef.current);
+      }
+
+      if (successTimerRef.current) {
+        window.clearTimeout(successTimerRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <OnboardingShell>
       <div className="flex flex-1 flex-col gap-10">
-        <div className="flex flex-col gap-2.5">
-          <h1 className="text-text-heading text-2xl font-semibold tracking-[-0.01em]">
-            Verify with World ID.{" "}
-            <span className="text-primary-light block">Unlock the edge.</span>
-          </h1>
-          <p className="text-text-sub text-sm font-medium tracking-[-0.01em]">
-            Prove you&apos;re a unique human. Bots stay out. You get more.
-          </p>
+        <StepIndicator step={3} />
+
+        <div className="flex flex-1 flex-col gap-10">
+          <div className="flex flex-col gap-2.5">
+            <h1 className="text-text-heading text-2xl font-semibold tracking-[-0.01em]">
+              Verify with World ID.{" "}
+              <span className="text-primary-light block">Unlock the edge.</span>
+            </h1>
+            <p className="text-text-sub text-sm font-medium tracking-[-0.01em]">
+              Prove you&apos;re a unique human. Bots stay out. You get more.
+            </p>
+          </div>
+
+          <section className="border-border-main bg-surface-overlay-subtle relative overflow-hidden rounded-[16px] border p-4">
+            <Image
+              src="/onboarding/verified-glow.svg"
+              alt=""
+              width={162}
+              height={162}
+              className="absolute top-[-82px] right-[-64px] size-[162px]"
+            />
+
+            <div className="relative flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <Image
+                  src="/onboarding/verified-badge.svg"
+                  alt=""
+                  width={32}
+                  height={32}
+                  className="size-8"
+                />
+                <h2 className="text-text-main text-lg font-semibold tracking-[-0.01em]">
+                  Verified Human
+                </h2>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                <BenefitRow
+                  title="+2% Edge Unlocked"
+                  description="Better payouts on every trade"
+                />
+                <BenefitRow
+                  title="Higher trade limits"
+                  description="Up to $5,000 per prediction"
+                />
+                <BenefitRow
+                  title="Leaderboard eligibility"
+                  description="Compete with verified humans only"
+                />
+              </div>
+            </div>
+          </section>
         </div>
 
-        <section className="border-border-main bg-surface-overlay-subtle relative overflow-hidden rounded-[16px] border p-4">
-          <Image
-            src="/onboarding/verified-glow.svg"
-            alt=""
-            width={162}
-            height={162}
-            className="absolute top-[-82px] right-[-64px] size-[162px]"
-          />
+        <div className="flex flex-col items-center gap-4">
+          <Button
+            type="button"
+            size="lg"
+            onClick={handleVerify}
+            disabled={isVerifying || verifyStatus === "success"}
+            className="bg-primary-light text-text-inverse hover:bg-primary-medium h-11 w-full rounded-[8px] text-sm font-medium tracking-[-0.01em] shadow-none disabled:opacity-70"
+          >
+            {verifyStatus === "loading"
+              ? "Verifying..."
+              : verifyStatus === "success"
+                ? "Verified"
+                : "Verify with World ID"}
+          </Button>
+          {verifyStatus !== "loading" && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onEnterApp}
+              disabled={isVerifying}
+              className="text-text-link-main hover:text-primary-light h-5 rounded-[8px] px-0 text-sm font-medium tracking-[-0.01em] shadow-none hover:bg-transparent disabled:opacity-60"
+            >
+              Verify later. Enter App
+            </Button>
+          )}
 
-          <div className="relative flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <Image
-                src="/onboarding/verified-badge.svg"
-                alt=""
-                width={32}
-                height={32}
-                className="size-8"
-              />
-              <h2 className="text-text-main text-lg font-semibold tracking-[-0.01em]">
-                Verified Human
-              </h2>
-            </div>
+          {verifyStatus === "loading" ? (
+            <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
+              Verifying your World ID...
+            </p>
+          ) : null}
 
-            <div className="flex flex-col gap-2.5">
-              <BenefitRow
-                title="+2% Edge Unlocked"
-                description="Better payouts on every trade"
-              />
-              <BenefitRow
-                title="Higher trade limits"
-                description="Up to $5,000 per prediction"
-              />
-              <BenefitRow
-                title="Leaderboard eligibility"
-                description="Compete with verified humans only"
-              />
-            </div>
-          </div>
-        </section>
+          {verifyStatus === "success" ? (
+            <p className="text-success-medium text-xs font-medium tracking-[-0.01em]">
+              Verification successful. Entering the app...
+            </p>
+          ) : null}
+        </div>
       </div>
-
-      <div className="flex flex-col items-center gap-4">
-        <Button
-          type="button"
-          size="lg"
-          onClick={onEnterApp}
-          className="bg-primary-light text-text-inverse hover:bg-primary-medium h-11 w-full rounded-[8px] text-sm font-medium tracking-[-0.01em] shadow-none"
-        >
-          Verify with World ID
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onEnterApp}
-          className="text-text-link-main hover:text-primary-light h-5 rounded-[8px] px-0 text-sm font-medium tracking-[-0.01em] shadow-none hover:bg-transparent"
-        >
-          Verify later. Enter App
-        </Button>
-      </div>
-    </div>
-  </OnboardingShell>
-);
+    </OnboardingShell>
+  );
+};
 
 const AuthGate = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated, isLoggingIn, isMiniApp, login } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const wasAuthenticatedRef = useRef(false);
   const [showSplash, setShowSplash] = useState(true);
   const [step, setStep] = useState<OnboardingStep>(1);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(
@@ -317,6 +395,15 @@ const AuthGate = ({ children }: { children: ReactNode }) => {
       typeof window !== "undefined" &&
       window.localStorage.getItem(ONBOARDING_COMPLETE_KEY) === "true",
   );
+
+  useEffect(() => {
+    const wasAuthenticated = wasAuthenticatedRef.current;
+    if (!wasAuthenticated && isAuthenticated && pathname !== "/") {
+      router.replace("/");
+    }
+
+    wasAuthenticatedRef.current = isAuthenticated;
+  }, [isAuthenticated, pathname, router]);
 
   useEffect(() => {
     if (!isMiniApp) return;

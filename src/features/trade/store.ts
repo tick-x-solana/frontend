@@ -61,6 +61,7 @@ interface GameState {
   setConnection: (socket: unknown | null, wssKey?: string | null) => void;
   setWssKey: (wssKey: string | null) => void;
   upsertFollowedOrderActivity: (activity: FollowedOrderActivity) => void;
+  hydrateHistory: (points: PricePoint[]) => void;
   updatePrice: (price: number, ts?: number) => void;
   updateGrid: (remoteCells: RemoteCell[]) => void;
   updateOrder: (payload: unknown) => void;
@@ -69,8 +70,6 @@ interface GameState {
 const MODE_INTERVAL_SECONDS = 5;
 const MODE_PRICE_STEP = 25;
 const DEFAULT_BET_AMOUNT_USD = 0.26; // 1 WLD
-// Limit chart length
-const MAX_HISTORY_POINTS = 1040;
 const MAX_FOLLOWED_ORDER_ACTIVITIES = 200;
 // Very slow smoothing (2%) so each price tick moves serverTimeOffset by at most
 // ~120ms — shift of ~0.8px at typical zoom. Faster convergence would cause
@@ -270,6 +269,54 @@ export const useGameStore = create<GameState>((set) => ({
       };
     }),
 
+  hydrateHistory: (points) =>
+    set((state) => {
+      if (!Array.isArray(points) || points.length === 0) return state;
+
+      const historyByTime = new Map<number, number>();
+      for (const point of state.history) {
+        if (
+          Number.isFinite(point?.time) &&
+          Number.isFinite(point?.price) &&
+          point.time > 0
+        ) {
+          historyByTime.set(point.time, point.price);
+        }
+      }
+
+      for (const point of points) {
+        if (
+          Number.isFinite(point?.time) &&
+          Number.isFinite(point?.price) &&
+          point.time > 0
+        ) {
+          historyByTime.set(point.time, point.price);
+        }
+      }
+
+      if (historyByTime.size === 0) return state;
+
+      const mergedHistory = Array.from(historyByTime.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([time, price]) => ({ time, price }));
+
+      if (mergedHistory.length === 0) return state;
+
+      const latestPoint = mergedHistory[mergedHistory.length - 1];
+      const observedOffset = latestPoint.time - Date.now();
+      const nextServerTimeOffset = blendServerOffset(
+        state.serverTimeOffset,
+        observedOffset,
+      );
+
+      return {
+        history: mergedHistory,
+        currentPrice: latestPoint.price,
+        basePrice: state.basePrice > 0 ? state.basePrice : mergedHistory[0].price,
+        serverTimeOffset: nextServerTimeOffset,
+      };
+    }),
+
   updatePrice: (price, ts) =>
     set((state) => {
       if (!Number.isFinite(price)) return state;
@@ -285,9 +332,7 @@ export const useGameStore = create<GameState>((set) => ({
           : 0;
       const safeTs = Math.max(normalizedTs, lastHistoryTime);
 
-      const nextHistory = [...state.history, { time: safeTs, price }].slice(
-        -MAX_HISTORY_POINTS,
-      );
+      const nextHistory = [...state.history, { time: safeTs, price }];
       const observedOffset = normalizedTs - Date.now();
       const nextServerTimeOffset = blendServerOffset(
         state.serverTimeOffset,
@@ -386,21 +431,9 @@ export const useGameStore = create<GameState>((set) => ({
       const nextSettledOutcomes = { ...state.settledOutcomes };
       let changed = false;
 
-      for (const [cellId] of Object.entries(state.pendingBets)) {
-        const cell = state.cells.find((c) => c.id === cellId);
-        if (!cell) {
-          delete nextPendingBets[cellId];
-          changed = true;
-          continue;
-        }
-        if (now >= cell.timeWindowStart) {
-          delete nextPendingBets[cellId];
-          changed = true;
-        }
-      }
-
       const nextCells: CellData[] = state.cells.map((cell) => {
-        const hasBet = (nextBets[cell.id] || 0) > 0;
+        const hasBet =
+          (nextBets[cell.id] || 0) > 0 || (nextPendingBets[cell.id] || 0) > 0;
         const hasSettledOutcome = nextSettledOutcomes[cell.id] !== undefined;
         const isPast = now >= cell.timeWindowEnd;
         const chartPassedCellEnd = now >= cell.timeWindowEnd;
@@ -549,8 +582,10 @@ export const useGameStore = create<GameState>((set) => ({
           delete nextPendingWins[cellId];
         }
 
-        if (amount && amount > 0 && !nextBets[cellId]) {
-          nextBets[cellId] = amount;
+        const resolvedStakeAmount =
+          amount ?? nextBets[cellId] ?? nextPendingBets[cellId] ?? 0;
+        if (resolvedStakeAmount > 0 && !nextBets[cellId]) {
+          nextBets[cellId] = resolvedStakeAmount;
         }
         delete nextPendingBets[cellId];
         changed = true;

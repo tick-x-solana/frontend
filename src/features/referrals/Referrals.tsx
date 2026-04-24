@@ -14,6 +14,7 @@ import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { useGameStore } from "@/src/features/trade/store";
+import { useAccountControllerGetBalance } from "@/src/services/queries";
 import { toast } from "sonner";
 
 const tabs = [
@@ -24,32 +25,66 @@ const tabs = [
 
 type ReferralTab = (typeof tabs)[number]["value"];
 
+function extractBalanceAmount(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    extractBalanceAmount(record.balance) ??
+    extractBalanceAmount(record.free) ??
+    extractBalanceAmount(record.amount) ??
+    extractBalanceAmount(record.availableBalance) ??
+    extractBalanceAmount(record.data)
+  );
+}
+
 const Referrals = () => {
   const [activeTab, setActiveTab] = useState<ReferralTab>("browse");
-  const { walletAddress, logout } = useAuth();
-  console.log("walletAddress: ", walletAddress);
+  const { walletAddress, username, logout, isAuthenticated, isLoggingIn } =
+    useAuth();
   const balance = useGameStore((state) => state.balance);
+  const { data: balanceResponse } = useAccountControllerGetBalance({
+    query: {
+      enabled: isAuthenticated && !isLoggingIn,
+      staleTime: 10_000,
+      refetchOnWindowFocus: true,
+    },
+  });
 
-  const displayWalletAddress = useMemo(() => {
-    if (!walletAddress) {
-      return "Not connected";
-    }
-
-    return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
-  }, [walletAddress]);
+  const resolvedBalance = useMemo(
+    () => extractBalanceAmount(balanceResponse) ?? balance,
+    [balance, balanceResponse],
+  );
 
   const displayBalance = useMemo(() => {
-    if (!Number.isFinite(balance)) {
+    if (!Number.isFinite(resolvedBalance)) {
       return "$0.00";
     }
 
-    return `$${balance.toLocaleString(undefined, {
+    return `$${resolvedBalance.toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
-  }, [balance]);
+  }, [resolvedBalance]);
 
   const resolveMiniAppUsername = useCallback(async () => {
+    const authUsername = username?.trim();
+    if (authUsername) {
+      return authUsername;
+    }
+
     const directUsername = MiniKit.user?.username?.trim();
     if (directUsername) {
       return directUsername;
@@ -70,7 +105,7 @@ const Referrals = () => {
       console.warn("[Referrals] Failed to resolve username", { error });
       return null;
     }
-  }, [walletAddress]);
+  }, [username, walletAddress]);
 
   const [worldId, setWorldId] = useState<string | null>(null);
 
@@ -91,7 +126,16 @@ const Referrals = () => {
     };
   }, [resolveMiniAppUsername]);
 
-  const referralLink = buildMiniAppReferralLink(worldId);
+  const referralLink = buildMiniAppReferralLink(worldId ?? username);
+  const displayUsername = useMemo(() => {
+    const identity = worldId ?? username;
+    if (!identity) {
+      return "Unknown user";
+    }
+
+    return `@${identity}`;
+  }, [worldId, username]);
+  const hasVerifiedUsername = Boolean(worldId ?? username);
 
   const shareToChat = async () => {
     try {
@@ -152,11 +196,20 @@ const Referrals = () => {
               Explore
             </h1>
             <div className="border-border-main bg-surface-overlay-subtle flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[10px] border px-3 py-2">
-              <p className="text-text-sub text-xs font-medium">
-                Address:{" "}
-                <span className="text-text-heading font-mono">
-                  {displayWalletAddress}
+              <p className="text-text-sub flex items-center gap-1.5 text-xs font-medium">
+                User:{" "}
+                <span className="text-text-heading font-semibold">
+                  {displayUsername}
                 </span>
+                {hasVerifiedUsername ? (
+                  <Image
+                    src="/onboarding/verified-badge.svg"
+                    alt="Verified badge"
+                    width={16}
+                    height={16}
+                    className="size-4"
+                  />
+                ) : null}
               </p>
               <p className="text-text-sub text-xs font-medium">
                 Balance:{" "}
@@ -166,9 +219,11 @@ const Referrals = () => {
               </p>
             </div>
           </div>
-          <Button type="button" variant="outline" onClick={logout}>
-            Logout
-          </Button>
+          {false && (
+            <Button type="button" variant="outline" onClick={logout}>
+              Logout
+            </Button>
+          )}
         </header>
 
         <ActiveTab

@@ -264,10 +264,10 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
         <DialogContent className="pointer-events-none">
           <div className="border-border-main pointer-events-auto w-full max-w-[760px] rounded-[20px] border bg-[linear-gradient(112deg,var(--background-main)_0%,var(--surface-card-strong)_62%,var(--background-main)_100%)] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)] md:p-8">
             <div className="flex flex-col gap-5 sm:gap-7">
-              <DialogTitle className="text-text-heading text-2xl font-semibold tracking-[-0.03em] sm:text-[42px]">
+              <DialogTitle className="text-text-heading text-lg font-semibold tracking-[-0.03em] sm:text-[42px]">
                 Start Follow Trade
               </DialogTitle>
-              <DialogDescription className="text-text-sub text-base font-medium tracking-[-0.01em] sm:max-w-[620px] sm:text-[42px] sm:tracking-[-0.02em]">
+              <DialogDescription className="text-text-sub text-[14px] font-medium tracking-[-0.01em] sm:max-w-[620px] sm:text-[42px] sm:tracking-[-0.02em]">
                 You need to pay {COPY_TRADE_PAYMENT_AMOUNT_WLD} WLD to start
                 follow trading this profile.
               </DialogDescription>
@@ -276,7 +276,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-border-main bg-white text-text-inverse hover:bg-white/90 hover:text-text-inverse h-12 rounded-[12px] text-base font-medium tracking-[-0.01em] sm:h-16 sm:rounded-[16px] sm:text-[42px] sm:tracking-[-0.02em]"
+                  className="border-border-main text-text-inverse hover:text-text-inverse h-12 rounded-[12px] bg-white text-base font-medium tracking-[-0.01em] hover:bg-white/90 sm:h-16 sm:rounded-[16px] sm:text-[42px] sm:tracking-[-0.02em]"
                   onClick={handleCloseCopyTradeModal}
                   disabled={isPaying || isSubmittingFollow}
                 >

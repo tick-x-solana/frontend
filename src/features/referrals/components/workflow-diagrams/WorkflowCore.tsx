@@ -407,12 +407,10 @@ const AnimatedEdge: React.FC<AnimatedEdgeProps> = ({
 // ─── Generic Animated Workflow Diagram ────────────────────────────────────────
 const WorkflowDiagram: React.FC<{
   config: WorkflowConfig;
-  isPlaying: boolean;
-  onPlayPause: () => void;
   onReset: () => void;
   step: number;
   diagramId: string;
-}> = ({ config, isPlaying, onPlayPause, onReset, step, diagramId }) => {
+}> = ({ config, onReset, step, diagramId }) => {
   const { width, height, nodes, edges, steps, groupBox, accentColor } = config;
   const labelScale = config.labelScale ?? 1;
   const minZoom = 1;
@@ -432,8 +430,14 @@ const WorkflowDiagram: React.FC<{
   const [panY, setPanY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isHoldPending, setIsHoldPending] = useState(false);
-  const [lastPointerType, setLastPointerType] = useState<"mouse" | "touch" | "pen">("touch");
+  const [lastPointerType, setLastPointerType] = useState<
+    "mouse" | "touch" | "pen"
+  >("touch");
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pinchRef = useRef<{
+    startDistance: number;
+    startZoom: number;
+  } | null>(null);
   const holdDraftRef = useRef<{
     pointerId: number;
     lastX: number;
@@ -466,6 +470,15 @@ const WorkflowDiagram: React.FC<{
     }
   };
 
+  const stopDragging = () => {
+    clearHoldTimer();
+    holdDraftRef.current = null;
+    pinchRef.current = null;
+    setIsDragging(false);
+    setIsHoldPending(false);
+    setDragStart(null);
+  };
+
   useEffect(() => {
     return () => {
       clearHoldTimer();
@@ -486,6 +499,16 @@ const WorkflowDiagram: React.FC<{
       }
       return z;
     });
+  };
+
+  const getTouchDistance = (touches: React.TouchList) => {
+    if (touches.length < 2) return 0;
+    const first = touches[0];
+    const second = touches[1];
+    if (!first || !second) return 0;
+    const dx = second.clientX - first.clientX;
+    const dy = second.clientY - first.clientY;
+    return Math.hypot(dx, dy);
   };
 
   return (
@@ -514,13 +537,6 @@ const WorkflowDiagram: React.FC<{
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={onPlayPause}
-            className="rounded border border-white/10 px-2 py-1 text-[10px] font-semibold tracking-wide text-gray-200 transition-colors hover:bg-white/10"
-          >
-            {isPlaying ? "Pause" : "Play"}
-          </button>
-          <button
-            type="button"
             onClick={() => {
               onReset();
               updateZoom(1);
@@ -546,19 +562,6 @@ const WorkflowDiagram: React.FC<{
           >
             +
           </button>
-          <span
-            className="h-2 w-2 animate-pulse rounded-full"
-            style={{ background: isPlaying ? accentColor : "#555" }}
-          />
-          <span
-            className="font-mono text-[10px]"
-            style={{
-              color: isPlaying ? accentColor : "accentColor",
-              fontSize: `${10 * labelScale}px`,
-            }}
-          >
-            {isPlaying ? "LIVE" : "PAUSED"}
-          </span>
         </div>
       </div>
 
@@ -578,6 +581,7 @@ const WorkflowDiagram: React.FC<{
         }}
         onPointerDown={(event) => {
           if (zoom <= 1) return;
+          if (event.pointerType === "touch") return;
           if (event.pointerType === "mouse" && event.button !== 0) return;
           setLastPointerType(
             event.pointerType === "mouse" || event.pointerType === "pen"
@@ -597,20 +601,23 @@ const WorkflowDiagram: React.FC<{
             panY: clampedPanY,
           };
 
-          holdTimerRef.current = setTimeout(() => {
-            const draft = holdDraftRef.current;
-            if (!draft || draft.pointerId !== event.pointerId) return;
+          holdTimerRef.current = setTimeout(
+            () => {
+              const draft = holdDraftRef.current;
+              if (!draft || draft.pointerId !== event.pointerId) return;
 
-            setIsDragging(true);
-            setIsHoldPending(false);
-            setDragStart({
-              pointerId: draft.pointerId,
-              mouseX: draft.lastX,
-              mouseY: draft.lastY,
-              panX: draft.panX,
-              panY: draft.panY,
-            });
-          }, event.pointerType === "mouse" ? holdToPanMouseMs : holdToPanMs);
+              setIsDragging(true);
+              setIsHoldPending(false);
+              setDragStart({
+                pointerId: draft.pointerId,
+                mouseX: draft.lastX,
+                mouseY: draft.lastY,
+                panX: draft.panX,
+                panY: draft.panY,
+              });
+            },
+            event.pointerType === "mouse" ? holdToPanMouseMs : holdToPanMs,
+          );
         }}
         onPointerMove={(event) => {
           const holdDraft = holdDraftRef.current;
@@ -636,31 +643,98 @@ const WorkflowDiagram: React.FC<{
           if (dragStart && event.pointerId === dragStart.pointerId) {
             event.currentTarget.releasePointerCapture(event.pointerId);
           }
-          clearHoldTimer();
-          holdDraftRef.current = null;
-          setIsDragging(false);
-          setIsHoldPending(false);
-          setDragStart(null);
+          stopDragging();
         }}
         onPointerCancel={(event) => {
           if (dragStart && event.pointerId === dragStart.pointerId) {
             event.currentTarget.releasePointerCapture(event.pointerId);
           }
-          clearHoldTimer();
-          holdDraftRef.current = null;
-          setIsDragging(false);
-          setIsHoldPending(false);
-          setDragStart(null);
+          stopDragging();
         }}
         onPointerLeave={(event) => {
           if (dragStart && event.pointerId === dragStart.pointerId) {
             event.currentTarget.releasePointerCapture(event.pointerId);
           }
-          clearHoldTimer();
-          holdDraftRef.current = null;
-          setIsDragging(false);
-          setIsHoldPending(false);
-          setDragStart(null);
+          stopDragging();
+        }}
+        onTouchStart={(event) => {
+          setLastPointerType("touch");
+          if (event.touches.length === 2) {
+            const distance = getTouchDistance(event.touches);
+            if (distance > 0) {
+              event.preventDefault();
+              stopDragging();
+              pinchRef.current = {
+                startDistance: distance,
+                startZoom: zoom,
+              };
+            }
+            return;
+          }
+
+          if (event.touches.length !== 1 || zoom <= 1) return;
+          const touch = event.touches[0];
+          if (!touch) return;
+
+          event.preventDefault();
+          setIsDragging(true);
+          setDragStart({
+            pointerId: -1,
+            mouseX: touch.clientX,
+            mouseY: touch.clientY,
+            panX: clampedPanX,
+            panY: clampedPanY,
+          });
+        }}
+        onTouchMove={(event) => {
+          if (!viewportRef.current) return;
+
+          if (event.touches.length === 2) {
+            const pinch = pinchRef.current;
+            if (!pinch || pinch.startDistance <= 0) return;
+
+            const currentDistance = getTouchDistance(event.touches);
+            if (currentDistance <= 0) return;
+
+            event.preventDefault();
+            updateZoom((pinch.startZoom * currentDistance) / pinch.startDistance);
+            return;
+          }
+
+          const touch = event.touches[0];
+          if (!touch) return;
+          if (zoom <= 1) return;
+          if (!isDragging || !dragStart || dragStart.pointerId !== -1) return;
+          event.preventDefault();
+          const rect = viewportRef.current.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return;
+
+          const deltaX =
+            ((touch.clientX - dragStart.mouseX) / rect.width) * viewBoxWidth;
+          const deltaY =
+            ((touch.clientY - dragStart.mouseY) / rect.height) * viewBoxHeight;
+          setPanX(dragStart.panX + deltaX);
+          setPanY(dragStart.panY + deltaY);
+        }}
+        onTouchEnd={(event) => {
+          if (event.touches.length === 1 && zoom > 1) {
+            pinchRef.current = null;
+            const touch = event.touches[0];
+            if (!touch) return;
+            setIsDragging(true);
+            setDragStart({
+              pointerId: -1,
+              mouseX: touch.clientX,
+              mouseY: touch.clientY,
+              panX: clampedPanX,
+              panY: clampedPanY,
+            });
+            return;
+          }
+          stopDragging();
+        }}
+        onTouchCancel={() => {
+          stopDragging();
         }}
         style={{ touchAction: zoom > 1 ? "none" : "pan-y" }}
       >
@@ -671,7 +745,7 @@ const WorkflowDiagram: React.FC<{
                 ? "Hold..."
                 : lastPointerType === "mouse"
                   ? "Hold left click to pan"
-                  : "Hold to pan"}
+                  : "Pinch to zoom · Drag to pan"}
             </div>
           ) : null}
           <svg
@@ -684,11 +758,7 @@ const WorkflowDiagram: React.FC<{
 
             {/* Group box */}
             {groupBox && (
-              <g
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5 }}
-              >
+              <g>
                 <rect
                   x={groupBox.x}
                   y={groupBox.y}
@@ -1549,24 +1619,20 @@ export const WorkflowPlayer: React.FC<{
   diagramId: string;
 }> = ({ config, diagramId }) => {
   const [step, setStep] = useState(-1);
-  const [isPlaying, setIsPlaying] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!isPlaying) return;
     timerRef.current = setInterval(() => {
       setStep((p) => (p >= config.steps.length - 1 ? -1 : p + 1));
     }, 1800);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPlaying, config.steps.length]);
+  }, [config.steps.length]);
 
   return (
     <WorkflowDiagram
       config={config}
-      isPlaying={isPlaying}
-      onPlayPause={() => setIsPlaying((p) => !p)}
       onReset={() => {
         setStep(-1);
       }}
