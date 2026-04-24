@@ -11,6 +11,7 @@ import { signWssMessage } from "@/src/features/trade/socketSignature";
 import type { CellData } from "@/src/features/trade/store";
 import { clamp } from "@/src/utils/gridLayout";
 import type { StoreSnapshot, Transform } from "@/src/utils/gridLayout";
+import { getAddress } from "viem";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -299,7 +300,6 @@ export function useGridInteraction({
         storeRef.current;
       const now = nowRef.current;
 
-      console.log("wssKey123: ", wssKey);
       try {
         // Warn if cell is in its closing window
         if (cell.timeWindowStart > now && cell.timeWindowStart - now <= 5000) {
@@ -339,16 +339,17 @@ export function useGridInteraction({
           return;
         }
 
-        const amount = betAmount.toString();
-        const cellId = cell.id;
-        const message = `${cell.original.gridTs}:${cellId}:${amount}`;
+        const amountStr = betAmount.toString();
+        const cellOrigin = cell.original;
+        const cellId = `${cellOrigin.startTs}:${cellOrigin.endTs}:${cellOrigin.lowerPrice}:${cellOrigin.upperPrice}`;
+        const message = `${cellOrigin.gridTs}:${cellId}:${amountStr}`;
         const signature = await signWssMessage(wssKey, message);
-        console.log("address: ", address);
+
         const payload = {
-          userId: address,
+          userId: getAddress(address as string),
           marketId: "BTCUSDT",
-          amount,
-          cell: cell.original,
+          amount: amountStr,
+          cell: cellOrigin,
           userSignature: signature,
         };
 

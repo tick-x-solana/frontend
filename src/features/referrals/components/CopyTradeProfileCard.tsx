@@ -5,6 +5,7 @@ import { Button } from "@/src/components/shadcn/button";
 import { cn } from "@/lib/utils";
 
 export type CopyTradeProfile = {
+  targetUserId?: string;
   initials: string;
   name: string;
   slots: string;
@@ -16,11 +17,17 @@ export type CopyTradeProfile = {
 type CopyTradeProfileCardProps = {
   profile: CopyTradeProfile;
   isFavorite?: boolean;
+  isFollowing?: boolean;
+  isSubmitting?: boolean;
+  onCopyTrade?: (profile: CopyTradeProfile) => void;
 };
 
 const CopyTradeProfileCard = ({
   profile,
   isFavorite = false,
+  isFollowing = false,
+  isSubmitting = false,
+  onCopyTrade,
 }: CopyTradeProfileCardProps) => {
   return (
     <article className="border-border-main bg-background-main flex flex-col gap-3 rounded-[8px] border p-4">
@@ -91,9 +98,18 @@ const CopyTradeProfileCard = ({
 
       <Button
         type="button"
-        className="bg-primary-light text-text-inverse hover:bg-primary-light/90 h-11 w-full rounded-[8px] text-sm font-medium tracking-[-0.01em]"
+        disabled={isFollowing || isSubmitting}
+        onClick={() => onCopyTrade?.(profile)}
+        className={cn(
+          "h-11 w-full rounded-[8px] text-sm font-medium tracking-[-0.01em]",
+          isFollowing
+            ? "bg-surface-overlay-subtle text-text-sub cursor-not-allowed"
+            : isSubmitting
+              ? "bg-primary-light/70 text-text-inverse cursor-wait"
+              : "bg-primary-light text-text-inverse hover:bg-primary-light/90",
+        )}
       >
-        Copy Trade
+        {isFollowing ? "Following" : isSubmitting ? "Processing..." : "Copy Trade"}
       </Button>
     </article>
   );

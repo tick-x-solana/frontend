@@ -5,7 +5,7 @@ import Image from "next/image";
 const CURRENT_REFERRALS = 12;
 const NEXT_RANK_REFERRALS = 15;
 const USER_INITIALS = "PL";
-const USER_NAME = "Paul Laverick";
+const USER_NAME = "TickX Finance";
 const JOINED_AT = "Joined on 24 November 2026";
 const CURRENT_RANK = "Silver";
 const REFERRAL_CARDS = [

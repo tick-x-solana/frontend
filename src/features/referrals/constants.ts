@@ -1,18 +1,14 @@
-const REFERRAL_USERNAME_PLACEHOLDER = "{username}";
-export const REFERRAL_LINK = `https://tickx.finance/ref/${REFERRAL_USERNAME_PLACEHOLDER}`;
-export const REFERRAL_BASE_URL = REFERRAL_LINK.replace(
-  `/${REFERRAL_USERNAME_PLACEHOLDER}`,
-  "",
-);
+export const WORLD_MINI_APP_BASE_URL = "https://worldcoin.org/mini-app";
+export const TICKX_MINI_APP_ID = "app_e35e8aaf83112cf2c4c4470fda05c7b2";
 
-export const buildReferralLink = (username?: string | null) => {
+export const buildReferralPath = (username?: string | null) => {
   const normalizedUsername = username?.trim();
   if (!normalizedUsername) {
-    return REFERRAL_BASE_URL;
+    return "/ref";
   }
 
-  return REFERRAL_LINK.replace(
-    REFERRAL_USERNAME_PLACEHOLDER,
-    encodeURIComponent(normalizedUsername),
-  );
+  return `/ref/${encodeURIComponent(normalizedUsername)}`;
 };
+
+export const buildMiniAppReferralLink = (username?: string | null) =>
+  `${WORLD_MINI_APP_BASE_URL}?app_id=${TICKX_MINI_APP_ID}&path=${buildReferralPath(username)}`;

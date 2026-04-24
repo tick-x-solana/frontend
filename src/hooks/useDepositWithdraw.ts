@@ -24,7 +24,7 @@ import {
 const WORLD_CHAIN_ID = 480;
 const COINGECKO_WLD_PRICE_URL =
   "https://api.coingecko.com/api/v3/simple/price?ids=worldcoin&vs_currencies=usd";
-const WORLDCHAIN_RPC_URL = "https://worldchain.drpc.org";
+const WORLDCHAIN_RPC_URL = "https://worldchain-mainnet.g.alchemy.com/public";
 
 const worldPublicClient = createPublicClient({
   transport: http(WORLDCHAIN_RPC_URL),

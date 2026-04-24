@@ -19,6 +19,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "code-inspector-plugin": "^1.5.1",
+    "crypto-js": "^4.2.0",
     "dayjs": "^1.11.20",
     "eruda": "^3.4.3",
     "html2canvas": "^1.4.1",

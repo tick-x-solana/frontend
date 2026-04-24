@@ -11,7 +11,7 @@ import HowItWork from "@/src/features/referrals/components/HowItWork";
 import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
 import ReferralsHeader from "@/src/features/referrals/components/ReferralsHeader";
 import UserRefInfo from "@/src/features/referrals/components/UserRefInfo";
-import { buildReferralLink } from "@/src/features/referrals/constants";
+import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
 import useWorldMiniAppChatPay from "@/src/hooks/useWorldMiniAppChatPay";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
@@ -52,7 +52,8 @@ const Referrals = () => {
     })}`;
   }, [balance]);
 
-  const referralLink = buildReferralLink(MiniKit.user?.username);
+  const referralLink = buildMiniAppReferralLink(MiniKit.user?.username);
+  const worldId = MiniKit.user?.username?.trim() || null;
 
   const shareToChat = async () => {
     try {
@@ -61,20 +62,28 @@ const Referrals = () => {
         return;
       }
 
-      const miniAppUsername = MiniKit.user?.username?.trim();
-      console.log("MiniKit123: ", MiniKit);
-      console.log("miniAppUsername: ", miniAppUsername);
+      const resolvedAddress =
+        MiniKit.user?.walletAddress ?? walletAddress ?? undefined;
+      const miniAppUsername =
+        MiniKit.user?.username?.trim() ??
+        (resolvedAddress
+          ? (await MiniKit.getUserByAddress(resolvedAddress)).username?.trim()
+          : undefined);
+
       if (!miniAppUsername) {
         toast.error("Missing World username. Please set your username first.");
         return;
       }
+
+      const miniAppReferralLink = buildMiniAppReferralLink(miniAppUsername);
+      console.log("miniAppReferralLink: ", miniAppReferralLink);
 
       // World Chat can unfurl URLs and hide them in the text bubble, so include a
       // plain referral code line that always remains visible.
       const message = [
         "Use my referral to copy trade on TickX.",
         `Referral code: ${miniAppUsername}`,
-        `Link: ${referralLink}`,
+        `Link: ${miniAppReferralLink}`,
       ].join("\n");
 
       const input = {
@@ -158,7 +167,10 @@ const Referrals = () => {
           <BrowseCopyTrade />
         ) : activeTab === "referrals" ? (
           <div className="flex flex-col gap-5 pb-4">
-            <ReferralsHeader onShareToChat={() => void shareToChat()} />
+            <ReferralsHeader
+              onShareToChat={() => void shareToChat()}
+              worldId={worldId}
+            />
             <ReferAFriend referralLink={referralLink} />
             <HowItWork />
           </div>

@@ -5,19 +5,25 @@ import { Button } from "@/src/components/shadcn/button";
 import { Share2 } from "lucide-react";
 import { toast } from "sonner";
 
-const WORLD_ID = "2Ma85VOA";
-
 type ReferralsHeaderProps = {
   onShareToChat: () => void;
+  worldId: string | null;
 };
 
-const ReferralsHeader = ({ onShareToChat }: ReferralsHeaderProps) => {
+const ReferralsHeader = ({ onShareToChat, worldId }: ReferralsHeaderProps) => {
+  const resolvedWorldId = worldId?.trim() || "Not set";
+
   const handleCopyWorldId = async () => {
+    if (!worldId?.trim()) {
+      toast.error("WorldID is not available");
+      return;
+    }
+
     try {
       if (!navigator.clipboard) {
         throw new Error("Clipboard API is not available");
       }
-      await navigator.clipboard.writeText(WORLD_ID);
+      await navigator.clipboard.writeText(worldId.trim());
       toast.success("WorldID copied");
     } catch {
       toast.error("Failed to copy WorldID");
@@ -52,7 +58,7 @@ const ReferralsHeader = ({ onShareToChat }: ReferralsHeaderProps) => {
 
           <div className="border-border-main bg-surface-field flex min-w-0 items-center gap-2 rounded-[10px] border px-3 py-2.5">
             <p className="min-w-0 flex-1 truncate font-mono text-sm font-medium tracking-[-0.01em] text-white">
-              {WORLD_ID}
+              {resolvedWorldId}
             </p>
             <Button
               type="button"

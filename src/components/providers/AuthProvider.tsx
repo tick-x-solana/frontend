@@ -21,8 +21,8 @@ import { useAccount, useSignMessage } from "wagmi";
 import { useGameStore } from "@/src/features/trade/store";
 import {
   accountControllerGetBalance,
-  authControllerGetChallenge,
   authControllerLogin,
+  authControllerGetChallenge,
   authControllerMiniAppLogin,
   getAccountControllerGetBalanceQueryKey,
   useAuthControllerGetMiniAppNonce,
@@ -59,6 +59,11 @@ function getStoredWalletAddress() {
   return window.localStorage.getItem("wallet-address");
 }
 
+function getStoredWssKey() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("wss-key");
+}
+
 function extractAccessToken(response: unknown): string | null {
   if (!response || typeof response !== "object") return null;
 
@@ -71,6 +76,47 @@ function extractAccessToken(response: unknown): string | null {
 
   if (record.data && typeof record.data === "object") {
     return extractAccessToken(record.data);
+  }
+
+  return null;
+}
+
+function extractWssKey(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+
+  const record = response as Record<string, unknown>;
+  const directWssKey = record.wssKey ?? record.key ?? record.signature;
+
+  if (typeof directWssKey === "string" && directWssKey.trim().length > 0) {
+    return directWssKey;
+  }
+
+  if (record.data && typeof record.data === "object") {
+    return extractWssKey(record.data);
+  }
+
+  return null;
+}
+
+function extractWssKeyExpiresAt(response: unknown): number | null {
+  if (!response || typeof response !== "object") return null;
+
+  const record = response as Record<string, unknown>;
+  const directExpiry = record.wssKeyExpiresAt;
+
+  if (typeof directExpiry === "number" && Number.isFinite(directExpiry)) {
+    return directExpiry;
+  }
+
+  if (typeof directExpiry === "string") {
+    const parsed = Number(directExpiry);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  if (record.data && typeof record.data === "object") {
+    return extractWssKeyExpiresAt(record.data);
   }
 
   return null;
@@ -201,9 +247,12 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     window.localStorage.removeItem("token");
     window.localStorage.removeItem("wallet-address");
+    window.localStorage.removeItem("wss-key");
+    window.localStorage.removeItem("wss-key-expires-at");
     window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
     setToken(null);
     setAuthWalletAddress(null);
+    useGameStore.setState({ wssKey: null });
     clearBalance();
   }, [clearBalance]);
 
@@ -212,18 +261,41 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     window.localStorage.removeItem("token");
     window.localStorage.removeItem("wallet-address");
+    window.localStorage.removeItem("wss-key");
+    window.localStorage.removeItem("wss-key-expires-at");
     window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
     setToken(null);
     setAuthWalletAddress(null);
+    useGameStore.setState({ wssKey: null });
     clearBalance();
   }, [clearBalance]);
 
   const storeAuthSession = useCallback(
-    async (accessToken: string, walletAddress: string) => {
+    async (
+      accessToken: string,
+      walletAddress: string,
+      session?: { wssKey?: string | null; wssKeyExpiresAt?: number | null },
+    ) => {
       if (typeof window === "undefined") return;
 
       window.localStorage.setItem("token", accessToken);
       window.localStorage.setItem("wallet-address", walletAddress);
+      if (session?.wssKey) {
+        window.localStorage.setItem("wss-key", session.wssKey);
+        useGameStore.setState({ wssKey: session.wssKey });
+      } else {
+        window.localStorage.removeItem("wss-key");
+        useGameStore.setState({ wssKey: null });
+      }
+
+      if (typeof session?.wssKeyExpiresAt === "number") {
+        window.localStorage.setItem(
+          "wss-key-expires-at",
+          String(session.wssKeyExpiresAt),
+        );
+      } else {
+        window.localStorage.removeItem("wss-key-expires-at");
+      }
       setToken(accessToken);
       setAuthWalletAddress(walletAddress);
       await syncBalance();
@@ -264,7 +336,6 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       const result = await MiniKit.walletAuth<WalletAuthResult>(
         walletAuthInput(nonce),
       );
-      console.log("result: ", result);
 
       if (result.executedWith === "fallback") {
         throw new Error("Mini App wallet authentication is unavailable");
@@ -288,15 +359,23 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const loginResponse = await authControllerMiniAppLogin(miniAppLoginDto);
       const accessToken = extractAccessToken(loginResponse);
+      const wssKey = extractWssKey(loginResponse);
+      const wssKeyExpiresAt = extractWssKeyExpiresAt(loginResponse);
 
       if (!accessToken) {
         throw new Error("Missing access token");
       }
 
-      await storeAuthSession(accessToken, result.data.address);
+      await storeAuthSession(accessToken, result.data.address, {
+        wssKey,
+        wssKeyExpiresAt,
+      });
     } catch (error) {
       console.error("Mini App login failed:", error);
       window.localStorage.removeItem("token");
+      window.localStorage.removeItem("wss-key");
+      window.localStorage.removeItem("wss-key-expires-at");
+      useGameStore.setState({ wssKey: null });
       setToken(null);
     } finally {
       isLoggingInRef.current = false;
@@ -360,6 +439,9 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Login failed:", error);
       window.localStorage.removeItem("token");
+      window.localStorage.removeItem("wss-key");
+      window.localStorage.removeItem("wss-key-expires-at");
+      useGameStore.setState({ wssKey: null });
       setToken(null);
     } finally {
       isLoggingInRef.current = false;
@@ -415,13 +497,22 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const storedWssKey = getStoredWssKey();
+    useGameStore.setState({ wssKey: storedWssKey });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
     const handleLogout = () => {
       window.localStorage.removeItem("token");
       window.localStorage.removeItem("wallet-address");
+      window.localStorage.removeItem("wss-key");
+      window.localStorage.removeItem("wss-key-expires-at");
       window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
       setToken(null);
       setAuthWalletAddress(null);
+      useGameStore.setState({ wssKey: null });
 
       if (!isMiniApp) {
         void login();

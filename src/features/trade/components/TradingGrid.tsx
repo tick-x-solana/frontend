@@ -49,7 +49,11 @@ import {
   useOrderFollowControllerListFollowing,
 } from "@/src/services/queries";
 import { signWssMessage } from "@/src/features/trade/socketSignature";
-import { computeLayout, hitTestAnyCell, hitTestCell } from "@/src/utils/gridLayout";
+import {
+  computeLayout,
+  hitTestAnyCell,
+  hitTestCell,
+} from "@/src/utils/gridLayout";
 import type { Transform, StoreSnapshot } from "@/src/utils/gridLayout";
 import { computeGridDimensions } from "@/src/utils/gridDimensions";
 import {
@@ -62,6 +66,7 @@ import {
   drawZoomIndicator,
 } from "@/src/utils/canvasDraw";
 import { useGridInteraction } from "@/src/hooks/useGridInteraction";
+import { getAddress } from "viem";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -286,7 +291,9 @@ export const TradingGrid: React.FC = () => {
   const { address } = useAccount();
   const { isAuthenticated, isLoggingIn, walletAddress } = useAuth();
   const isMiniApp = MiniKit.isInWorldApp();
-  const miniKitWalletAddress = isMiniApp ? (MiniKit.user?.walletAddress ?? null) : null;
+  const miniKitWalletAddress = isMiniApp
+    ? (MiniKit.user?.walletAddress ?? null)
+    : null;
   const resolvedUserAddress =
     miniKitWalletAddress ?? walletAddress ?? address ?? null;
   const { data: wssKeyResponse } = useAuthControllerGetWssKey({
@@ -566,11 +573,15 @@ export const TradingGrid: React.FC = () => {
         throw new Error("Missing socket user challenge");
       }
 
-      const signature = await signWssMessage(wssKey, userAddress, challenge);
+      const signature = await signWssMessage(
+        wssKey,
+        getAddress(userAddress),
+        challenge,
+      );
       if (isDisposed) return;
 
       socketClient.emit(SUBSCRIBE_USER_EVENT, {
-        userId: userAddress,
+        userId: getAddress(userAddress),
         signature,
       });
     };
@@ -590,13 +601,7 @@ export const TradingGrid: React.FC = () => {
       isDisposed = true;
       socketClient.off("connect", handleConnect);
     };
-  }, [
-    isAuthenticated,
-    resolvedUserAddress,
-    setConnection,
-    setWssKey,
-    socket,
-  ]);
+  }, [isAuthenticated, resolvedUserAddress, setConnection, setWssKey, socket]);
 
   useEffect(() => {
     if (
@@ -613,7 +618,11 @@ export const TradingGrid: React.FC = () => {
     ) {
       return;
     }
-    if (!resolvedWssKey || activeFollowings.length === 0 || !resolvedUserAddress) {
+    if (
+      !resolvedWssKey ||
+      activeFollowings.length === 0 ||
+      !resolvedUserAddress
+    ) {
       return;
     }
     const userAddress = resolvedUserAddress;
@@ -646,8 +655,8 @@ export const TradingGrid: React.FC = () => {
 
       activeFollowings.forEach((follow) => {
         socketClient.emit(SUBSCRIBE_ORDER_FOLLOWS_EVENT, {
-          userId: userAddress,
-          targetUserId: follow.targetUserId,
+          userId: getAddress(userAddress),
+          targetUserId: getAddress(follow.targetUserId),
           signature,
         });
       });
@@ -671,8 +680,8 @@ export const TradingGrid: React.FC = () => {
         .then((signature) => {
           activeFollowings.forEach((follow) => {
             socketClient.emit(UNSUBSCRIBE_ORDER_FOLLOWS_EVENT, {
-              userId: userAddress,
-              targetUserId: follow.targetUserId,
+              userId: getAddress(userAddress),
+              targetUserId: getAddress(follow.targetUserId),
               signature,
             });
           });
