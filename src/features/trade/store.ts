@@ -28,9 +28,14 @@ export interface CellData {
   timeWindowEnd: number;
   priceLevel: number;
   multiplier: number;
-  status: "active" | "past" | "hit";
+  status: "active" | "past" | "hit" | "lose";
   original: RemoteCell;
 }
+
+type SettledOutcome = {
+  isWin: boolean;
+  revealed: boolean;
+};
 
 interface GameState {
   balance: number;
@@ -44,6 +49,7 @@ interface GameState {
   bets: Record<string, number>;
   pendingBets: Record<string, number>;
   pendingWins: Record<string, number>;
+  settledOutcomes: Record<string, SettledOutcome>;
   socket: unknown | null;
   wssKey: string | null;
   followedOrderActivities: FollowedOrderActivity[];
@@ -57,10 +63,12 @@ interface GameState {
   upsertFollowedOrderActivity: (activity: FollowedOrderActivity) => void;
   updatePrice: (price: number, ts?: number) => void;
   updateGrid: (remoteCells: RemoteCell[]) => void;
+  updateOrder: (payload: unknown) => void;
 }
 
 const MODE_INTERVAL_SECONDS = 5;
 const MODE_PRICE_STEP = 25;
+const DEFAULT_BET_AMOUNT_USD = 0.26; // 1 WLD
 // Limit chart length
 const MAX_HISTORY_POINTS = 1040;
 const MAX_FOLLOWED_ORDER_ACTIVITIES = 200;
@@ -94,6 +102,73 @@ function normalizeTs(ts?: number): number {
 function toMsIfFinite(ts: number | null | undefined): number | null {
   if (typeof ts !== "number" || !Number.isFinite(ts)) return null;
   return ts > 1_000_000_000_000 ? ts : ts * 1000;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function toNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseOrderIdCellParts(orderId: unknown) {
+  if (typeof orderId !== "string") return null;
+  const parts = orderId.split(":");
+  if (parts.length < 5) return null;
+  const start = parts[parts.length - 4];
+  const end = parts[parts.length - 3];
+  const lower = parts[parts.length - 2];
+  const upper = parts[parts.length - 1];
+  return { start, end, lower, upper };
+}
+
+function resolveOrderCellId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const cell =
+    record.cell && typeof record.cell === "object" && !Array.isArray(record.cell)
+      ? (record.cell as Record<string, unknown>)
+      : null;
+  const orderIdParts = parseOrderIdCellParts(record.orderId);
+
+  const startRaw =
+    record.cellTimeStart ??
+    record.startTs ??
+    cell?.startTs ??
+    orderIdParts?.start;
+  const endRaw =
+    record.cellTimeEnd ??
+    record.endTs ??
+    cell?.endTs ??
+    orderIdParts?.end;
+  const lowerRaw = record.lowerPrice ?? cell?.lowerPrice ?? orderIdParts?.lower;
+  const upperRaw = record.upperPrice ?? cell?.upperPrice ?? orderIdParts?.upper;
+
+  const startMs = toMsIfFinite(toFiniteNumber(startRaw));
+  const endMs = toMsIfFinite(toFiniteNumber(endRaw));
+  const lower = toNonEmptyString(lowerRaw);
+  const upper = toNonEmptyString(upperRaw);
+
+  if (startMs === null || endMs === null || !lower || !upper) return null;
+  return toCellId(startMs, endMs, lower, upper);
+}
+
+function resolveRewardRate(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const cell =
+    record.cell && typeof record.cell === "object" && !Array.isArray(record.cell)
+      ? (record.cell as Record<string, unknown>)
+      : null;
+  return toNonEmptyString(record.rewardRate) ?? toNonEmptyString(cell?.rewardRate);
 }
 
 function getServerNow(serverTimeOffset: number): number {
@@ -161,10 +236,11 @@ export const useGameStore = create<GameState>((set) => ({
   bets: {},
   pendingBets: {},
   pendingWins: {},
+  settledOutcomes: {},
   socket: null,
   wssKey: null,
   followedOrderActivities: [],
-  betAmount: 10,
+  betAmount: DEFAULT_BET_AMOUNT_USD,
   serverTimeOffset: 0,
 
   setBetAmount: (amount) => set({ betAmount: amount }),
@@ -248,7 +324,32 @@ export const useGameStore = create<GameState>((set) => ({
       const now = getServerNow(nextServerTimeOffset);
       const chartTime = getLatestChartTime(state.history, now);
       const hideThresholdTime = getCellHideThresholdTime(chartTime);
-      const incomingCells = mapRemoteCells(remoteCells, now);
+      const existingCellById = new Map(state.cells.map((cell) => [cell.id, cell]));
+      const incomingCells = mapRemoteCells(remoteCells, now).map((incomingCell) => {
+        const existingCell = existingCellById.get(incomingCell.id);
+        if (!existingCell) return incomingCell;
+
+        const shouldFreezeMultiplier =
+          (state.bets[incomingCell.id] || 0) > 0 ||
+          (state.pendingBets[incomingCell.id] || 0) > 0 ||
+          state.pendingWins[incomingCell.id] !== undefined ||
+          state.settledOutcomes[incomingCell.id] !== undefined;
+
+        if (!shouldFreezeMultiplier) return incomingCell;
+
+        return {
+          ...incomingCell,
+          multiplier: existingCell.multiplier,
+          status:
+            existingCell.status === "hit" || existingCell.status === "lose"
+              ? existingCell.status
+              : incomingCell.status,
+          original: {
+            ...incomingCell.original,
+            rewardRate: existingCell.original.rewardRate,
+          },
+        };
+      });
       const incomingIds = new Set(incomingCells.map((cell) => cell.id));
       const retainedCells = state.cells
         .filter((cell) => {
@@ -257,7 +358,8 @@ export const useGameStore = create<GameState>((set) => ({
           const hasTrackedState =
             (state.bets[cell.id] || 0) > 0 ||
             (state.pendingBets[cell.id] || 0) > 0 ||
-            state.pendingWins[cell.id] !== undefined;
+            state.pendingWins[cell.id] !== undefined ||
+            state.settledOutcomes[cell.id] !== undefined;
 
           // Keep cells the server has already rolled off only until the chart
           // reaches that column. This keeps store retention aligned with the
@@ -267,8 +369,8 @@ export const useGameStore = create<GameState>((set) => ({
         .map((cell) => ({
           ...cell,
           status:
-            cell.status === "hit"
-              ? "hit"
+            cell.status === "hit" || cell.status === "lose"
+              ? cell.status
               : statusForWindow(now, cell.timeWindowStart, cell.timeWindowEnd),
         }));
 
@@ -297,59 +399,187 @@ export const useGameStore = create<GameState>((set) => ({
       const nextPendingBets = { ...state.pendingBets };
       const nextBets = { ...state.bets };
       const nextPendingWins = { ...state.pendingWins };
-      let nextServerBalance = state.serverBalance;
+      const nextSettledOutcomes = { ...state.settledOutcomes };
       let changed = false;
 
-      for (const [cellId, pendingAmount] of Object.entries(state.pendingBets)) {
+      for (const [cellId] of Object.entries(state.pendingBets)) {
         const cell = state.cells.find((c) => c.id === cellId);
         if (!cell) {
           delete nextPendingBets[cellId];
           changed = true;
           continue;
         }
-        if (now > cell.timeWindowStart) {
-          nextBets[cellId] = pendingAmount;
+        if (now >= cell.timeWindowStart) {
           delete nextPendingBets[cellId];
-          nextServerBalance -= pendingAmount;
           changed = true;
         }
       }
 
       const nextCells: CellData[] = state.cells.map((cell) => {
         const hasBet = (nextBets[cell.id] || 0) > 0;
-        const isPast = now > cell.timeWindowEnd;
-        const nextStatus: CellData["status"] = isPast ? "past" : "active";
+        const isPast = now >= cell.timeWindowEnd;
+        let nextStatus: CellData["status"] = isPast ? "past" : "active";
+        const settledOutcome = nextSettledOutcomes[cell.id];
+
         if (!hasBet) {
+          if (cell.status !== nextStatus) {
+            changed = true;
+            return { ...cell, status: nextStatus };
+          }
+          return cell;
+        }
+
+        if (isPast && settledOutcome) {
+          if (settledOutcome.isWin) {
+            nextStatus = "hit";
+            if (!settledOutcome.revealed) {
+              if (nextPendingWins[cell.id] !== undefined) {
+                delete nextPendingWins[cell.id];
+              }
+              nextSettledOutcomes[cell.id] = {
+                ...settledOutcome,
+                revealed: true,
+              };
+              changed = true;
+            }
+          } else {
+            nextStatus = "lose";
+            if (!settledOutcome.revealed) {
+              nextSettledOutcomes[cell.id] = {
+                ...settledOutcome,
+                revealed: true,
+              };
+              changed = true;
+            }
+          }
+        } else if (cell.status === "hit" || cell.status === "lose") {
+          nextStatus = cell.status;
+        }
+
+        if (cell.status !== nextStatus) {
+          changed = true;
           return { ...cell, status: nextStatus };
         }
 
-        const inBand =
-          state.currentPrice >= cell.priceLevel - state.modePriceStep / 2 &&
-          state.currentPrice <= cell.priceLevel + state.modePriceStep / 2;
-        if (isPast && inBand) {
-          if (nextPendingWins[cell.id] === undefined) {
-            nextPendingWins[cell.id] = nextBets[cell.id] * cell.multiplier;
-            changed = true;
-          }
-          return { ...cell, status: "hit" as const };
-        }
-        return { ...cell, status: nextStatus };
+        return cell;
       });
 
       if (!changed) return state;
-
-      const pendingWinsTotal = Object.values(nextPendingWins).reduce(
-        (sum, win) => sum + win,
-        0,
-      );
 
       return {
         cells: nextCells,
         pendingBets: nextPendingBets,
         bets: nextBets,
         pendingWins: nextPendingWins,
-        serverBalance: nextServerBalance,
-        balance: nextServerBalance - pendingWinsTotal,
+        settledOutcomes: nextSettledOutcomes,
+        balance: state.serverBalance,
+      };
+    }),
+
+  updateOrder: (payload) =>
+    set((state) => {
+      const cellId = resolveOrderCellId(payload);
+      if (!cellId) return state;
+
+      const record =
+        payload && typeof payload === "object"
+          ? (payload as Record<string, unknown>)
+          : null;
+      if (!record) return state;
+
+      const status = toNonEmptyString(record.status)?.toUpperCase();
+      const amount = toFiniteNumber(record.amount);
+      const rewardRate = resolveRewardRate(payload);
+      const rewardRateNum = toFiniteNumber(rewardRate);
+
+      const nextPendingBets = { ...state.pendingBets };
+      const nextBets = { ...state.bets };
+      const nextPendingWins = { ...state.pendingWins };
+      const nextSettledOutcomes = { ...state.settledOutcomes };
+      let changed = false;
+
+      if (status === "OPEN") {
+        const confirmedAmount = amount ?? nextPendingBets[cellId] ?? 0;
+        delete nextPendingBets[cellId];
+        if (confirmedAmount > 0) {
+          nextBets[cellId] = confirmedAmount;
+        }
+        changed = true;
+      }
+
+      const isSettled = status === "SETTLED";
+      if (isSettled) {
+        const settledWinRaw = record.settledWin ?? record.outcome;
+        const settledWinText = toNonEmptyString(settledWinRaw)?.toUpperCase();
+        const hasExplicitOutcome =
+          settledWinRaw !== undefined && settledWinRaw !== null;
+        const isWin =
+          settledWinRaw === true ||
+          settledWinText === "TRUE" ||
+          settledWinText === "WIN" ||
+          status === "WIN";
+
+        if (hasExplicitOutcome) {
+          nextSettledOutcomes[cellId] = {
+            isWin,
+            revealed: nextSettledOutcomes[cellId]?.revealed ?? false,
+          };
+        }
+
+        if (hasExplicitOutcome && isWin) {
+          const baseAmount = amount ?? nextBets[cellId] ?? nextPendingBets[cellId] ?? 0;
+          if (baseAmount > 0) {
+            const mult =
+              rewardRateNum ??
+              state.cells.find((c) => c.id === cellId)?.multiplier ??
+              0;
+            nextPendingWins[cellId] = baseAmount * Math.max(mult, 0);
+          }
+        } else if (hasExplicitOutcome) {
+          delete nextPendingWins[cellId];
+        }
+
+        if (amount && amount > 0 && !nextBets[cellId]) {
+          nextBets[cellId] = amount;
+        }
+        delete nextPendingBets[cellId];
+        changed = true;
+      }
+
+      if (status === "REJECTED") {
+        delete nextPendingBets[cellId];
+        delete nextBets[cellId];
+        delete nextPendingWins[cellId];
+        delete nextSettledOutcomes[cellId];
+        changed = true;
+      }
+
+      const nextCells = rewardRate
+        ? state.cells.map((cell) => {
+            if (cell.id !== cellId) return cell;
+            const resolvedMultiplier =
+              rewardRateNum !== null ? rewardRateNum : cell.multiplier;
+            changed = true;
+            return {
+              ...cell,
+              multiplier: resolvedMultiplier,
+              original: {
+                ...cell.original,
+                rewardRate,
+              },
+            };
+          })
+        : state.cells;
+
+      if (!changed) return state;
+
+      return {
+        cells: nextCells,
+        pendingBets: nextPendingBets,
+        bets: nextBets,
+        pendingWins: nextPendingWins,
+        settledOutcomes: nextSettledOutcomes,
+        balance: state.serverBalance,
       };
     }),
 }));

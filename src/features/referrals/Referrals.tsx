@@ -2,26 +2,34 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
+import { MiniKit } from "@worldcoin/minikit-js";
+import type { MiniKitChatOptions } from "@worldcoin/minikit-js/commands";
 import ActiveTab from "@/src/components/common/ActiveTab";
 import ActiveRef from "@/src/features/referrals/components/ActiveRef";
+import BrowseCopyTrade from "@/src/features/referrals/components/BrowseCopyTrade";
 import HowItWork from "@/src/features/referrals/components/HowItWork";
 import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
 import ReferralsHeader from "@/src/features/referrals/components/ReferralsHeader";
 import UserRefInfo from "@/src/features/referrals/components/UserRefInfo";
-import useWorldMiniAppChatPay from "@/src/hooks/useWorldMiniAppChatPay";
+import { REFERRAL_LINK } from "@/src/features/referrals/constants";
+import useWorldMiniAppChatPay, {
+  getWorldChatDeeplinkUrl,
+} from "@/src/hooks/useWorldMiniAppChatPay";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { useGameStore } from "@/src/features/trade/store";
 
 const tabs = [
+  { value: "browse", label: "Browse" },
   { value: "referrals", label: "Referrals" },
-  { value: "rankings", label: "My Rankings" },
+  { value: "rankings", label: "Rankings" },
 ] as const;
 
 type ReferralTab = (typeof tabs)[number]["value"];
+const WORLD_CHAT_SHARE_MESSAGE = `Copy this trader on TickX: ${REFERRAL_LINK}`;
 
 const Referrals = () => {
-  const [activeTab, setActiveTab] = useState<ReferralTab>("referrals");
+  const [activeTab, setActiveTab] = useState<ReferralTab>("browse");
   const { walletAddress } = useAuth();
   console.log("walletAddress: ", walletAddress);
   const balance = useGameStore((state) => state.balance);
@@ -57,17 +65,92 @@ const Referrals = () => {
       />
       <Button
         onClick={() => {
-          payWld({
-            to: "0xFfB7b84f8D6968a7841782e58e9c75B3a601361A",
+          console.log("[Referrals] Pay button clicked");
+          void payWld({
+            to: "0x0cb3e84e2c4bf88032e2279e7dd11b4e75ba7303",
             amountWld: 0.001,
             description: "Hello",
             fallback: () => {
-              console.log("Fallback");
+              console.log("[Referrals] MiniKit fallback callback triggered");
             },
-          });
+          })
+            .then((result) => {
+              console.log("[Referrals] payWld resolved", { result });
+            })
+            .catch((error: unknown) => {
+              console.error("[Referrals] payWld failed", { error });
+            });
         }}
       >
         Pay Wld
+      </Button>
+
+      <Button
+        onClick={() => {
+          console.log("[Referrals] Share chat button clicked");
+
+          const recipientInput = window.prompt(
+            "Enter recipient World username (without @):",
+          );
+          if (!recipientInput) {
+            console.warn("[Referrals] Share cancelled: no recipient username");
+            return;
+          }
+          const recipientUsername = recipientInput.trim().replace(/^@/, "");
+          if (!recipientUsername) {
+            console.warn("[Referrals] Share cancelled: invalid username");
+            return;
+          }
+
+          const worldChatDeeplink = getWorldChatDeeplinkUrl({
+            username: recipientUsername,
+            message: WORLD_CHAT_SHARE_MESSAGE,
+          });
+
+          if (!MiniKit.isInWorldApp()) {
+            console.warn(
+              "[Referrals] Not in World App, opening World Chat deeplink",
+            );
+            window.location.assign(worldChatDeeplink);
+            return;
+          }
+
+          const input = {
+            message: WORLD_CHAT_SHARE_MESSAGE,
+            to: [recipientUsername],
+          } satisfies MiniKitChatOptions;
+
+          console.log("input: ", input);
+          void MiniKit.chat(input)
+            .then((result) => {
+              if (result.data.status === "success") {
+                console.log("[Referrals] MiniKit.chat resolved", {
+                  count: result.data.count,
+                  result,
+                });
+                return;
+              }
+
+              console.warn("[Referrals] MiniKit.chat non-success payload", {
+                result,
+              });
+            })
+            .catch((error: unknown) => {
+              console.error("[Referrals] MiniKit.chat failed", { error });
+
+              if (
+                error instanceof Error &&
+                error.name === "CommandUnavailableError"
+              ) {
+                console.warn(
+                  "[Referrals] chat command unavailable, opening World Chat deeplink",
+                );
+                window.location.assign(worldChatDeeplink);
+              }
+            });
+        }}
+      >
+        Share chat
       </Button>
 
       <div className="relative z-10 mx-auto flex flex-col gap-5 md:max-w-[720px] xl:max-w-[860px]">
@@ -97,10 +180,12 @@ const Referrals = () => {
           listTabs={tabs}
           activeTab={activeTab}
           onTabChange={(value) => setActiveTab(value as ReferralTab)}
-          className="border-border-main bg-surface-overlay-subtle grid w-full grid-cols-2 rounded-[14px] border p-1"
+          className="grid w-full grid-cols-3"
         />
 
-        {activeTab === "referrals" ? (
+        {activeTab === "browse" ? (
+          <BrowseCopyTrade />
+        ) : activeTab === "referrals" ? (
           <div className="flex flex-col gap-5 pb-4">
             <ReferralsHeader />
             <ReferAFriend />

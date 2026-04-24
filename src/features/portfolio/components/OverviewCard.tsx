@@ -18,7 +18,7 @@ const OverviewCard = ({
   return (
     <div
       className={cn(
-        "border-stroke-main bg-background-main flex flex-col items-center gap-2 overflow-hidden rounded-[8px] border px-[10px] py-[10px] text-center",
+        "border-stroke-main bg-background-main flex flex-col items-center gap-2 overflow-hidden rounded-[8px] border py-[10px] text-center",
         className,
       )}
     >
@@ -27,7 +27,7 @@ const OverviewCard = ({
       </p>
       <p
         className={cn(
-          "text-[20px] leading-7 font-semibold tracking-[-0.01em] text-white",
+          "text-[16px] leading-7 font-semibold tracking-[-0.01em] text-white",
           valueClassName,
         )}
         style={valueColor ? { color: valueColor } : undefined}

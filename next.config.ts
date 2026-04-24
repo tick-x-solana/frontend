@@ -9,15 +9,12 @@ const nextConfig: NextConfig = {
         loaders: ["@svgr/webpack"],
         as: "*.js",
       },
-      // Only include code inspector in development
       ...codeInspectorPlugin({
         bundler: "turbopack",
       }),
     },
   },
-  allowedDevOrigins: [
-    "1c90-2405-4802-1d55-7ff0-9c8d-ae1c-4cc7-925.ngrok-free.app",
-  ],
+  allowedDevOrigins: ["765d-116-96-44-1.ngrok-free.app"],
 };
 
 export default nextConfig;

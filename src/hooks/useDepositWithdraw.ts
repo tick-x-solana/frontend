@@ -24,7 +24,7 @@ import {
 const WORLD_CHAIN_ID = 480;
 const COINGECKO_WLD_PRICE_URL =
   "https://api.coingecko.com/api/v3/simple/price?ids=worldcoin&vs_currencies=usd";
-const WORLDCHAIN_RPC_URL = "https://worldchain-mainnet.g.alchemy.com/public";
+const WORLDCHAIN_RPC_URL = "https://worldchain.drpc.org";
 
 const worldPublicClient = createPublicClient({
   transport: http(WORLDCHAIN_RPC_URL),
@@ -168,7 +168,10 @@ async function resolveTransactionHash(
     }
 
     const json = (await response.json()) as UserOpStatusResponse;
-    if (json.status === "success" && typeof json.transaction_hash === "string") {
+    if (
+      json.status === "success" &&
+      typeof json.transaction_hash === "string"
+    ) {
       return json.transaction_hash;
     }
 
@@ -291,7 +294,7 @@ const useDepositWithdraw = () => {
 
         const userOpHash = extractUserOpHash(txResult);
         const finalTxHash = userOpHash
-          ? (await resolveTransactionHash(userOpHash)) ?? userOpHash
+          ? ((await resolveTransactionHash(userOpHash)) ?? userOpHash)
           : undefined;
 
         await paymentControllerDebugDeposit({

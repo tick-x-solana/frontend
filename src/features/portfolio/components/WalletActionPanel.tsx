@@ -7,8 +7,8 @@ import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
 import useDepositWithdraw from "@/src/hooks/useDepositWithdraw";
 import { useAccountControllerGetBalance } from "@/src/services/queries";
-import { ArrowLeft, ArrowUpDown, Eye } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ArrowUpDown, Eye, EyeOff } from "lucide-react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Sheet } from "react-modal-sheet";
 import { toast } from "sonner";
 
@@ -38,11 +38,23 @@ function extractBalance(value: unknown): number | null {
   );
 }
 
+function normalizeDecimalInput(value: string): string {
+  const normalizedValue = value.replace(/,/g, ".").replace(/[^\d.]/g, "");
+  const [integerPart = "", ...decimalParts] = normalizedValue.split(".");
+
+  if (decimalParts.length === 0) {
+    return integerPart;
+  }
+
+  return `${integerPart}.${decimalParts.join("")}`;
+}
+
 const WalletActionPanel = () => {
   const [activeAction, setActiveAction] = useState<PortfolioAction | null>(
     null,
   );
   const [amountInput, setAmountInput] = useState("");
+  const [isBalanceVisible, setIsBalanceVisible] = useState(true);
   const [availableWldBalance, setAvailableWldBalance] = useState<string | null>(
     null,
   );
@@ -50,10 +62,10 @@ const WalletActionPanel = () => {
   const storeBalance = useGameStore((state) => state.balance);
   const { data: balanceResponse, refetch: refetchBalance } =
     useAccountControllerGetBalance({
-    query: {
-      enabled: Boolean(walletAddress),
-    },
-  });
+      query: {
+        enabled: Boolean(walletAddress),
+      },
+    });
   const [wldUsdPrice, setWldUsdPrice] = useState<number | null>(null);
   const {
     isDepositing,
@@ -82,7 +94,11 @@ const WalletActionPanel = () => {
       })}`
     : "Fetching WLD price...";
 
-  const numericAmount = Number(amountInput || "0");
+  const normalizedAmountInput = useMemo(
+    () => normalizeDecimalInput(amountInput),
+    [amountInput],
+  );
+  const numericAmount = Number(normalizedAmountInput || "0");
   const receivedValue =
     Number.isFinite(numericAmount) && Number.isFinite(wldUsdPrice)
       ? isWithdraw
@@ -113,26 +129,36 @@ const WalletActionPanel = () => {
     const resolvedBalance = apiBalance ?? storeBalance;
 
     if (!Number.isFinite(resolvedBalance)) {
-      return "$0.00";
+      return "$0";
     }
 
     return `$${resolvedBalance.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
+      minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     })}`;
   }, [balanceResponse, storeBalance]);
 
-  const displayDepositBalance = useMemo(() => {
-    if (isWithdraw) {
-      return displayBalance;
-    }
+  const visibleBalance = isBalanceVisible ? displayBalance : "******";
 
+  const toggleBalanceVisibility = useCallback(() => {
+    setIsBalanceVisible((current) => !current);
+  }, []);
+
+  const displayWldBalance = useMemo(() => {
     if (availableWldBalance === null) {
       return "Loading...";
     }
 
-    return `${availableWldBalance} WLD`;
-  }, [availableWldBalance, displayBalance, isWithdraw]);
+    const numericWldBalance = Number(availableWldBalance);
+    const formattedWldBalance = Number.isFinite(numericWldBalance)
+      ? numericWldBalance.toLocaleString(undefined, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        })
+      : availableWldBalance;
+
+    return `${formattedWldBalance} WLD`;
+  }, [availableWldBalance]);
 
   useEffect(() => {
     if (activeAction !== "deposit") {
@@ -144,18 +170,21 @@ const WalletActionPanel = () => {
       .catch(() => setAvailableWldBalance(null));
   }, [activeAction, getAvailableWldBalance]);
 
-  const openActionSheet = useCallback((action: PortfolioAction) => {
-    setActiveAction(action);
-    setAmountInput("");
-    void getWldUsdPrice()
-      .then((price) => setWldUsdPrice(price))
-      .catch(() => setWldUsdPrice(null));
-    if (action === "deposit") {
-      void getAvailableWldBalance()
-        .then((balance) => setAvailableWldBalance(balance.formatted))
-        .catch(() => setAvailableWldBalance(null));
-    }
-  }, [getAvailableWldBalance, getWldUsdPrice]);
+  const openActionSheet = useCallback(
+    (action: PortfolioAction) => {
+      setActiveAction(action);
+      setAmountInput("");
+      void getWldUsdPrice()
+        .then((price) => setWldUsdPrice(price))
+        .catch(() => setWldUsdPrice(null));
+      if (action === "deposit") {
+        void getAvailableWldBalance()
+          .then((balance) => setAvailableWldBalance(balance.formatted))
+          .catch(() => setAvailableWldBalance(null));
+      }
+    },
+    [getAvailableWldBalance, getWldUsdPrice],
+  );
 
   const closeActionSheet = useCallback(() => {
     setActiveAction(null);
@@ -169,6 +198,13 @@ const WalletActionPanel = () => {
     });
   }, []);
 
+  const handleAmountInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setAmountInput(normalizeDecimalInput(event.target.value));
+    },
+    [],
+  );
+
   const handlePrimaryAction = useCallback(async () => {
     if (!activeAction) {
       return;
@@ -176,7 +212,7 @@ const WalletActionPanel = () => {
 
     if (activeAction === "withdraw") {
       try {
-        await withdrawUsdToWld({ amountUsd: amountInput.trim() });
+        await withdrawUsdToWld({ amountUsd: normalizedAmountInput.trim() });
         await refetchBalance();
         setAmountInput("");
         closeActionSheet();
@@ -192,7 +228,7 @@ const WalletActionPanel = () => {
     }
 
     try {
-      await depositWldToUsd({ amountWld: amountInput.trim() });
+      await depositWldToUsd({ amountWld: normalizedAmountInput.trim() });
       await refetchBalance();
       const wldBalance = await getAvailableWldBalance();
       setAvailableWldBalance(wldBalance.formatted);
@@ -203,11 +239,11 @@ const WalletActionPanel = () => {
     }
   }, [
     activeAction,
-    amountInput,
     closeActionSheet,
     depositWldToUsd,
     getAvailableWldBalance,
     numericAmount,
+    normalizedAmountInput,
     refetchBalance,
     withdrawUsdToWld,
   ]);
@@ -230,9 +266,22 @@ const WalletActionPanel = () => {
                 Balance:
               </p>
               <p className="text-primary-light font-mono text-xs font-bold tracking-[-0.01em]">
-                {displayBalance}
+                {visibleBalance}
               </p>
-              <Eye className="text-hint size-4" strokeWidth={1.75} />
+              <button
+                type="button"
+                aria-label={
+                  isBalanceVisible ? "Hide wallet balance" : "Show wallet balance"
+                }
+                onClick={toggleBalanceVisibility}
+                className="text-hint hover:text-text-sub transition-colors"
+              >
+                {isBalanceVisible ? (
+                  <Eye className="size-4" strokeWidth={1.75} />
+                ) : (
+                  <EyeOff className="size-4" strokeWidth={1.75} />
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -260,18 +309,19 @@ const WalletActionPanel = () => {
         isOpen={activeAction !== null}
         onClose={closeActionSheet}
         detent="full"
+        className="z-[70]"
         unstyled
       >
         <Sheet.Backdrop
-          onTap={closeActionSheet}
-          className="bg-background-main/55 backdrop-blur-[2px]"
+          onClick={closeActionSheet}
+          className="bg-background-main/55 fixed inset-0 backdrop-blur-[2px]"
         />
         <Sheet.Container className="pointer-events-none">
           <Sheet.Content
             disableDrag={false}
-            className="bg-background-main pointer-events-auto rounded-t-[24px]"
+            className="bg-background-main border-border-main pointer-events-auto max-h-[calc(100dvh-env(safe-area-inset-top)-8px)] rounded-t-[24px] border-t"
           >
-            <div className="flex h-[100dvh] flex-col px-4 py-4">
+            <div className="flex min-h-0 flex-col px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)]">
               <div className="flex flex-col gap-4">
                 <Button
                   type="button"
@@ -289,7 +339,7 @@ const WalletActionPanel = () => {
                 </h2>
               </div>
 
-              <div className="mt-5 flex flex-1 flex-col gap-4">
+              <div className="mt-5 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4">
                 <div className="flex flex-col items-center gap-2">
                   <div className="bg-background-subtle border-border-main flex size-10 items-center justify-center rounded-full border">
                     <WldMarketIcon aria-hidden className="size-4" />
@@ -304,21 +354,43 @@ const WalletActionPanel = () => {
                       Balance:
                     </p>
                     <p className="text-primary-light font-mono text-xs font-bold tracking-[-0.01em]">
-                      {displayDepositBalance}
+                      {visibleBalance}
                     </p>
-                    <Eye className="text-hint size-4" strokeWidth={1.75} />
+                    <button
+                      type="button"
+                      aria-label={
+                        isBalanceVisible
+                          ? "Hide wallet balance"
+                          : "Show wallet balance"
+                      }
+                      onClick={toggleBalanceVisibility}
+                      className="text-hint hover:text-text-sub transition-colors"
+                    >
+                      {isBalanceVisible ? (
+                        <Eye className="size-4" strokeWidth={1.75} />
+                      ) : (
+                        <EyeOff className="size-4" strokeWidth={1.75} />
+                      )}
+                    </button>
                   </div>
                 </div>
 
                 <div className="relative">
-                  <div className="bg-background-subtle flex flex-col gap-2 rounded-[12px] px-4 py-3">
-                    <p className="text-hint text-xs font-medium tracking-[-0.01em]">
-                      Amount
-                    </p>
+                  <div className="flex flex-col gap-2 rounded-[12px] bg-[#0D1E30] px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-hint text-xs font-medium tracking-[-0.01em]">
+                        Amount
+                      </p>
+                      {!isWithdraw && (
+                        <p className="text-hint text-xs font-medium tracking-[-0.01em]">
+                          WLD Balance: {displayWldBalance}
+                        </p>
+                      )}
+                    </div>
                     <div className="flex items-center justify-between gap-3">
                       <input
                         value={amountInput}
-                        onChange={(event) => setAmountInput(event.target.value)}
+                        onChange={handleAmountInputChange}
                         className="text-hint placeholder:text-hint w-full bg-transparent text-3xl font-bold outline-none"
                         inputMode="decimal"
                         placeholder="0"
@@ -350,7 +422,7 @@ const WalletActionPanel = () => {
                     className="bg-background-subtle absolute top-1/2 left-1/2 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
                     aria-label="Swap deposit and withdraw mode"
                   >
-                    <ArrowUpDown className="text-text-sub size-4" />
+                    <ArrowUpDown className="text-primary-light size-4" />
                   </button>
                 </div>
               </div>

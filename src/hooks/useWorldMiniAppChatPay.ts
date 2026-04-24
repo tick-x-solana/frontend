@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { Tokens, tokenToDecimals } from "@worldcoin/minikit-js/commands";
 
+const WORLD_MINI_APP_BASE_URL = "https://worldcoin.org/mini-app";
 const WORLD_CHAT_APP_ID = "app_e293fcd0565f45ca296aa317212d8741";
 
 type DraftActionValue = boolean | "true" | number | string;
@@ -16,7 +17,7 @@ export type WorldChatDraftOptions = {
 };
 
 export type SendWldPaymentOptions = {
-  to: `0x${string}` | string;
+  to: string;
   amountWld: number;
   description: string;
   reference?: string;
@@ -27,6 +28,12 @@ type UseWorldMiniAppChatPayConfig = {
   onOpenUrl?: (url: string) => void;
   createPaymentReference?: () => Promise<string> | string;
 };
+
+const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+
+function normalizeWorldUsername(value: string) {
+  return value.trim().replace(/^@/, "");
+}
 
 function assertSingleQuickAction({
   message,
@@ -74,7 +81,7 @@ export function getWorldChatDeeplinkUrl({
   }
 
   const encodedPath = encodeURIComponent(path);
-  return `https://worldcoin.org/mini-app?app_id=${WORLD_CHAT_APP_ID}&path=${encodedPath}`;
+  return `${WORLD_MINI_APP_BASE_URL}?app_id=${WORLD_CHAT_APP_ID}&path=${encodedPath}`;
 }
 
 const useWorldMiniAppChatPay = (config?: UseWorldMiniAppChatPayConfig) => {
@@ -82,12 +89,26 @@ const useWorldMiniAppChatPay = (config?: UseWorldMiniAppChatPayConfig) => {
 
   const openWorldChatDraft = useCallback(
     (options: WorldChatDraftOptions) => {
+      console.log("[useWorldMiniAppChatPay] Step 1: build World Chat draft URL", {
+        options,
+      });
       const url = getWorldChatDeeplinkUrl(options);
+      console.log("[useWorldMiniAppChatPay] Step 2: draft URL created", { url });
 
       if (config?.onOpenUrl) {
+        console.log(
+          "[useWorldMiniAppChatPay] Step 3: open via custom onOpenUrl handler",
+        );
         config.onOpenUrl(url);
       } else if (typeof window !== "undefined") {
+        console.log(
+          "[useWorldMiniAppChatPay] Step 3: navigating browser to draft URL",
+        );
         window.location.assign(url);
+      } else {
+        console.log(
+          "[useWorldMiniAppChatPay] Step 3: skipped navigation (window unavailable)",
+        );
       }
 
       return url;
@@ -127,37 +148,87 @@ const useWorldMiniAppChatPay = (config?: UseWorldMiniAppChatPayConfig) => {
       reference,
       fallback,
     }: SendWldPaymentOptions) => {
-      if (!MiniKit.isInWorldApp()) {
-        throw new Error("WLD payments with MiniKit.pay are only available in World App");
-      }
+      console.log("[useWorldMiniAppChatPay] payWld called", {
+        to,
+        amountWld,
+        description,
+      });
 
       if (!Number.isFinite(amountWld) || amountWld <= 0) {
+        console.log("[useWorldMiniAppChatPay] Step 0 failed: invalid amount", {
+          amountWld,
+        });
         throw new Error("amountWld must be a positive number");
       }
 
+      const recipient = to.trim();
+      console.log("[useWorldMiniAppChatPay] Step 1: normalize recipient", {
+        recipient,
+      });
+      if (!EVM_ADDRESS_REGEX.test(recipient)) {
+        const username = normalizeWorldUsername(recipient);
+        console.log(
+          "[useWorldMiniAppChatPay] Step 2: recipient is username, opening World Chat pay draft",
+          { username, amountWld },
+        );
+        console.log("[useWorldMiniAppChatPay] World App environment check", {
+          isInWorldApp: MiniKit.isInWorldApp(),
+        });
+        if (!username) {
+          throw new Error("Valid username or wallet address is required");
+        }
+        return openWorldChatPayDraft(username, amountWld);
+      }
+
+      console.log(
+        "[useWorldMiniAppChatPay] Step 2: recipient is EVM address, using MiniKit.pay",
+      );
+      if (!MiniKit.isInWorldApp()) {
+        console.log(
+          "[useWorldMiniAppChatPay] Step 3 failed: MiniKit.pay requires World App",
+        );
+        throw new Error(
+          "WLD payments with MiniKit.pay are only available in World App",
+        );
+      }
+
+      console.log("[useWorldMiniAppChatPay] Step 3: set paying state true");
       setIsPaying(true);
 
       try {
+        console.log("[useWorldMiniAppChatPay] Step 4: resolve payment reference");
         const resolvedReference =
           reference ??
           (config?.createPaymentReference
             ? await config.createPaymentReference()
             : crypto.randomUUID());
+        console.log("[useWorldMiniAppChatPay] Step 4 done", {
+          resolvedReference,
+        });
 
         const tokenAmount = tokenToDecimals(amountWld, Tokens.WLD).toString();
+        console.log("[useWorldMiniAppChatPay] Step 5: convert amount to token decimals", {
+          tokenAmount,
+        });
 
-        return await MiniKit.pay({
+        console.log("[useWorldMiniAppChatPay] Step 6: call MiniKit.pay");
+        const result = await MiniKit.pay({
           reference: resolvedReference,
-          to,
+          to: recipient,
           tokens: [{ symbol: Tokens.WLD, token_amount: tokenAmount }],
           description,
           fallback,
         });
+        console.log("[useWorldMiniAppChatPay] Step 7: MiniKit.pay completed", {
+          result,
+        });
+        return result;
       } finally {
+        console.log("[useWorldMiniAppChatPay] Step 8: set paying state false");
         setIsPaying(false);
       }
     },
-    [config],
+    [config, openWorldChatPayDraft],
   );
 
   return {

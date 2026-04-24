@@ -20,7 +20,7 @@ import React, {
 import { WalletIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Eye, Globe, Info, LocateFixed } from "lucide-react";
+import { Eye, Globe, Info, LocateFixed } from "lucide-react";
 import { Sheet } from "react-modal-sheet";
 import { io } from "socket.io-client";
 import { useAccount } from "wagmi";
@@ -32,12 +32,15 @@ import {
   extractOrderFollowings,
   extractWssKey,
 } from "@/src/features/trade/orderFollow";
+import { getLatestChartTime } from "@/src/features/trade/gridTiming";
 import type { RemoteCell } from "@/src/features/trade/store";
 import { BACKEND_URL } from "@/src/features/trade/constant";
 import { useGameStore } from "@/src/features/trade/store";
 import {
+  authControllerGetWssKey,
   authControllerGetChallenge,
   useAuthControllerGetWssKey,
+  useOrderControllerGetUserOrders,
   useOrderFollowControllerListFollowing,
 } from "@/src/services/queries";
 import { signWssMessage } from "@/src/features/trade/socketSignature";
@@ -70,7 +73,10 @@ const FOLLOW_ORDER_EVENTS = [
   "follow_order_placed",
   "place_bet",
 ] as const;
+const SUBSCRIBE_USER_EVENT = "subscribe_user";
 const FOLLOWED_ORDER_UPDATE_EVENT = "followed_order_update";
+const ORDER_UPDATE_EVENT = "order_update";
+const BALANCE_UPDATE_EVENT = "balance_update";
 const SUBSCRIBE_ORDER_FOLLOWS_EVENT = "subscribe_order_follows";
 const UNSUBSCRIBE_ORDER_FOLLOWS_EVENT = "unsubscribe_order_follows";
 const livePriceFormatter = new Intl.NumberFormat("en-US", {
@@ -83,8 +89,6 @@ const balanceFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
-const ETHEREUM_LOGO_SRC =
-  "https://www.figma.com/api/mcp/asset/5b2e0c8b-1140-4470-a234-0d3b7057a3f5";
 const MARKET_SYMBOL = "BTC/USD";
 
 type GridActionButtonProps = React.ComponentProps<typeof Button> & {
@@ -151,6 +155,54 @@ function extractChallenge(response: unknown): string | null {
     : null;
 }
 
+function extractBalanceAmount(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  return (
+    extractBalanceAmount(record.balance) ??
+    extractBalanceAmount(record.free) ??
+    extractBalanceAmount(record.amount) ??
+    extractBalanceAmount(record.availableBalance) ??
+    extractBalanceAmount(record.data)
+  );
+}
+
+function extractUserOrders(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.orders)) return record.orders;
+  if (Array.isArray(record.items)) return record.items;
+  if (Array.isArray(record.results)) return record.results;
+  if (Array.isArray(record.data)) return record.data;
+
+  if (
+    record.data &&
+    typeof record.data === "object" &&
+    !Array.isArray(record.data)
+  ) {
+    const nested = record.data as Record<string, unknown>;
+    if (Array.isArray(nested.orders)) return nested.orders;
+    if (Array.isArray(nested.items)) return nested.items;
+    if (Array.isArray(nested.results)) return nested.results;
+  }
+
+  return [];
+}
+
 function buildDisplayHistory(
   history: StoreSnapshot["history"],
   now: number,
@@ -196,6 +248,7 @@ export const TradingGrid: React.FC = () => {
   );
   const updatePrice = useGameStore((s) => s.updatePrice);
   const updateGrid = useGameStore((s) => s.updateGrid);
+  const updateOrder = useGameStore((s) => s.updateOrder);
   const betAmount = useGameStore((s) => s.betAmount);
   const balance = useGameStore((s) => s.balance);
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
@@ -215,6 +268,19 @@ export const TradingGrid: React.FC = () => {
       refetchOnWindowFocus: true,
     },
   });
+  const { data: userOrdersResponse } = useOrderControllerGetUserOrders(
+    {
+      limit: 200,
+      offset: 0,
+    },
+    {
+      query: {
+        enabled: isAuthenticated && !isLoggingIn,
+        staleTime: 10_000,
+        refetchOnWindowFocus: true,
+      },
+    },
+  );
 
   const resolvedWssKey = extractWssKey(wssKeyResponse);
   const activeFollowings = useMemo(
@@ -406,8 +472,93 @@ export const TradingGrid: React.FC = () => {
     if (
       !socket ||
       typeof socket !== "object" ||
+      !("connected" in socket) ||
+      typeof socket.connected !== "boolean" ||
       !("emit" in socket) ||
-      typeof socket.emit !== "function"
+      typeof socket.emit !== "function" ||
+      !("on" in socket) ||
+      typeof socket.on !== "function" ||
+      !("off" in socket) ||
+      typeof socket.off !== "function"
+    ) {
+      return;
+    }
+    const userAddress = address ?? walletAddress;
+    if (!isAuthenticated || !userAddress) {
+      return;
+    }
+
+    const socketClient = socket as {
+      connected: boolean;
+      emit: (event: string, payload: unknown) => void;
+      on: (event: string, handler: (payload: unknown) => void) => void;
+      off: (event: string, handler?: (payload: unknown) => void) => void;
+    };
+    let isDisposed = false;
+
+    const subscribeUser = async () => {
+      const wssKeyResponse = await authControllerGetWssKey();
+      const wssKey = extractWssKey(wssKeyResponse);
+      if (!wssKey) {
+        throw new Error("Missing WSS key");
+      }
+
+      setConnection(socket, wssKey);
+      setWssKey(wssKey);
+
+      const challengeResponse = await authControllerGetChallenge({
+        address: userAddress,
+      });
+      const challenge = extractChallenge(challengeResponse);
+      if (!challenge) {
+        throw new Error("Missing socket user challenge");
+      }
+
+      const signature = await signWssMessage(wssKey, userAddress, challenge);
+      if (isDisposed) return;
+
+      socketClient.emit(SUBSCRIBE_USER_EVENT, {
+        userId: userAddress,
+        signature,
+      });
+    };
+
+    const handleConnect = () => {
+      void subscribeUser().catch((error) => {
+        console.error("Failed to subscribe user:", error);
+      });
+    };
+
+    if (socketClient.connected) {
+      handleConnect();
+    }
+    socketClient.on("connect", handleConnect);
+
+    return () => {
+      isDisposed = true;
+      socketClient.off("connect", handleConnect);
+    };
+  }, [
+    address,
+    isAuthenticated,
+    setConnection,
+    setWssKey,
+    socket,
+    walletAddress,
+  ]);
+
+  useEffect(() => {
+    if (
+      !socket ||
+      typeof socket !== "object" ||
+      !("connected" in socket) ||
+      typeof socket.connected !== "boolean" ||
+      !("emit" in socket) ||
+      typeof socket.emit !== "function" ||
+      !("on" in socket) ||
+      typeof socket.on !== "function" ||
+      !("off" in socket) ||
+      typeof socket.off !== "function"
     ) {
       return;
     }
@@ -416,6 +567,7 @@ export const TradingGrid: React.FC = () => {
     }
 
     const socketClient = socket as {
+      connected: boolean;
       emit: (event: string, payload: unknown) => void;
       on: (event: string, handler: (payload: unknown) => void) => void;
       off: (event: string, handler?: (payload: unknown) => void) => void;
@@ -455,7 +607,9 @@ export const TradingGrid: React.FC = () => {
       });
     };
 
-    handleConnect();
+    if (socketClient.connected) {
+      handleConnect();
+    }
     socketClient.on("connect", handleConnect);
 
     return () => {
@@ -523,6 +677,64 @@ export const TradingGrid: React.FC = () => {
     upsertFollowedOrderActivity,
     followedTargetsKey,
   ]);
+
+  useEffect(() => {
+    if (!socket) {
+      return;
+    }
+
+    const socketClient = socket as {
+      on: (event: string, handler: (payload: unknown) => void) => void;
+      off: (event: string, handler: (payload: unknown) => void) => void;
+    };
+
+    const handleBalanceUpdate = (payload: unknown) => {
+      const nextServerBalance = extractBalanceAmount(payload);
+      if (nextServerBalance === null) return;
+
+      useGameStore.setState({
+        serverBalance: nextServerBalance,
+        balance: nextServerBalance,
+      });
+    };
+
+    console.log("listen balance");
+    socketClient.on(BALANCE_UPDATE_EVENT, handleBalanceUpdate);
+
+    return () => {
+      socketClient.off(BALANCE_UPDATE_EVENT, handleBalanceUpdate);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!socket) {
+      return;
+    }
+
+    const socketClient = socket as {
+      on: (event: string, handler: (payload: unknown) => void) => void;
+      off: (event: string, handler: (payload: unknown) => void) => void;
+    };
+
+    const handleOrderUpdate = (payload: unknown) => {
+      updateOrder(payload);
+    };
+
+    socketClient.on(ORDER_UPDATE_EVENT, handleOrderUpdate);
+
+    return () => {
+      socketClient.off(ORDER_UPDATE_EVENT, handleOrderUpdate);
+    };
+  }, [socket, updateOrder]);
+
+  useEffect(() => {
+    const orders = extractUserOrders(userOrdersResponse);
+    if (orders.length === 0) return;
+
+    orders.forEach((orderPayload) => {
+      updateOrder(orderPayload);
+    });
+  }, [updateOrder, userOrdersResponse]);
 
   useEffect(() => {
     if (!socket) {
@@ -742,7 +954,9 @@ export const TradingGrid: React.FC = () => {
   }, [serverTimeOffset]);
 
   useEffect(() => {
-    // Throttle checkWinEffects — cell windows are 5 s wide so checking once per second is plenty.
+    // Keep bet-status transitions visually immediate when the chart head crosses
+    // a cell boundary. 1s cadence causes noticeable lag; run at sub-frame cadence.
+    const WIN_CHECK_INTERVAL_MS = 50;
     let lastWinCheck = 0;
 
     const loop = () => {
@@ -774,14 +988,15 @@ export const TradingGrid: React.FC = () => {
         cameraPriceRef.current = target;
       }
 
-      // Only check win effects once per second — avoids zustand setState at 60fps.
-      if (loopNow - lastWinCheck > 1000) {
+      // Check frequently so OPEN/SETTLED outcomes reveal right as the chart reaches the cell.
+      if (loopNow - lastWinCheck > WIN_CHECK_INTERVAL_MS) {
         const hasOpenBetState =
           Object.keys(state.pendingBets).length > 0 ||
           Object.keys(state.bets).length > 0 ||
           Object.keys(state.pendingWins).length > 0;
         if (hasOpenBetState) {
-          state.checkWinEffects(nowRef.current);
+          const chartTime = getLatestChartTime(state.history, nowRef.current);
+          state.checkWinEffects(chartTime);
         }
         lastWinCheck = loopNow;
       }
@@ -875,7 +1090,7 @@ export const TradingGrid: React.FC = () => {
             <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={ETHEREUM_LOGO_SRC}
+                src="/btc.png"
                 alt=""
                 className="h-full w-full object-contain"
               />
@@ -883,7 +1098,6 @@ export const TradingGrid: React.FC = () => {
             <span className="text-sm font-semibold tracking-[-0.01em]">
               {MARKET_SYMBOL}
             </span>
-            <ChevronDown className="size-4 text-white/80" strokeWidth={1.75} />
           </button>
           <span className="text-text-sub truncate text-xs font-semibold tracking-[-0.01em]">
             {displayMarketPrice}

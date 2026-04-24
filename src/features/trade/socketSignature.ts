@@ -22,11 +22,7 @@ export async function signWssMessage(
 
   const payload = challenge ? `${message}${challenge}` : message;
   const payloadBytes = Uint8Array.from(stringToBytes(payload));
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    payloadBytes,
-  );
+  const signature = await crypto.subtle.sign("HMAC", key, payloadBytes);
 
   return bytesToHex(new Uint8Array(signature)).slice(2);
 }

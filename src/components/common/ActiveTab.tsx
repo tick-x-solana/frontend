@@ -35,17 +35,19 @@ const ActiveTabItem = ({
   onClick,
 }: ActiveTabItemProps) => {
   return (
-    <div
+    <button
+      type="button"
+      aria-pressed={isActive}
       onClick={() => onClick(value)}
       className={cn(
-        "relative cursor-pointer overflow-hidden rounded-[8px] px-2 py-1.5 text-center text-base leading-6 font-semibold tracking-[-0.16px] text-white",
+        "relative cursor-pointer overflow-hidden rounded-[8px] px-2 py-1.5 text-center text-base font-semibold",
         isActive
-          ? "text-primary-medium after:bg-primary-medium bg-[linear-gradient(90deg,rgba(13,30,48,0.8)_0%,rgba(13,30,48,0.8)_100%),linear-gradient(90deg,#A8E8BB_0%,#A8E8BB_100%)] after:absolute after:right-[19.64%] after:bottom-0 after:left-[19.64%] after:h-[3px] after:rounded-full after:content-['']"
+          ? "bg-background-surface/80 text-primary-medium after:bg-primary-medium after:absolute after:right-[19.64%] after:bottom-0 after:left-[19.64%] after:h-[3px] after:rounded-full after:content-['']"
           : "text-hint",
       )}
     >
       {label}
-    </div>
+    </button>
   );
 };
 
@@ -58,7 +60,7 @@ const ActiveTabContainer = ({
   return (
     <div
       className={cn(
-        "flex w-max rounded-xl bg-[rgba(255,255,255,0.04)] p-1",
+        "bg-surface-overlay-subtle flex w-max rounded-xl p-1",
         className,
       )}
     >

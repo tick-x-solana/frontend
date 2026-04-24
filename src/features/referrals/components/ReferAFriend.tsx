@@ -3,9 +3,8 @@
 import Image from "next/image";
 import { CopyOutlineIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
+import { REFERRAL_LINK } from "@/src/features/referrals/constants";
 import { toast } from "sonner";
-
-const REFERRAL_LINK = "https://tickx.net/ref/02Q8qJK4M";
 
 const SOCIAL_LINKS = [
   { key: "facebook-main", href: "#", label: "Share on Facebook" },
