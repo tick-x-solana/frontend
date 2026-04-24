@@ -304,24 +304,9 @@ export const useGameStore = create<GameState>((set) => ({
   updateGrid: (remoteCells) =>
     set((state) => {
       if (!Array.isArray(remoteCells)) return {};
-      let nextServerTimeOffset = state.serverTimeOffset;
-
-      const latestGridTs = remoteCells.reduce<number | null>((latest, cell) => {
-        const gridTs = toMsIfFinite(cell.gridTs);
-        if (gridTs === null) return latest;
-        if (latest === null || gridTs > latest) return gridTs;
-        return latest;
-      }, null);
-
-      if (latestGridTs !== null) {
-        const observedOffset = latestGridTs - Date.now();
-        nextServerTimeOffset = blendServerOffset(
-          state.serverTimeOffset,
-          observedOffset,
-        );
-      }
-
-      const now = getServerNow(nextServerTimeOffset);
+      // gridTs can represent grid window anchors (often in the future), not
+      // authoritative server "now". Sync clock only from price timestamps.
+      const now = getServerNow(state.serverTimeOffset);
       const chartTime = getLatestChartTime(state.history, now);
       const hideThresholdTime = getCellHideThresholdTime(chartTime);
       const existingCellById = new Map(state.cells.map((cell) => [cell.id, cell]));
@@ -376,7 +361,6 @@ export const useGameStore = create<GameState>((set) => ({
 
       return {
         cells: [...retainedCells, ...incomingCells].sort(sortGridCells),
-        serverTimeOffset: nextServerTimeOffset,
       };
     }),
 
@@ -417,11 +401,13 @@ export const useGameStore = create<GameState>((set) => ({
 
       const nextCells: CellData[] = state.cells.map((cell) => {
         const hasBet = (nextBets[cell.id] || 0) > 0;
+        const hasSettledOutcome = nextSettledOutcomes[cell.id] !== undefined;
         const isPast = now >= cell.timeWindowEnd;
+        const chartReachedCell = now >= cell.timeWindowStart;
         let nextStatus: CellData["status"] = isPast ? "past" : "active";
         const settledOutcome = nextSettledOutcomes[cell.id];
 
-        if (!hasBet) {
+        if (!hasBet && !hasSettledOutcome) {
           if (cell.status !== nextStatus) {
             changed = true;
             return { ...cell, status: nextStatus };
@@ -429,7 +415,7 @@ export const useGameStore = create<GameState>((set) => ({
           return cell;
         }
 
-        if (isPast && settledOutcome) {
+        if (settledOutcome) {
           if (settledOutcome.isWin) {
             nextStatus = "hit";
             if (!settledOutcome.revealed) {
@@ -452,6 +438,11 @@ export const useGameStore = create<GameState>((set) => ({
               changed = true;
             }
           }
+        } else if (chartReachedCell) {
+          // Show immediate loss feedback when chart reaches the bet cell but
+          // no settled outcome has arrived yet; a later WIN update can still
+          // override this to "hit".
+          nextStatus = "lose";
         } else if (cell.status === "hit" || cell.status === "lose") {
           nextStatus = cell.status;
         }
@@ -491,6 +482,13 @@ export const useGameStore = create<GameState>((set) => ({
       const amount = toFiniteNumber(record.amount);
       const rewardRate = resolveRewardRate(payload);
       const rewardRateNum = toFiniteNumber(rewardRate);
+      const statusIsWin = status === "WIN" || status === "WON";
+      const statusIsLose =
+        status === "LOSE" ||
+        status === "LOST" ||
+        status === "FAIL" ||
+        status === "FAILED";
+      const isSettled = status === "SETTLED" || statusIsWin || statusIsLose;
 
       const nextPendingBets = { ...state.pendingBets };
       const nextBets = { ...state.bets };
@@ -507,26 +505,34 @@ export const useGameStore = create<GameState>((set) => ({
         changed = true;
       }
 
-      const isSettled = status === "SETTLED";
       if (isSettled) {
         const settledWinRaw = record.settledWin ?? record.outcome;
         const settledWinText = toNonEmptyString(settledWinRaw)?.toUpperCase();
         const hasExplicitOutcome =
           settledWinRaw !== undefined && settledWinRaw !== null;
-        const isWin =
+        const outcomeIsWin =
           settledWinRaw === true ||
           settledWinText === "TRUE" ||
-          settledWinText === "WIN" ||
-          status === "WIN";
+          settledWinText === "WIN";
+        const outcomeIsLose =
+          settledWinRaw === false ||
+          settledWinText === "FALSE" ||
+          settledWinText === "LOSE" ||
+          settledWinText === "LOST" ||
+          settledWinText === "FAIL" ||
+          settledWinText === "FAILED";
 
-        if (hasExplicitOutcome) {
-          nextSettledOutcomes[cellId] = {
-            isWin,
-            revealed: nextSettledOutcomes[cellId]?.revealed ?? false,
-          };
-        }
+        const hasOutcomeSignal = hasExplicitOutcome || statusIsWin || statusIsLose;
+        const isWin = statusIsWin || (outcomeIsWin && !statusIsLose);
+        const isLose = statusIsLose || (outcomeIsLose && !statusIsWin);
+        const resolvedIsWin = hasOutcomeSignal ? isWin && !isLose : false;
 
-        if (hasExplicitOutcome && isWin) {
+        nextSettledOutcomes[cellId] = {
+          isWin: resolvedIsWin,
+          revealed: nextSettledOutcomes[cellId]?.revealed ?? false,
+        };
+
+        if (resolvedIsWin) {
           const baseAmount = amount ?? nextBets[cellId] ?? nextPendingBets[cellId] ?? 0;
           if (baseAmount > 0) {
             const mult =
@@ -535,7 +541,7 @@ export const useGameStore = create<GameState>((set) => ({
               0;
             nextPendingWins[cellId] = baseAmount * Math.max(mult, 0);
           }
-        } else if (hasExplicitOutcome) {
+        } else {
           delete nextPendingWins[cellId];
         }
 
@@ -554,22 +560,27 @@ export const useGameStore = create<GameState>((set) => ({
         changed = true;
       }
 
-      const nextCells = rewardRate
-        ? state.cells.map((cell) => {
-            if (cell.id !== cellId) return cell;
-            const resolvedMultiplier =
-              rewardRateNum !== null ? rewardRateNum : cell.multiplier;
-            changed = true;
-            return {
-              ...cell,
-              multiplier: resolvedMultiplier,
-              original: {
-                ...cell.original,
-                rewardRate,
-              },
-            };
-          })
-        : state.cells;
+      const nextCells = state.cells.map((cell) => {
+        if (cell.id !== cellId) return cell;
+
+        const nextCell: CellData = { ...cell };
+        if (rewardRate) {
+          const resolvedMultiplier =
+            rewardRateNum !== null ? rewardRateNum : cell.multiplier;
+          nextCell.multiplier = resolvedMultiplier;
+          nextCell.original = {
+            ...cell.original,
+            rewardRate,
+          };
+        }
+
+        if (isSettled) {
+          nextCell.status = nextSettledOutcomes[cellId]?.isWin ? "hit" : "lose";
+        }
+
+        changed = true;
+        return nextCell;
+      });
 
       if (!changed) return state;
 

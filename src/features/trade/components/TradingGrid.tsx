@@ -918,7 +918,7 @@ export const TradingGrid: React.FC = () => {
     );
     const store = storeRef.current;
     const isMobile = isMobileRef.current;
-    const drawStore = {
+    const animatedPriceStore = {
       ...store,
       history: buildDisplayHistory(
         store.history,
@@ -933,10 +933,12 @@ export const TradingGrid: React.FC = () => {
     ctx.fillStyle = COLOR_BG;
     ctx.fillRect(0, 0, layout.w, layout.h);
 
-    drawBackgroundGrid(ctx, layout, drawStore);
-    drawBetCells(ctx, layout, drawStore, isMobile, previewCellIdRef.current);
-    drawPriceLine(ctx, layout, drawStore);
-    drawPriceAxis(ctx, layout, drawStore, isMobile);
+    drawBackgroundGrid(ctx, layout, store);
+    // Bet-cell visibility/selection must track real server ticks, not the
+    // interpolated display point used for smoother line animation.
+    drawBetCells(ctx, layout, store, isMobile, previewCellIdRef.current);
+    drawPriceLine(ctx, layout, animatedPriceStore);
+    drawPriceAxis(ctx, layout, animatedPriceStore, isMobile);
     drawTimeAxis(ctx, layout, isMobile);
     drawZoomIndicator(ctx, layout, tf.zoom);
 
@@ -993,7 +995,8 @@ export const TradingGrid: React.FC = () => {
         const hasOpenBetState =
           Object.keys(state.pendingBets).length > 0 ||
           Object.keys(state.bets).length > 0 ||
-          Object.keys(state.pendingWins).length > 0;
+          Object.keys(state.pendingWins).length > 0 ||
+          Object.keys(state.settledOutcomes).length > 0;
         if (hasOpenBetState) {
           const chartTime = getLatestChartTime(state.history, nowRef.current);
           state.checkWinEffects(chartTime);

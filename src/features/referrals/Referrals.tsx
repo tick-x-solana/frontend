@@ -12,9 +12,7 @@ import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
 import ReferralsHeader from "@/src/features/referrals/components/ReferralsHeader";
 import UserRefInfo from "@/src/features/referrals/components/UserRefInfo";
 import { REFERRAL_LINK } from "@/src/features/referrals/constants";
-import useWorldMiniAppChatPay, {
-  getWorldChatDeeplinkUrl,
-} from "@/src/hooks/useWorldMiniAppChatPay";
+import useWorldMiniAppChatPay from "@/src/hooks/useWorldMiniAppChatPay";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { useGameStore } from "@/src/features/trade/store";
@@ -54,6 +52,30 @@ const Referrals = () => {
     })}`;
   }, [balance]);
 
+  const shareToChat = async () => {
+    if (!MiniKit.isInWorldApp()) {
+      console.warn("[Referrals] MiniKit.chat is only available in World App");
+      return;
+    }
+
+    const recipientInput = "@andy";
+    const recipient = recipientInput?.trim().replace(/^@/, "");
+    console.log("recipient: ", recipient);
+
+    if (!recipient) {
+      console.warn("[Referrals] Share cancelled: invalid recipient");
+      return;
+    }
+
+    const input = {
+      message: WORLD_CHAT_SHARE_MESSAGE,
+      to: [recipient],
+    } satisfies MiniKitChatOptions;
+
+    const result = await MiniKit.chat(input);
+    console.log("[Referrals] MiniKit.chat result", { result });
+  };
+
   return (
     <div className="bg-background-main relative overflow-hidden px-4 py-5 md:px-6 md:py-6">
       <Image
@@ -88,66 +110,9 @@ const Referrals = () => {
       <Button
         onClick={() => {
           console.log("[Referrals] Share chat button clicked");
-
-          const recipientInput = window.prompt(
-            "Enter recipient World username (without @):",
-          );
-          if (!recipientInput) {
-            console.warn("[Referrals] Share cancelled: no recipient username");
-            return;
-          }
-          const recipientUsername = recipientInput.trim().replace(/^@/, "");
-          if (!recipientUsername) {
-            console.warn("[Referrals] Share cancelled: invalid username");
-            return;
-          }
-
-          const worldChatDeeplink = getWorldChatDeeplinkUrl({
-            username: recipientUsername,
-            message: WORLD_CHAT_SHARE_MESSAGE,
+          void shareToChat().catch((error: unknown) => {
+            console.error("[Referrals] MiniKit.chat failed", { error });
           });
-
-          if (!MiniKit.isInWorldApp()) {
-            console.warn(
-              "[Referrals] Not in World App, opening World Chat deeplink",
-            );
-            window.location.assign(worldChatDeeplink);
-            return;
-          }
-
-          const input = {
-            message: WORLD_CHAT_SHARE_MESSAGE,
-            to: [recipientUsername],
-          } satisfies MiniKitChatOptions;
-
-          console.log("input: ", input);
-          void MiniKit.chat(input)
-            .then((result) => {
-              if (result.data.status === "success") {
-                console.log("[Referrals] MiniKit.chat resolved", {
-                  count: result.data.count,
-                  result,
-                });
-                return;
-              }
-
-              console.warn("[Referrals] MiniKit.chat non-success payload", {
-                result,
-              });
-            })
-            .catch((error: unknown) => {
-              console.error("[Referrals] MiniKit.chat failed", { error });
-
-              if (
-                error instanceof Error &&
-                error.name === "CommandUnavailableError"
-              ) {
-                console.warn(
-                  "[Referrals] chat command unavailable, opening World Chat deeplink",
-                );
-                window.location.assign(worldChatDeeplink);
-              }
-            });
         }}
       >
         Share chat

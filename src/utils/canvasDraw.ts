@@ -83,6 +83,17 @@ function hasChartReachedColumn(chartX: number, columnX: number) {
   return chartX >= columnX - 0.5;
 }
 
+function getClosingFadeAlpha(
+  cellStartTs: number,
+  now: number,
+  closingMs: number,
+): number {
+  const remainingMs = Math.max(0, cellStartTs - now);
+  const ratio = clamp(remainingMs / closingMs, 0, 1);
+  // At the closing boundary keep full opacity; near chart head fade down.
+  return 0.35 + ratio * 0.65;
+}
+
 function getPriceAxisMetrics(
   ctx: CanvasRenderingContext2D,
   layout: GridLayout,
@@ -270,6 +281,10 @@ export function drawBetCells(
 
     const isFuture = cell.timeWindowStart > hideThresholdTime;
     const isNext = isFuture && cell.timeWindowStart - now <= CLOSING_MS;
+    const nextCellFadeAlpha =
+      isNext && !hasAnyBet
+        ? getClosingFadeAlpha(cell.timeWindowStart, now, CLOSING_MS)
+        : 1;
     const isSelectedColumn =
       selectedColumnStart !== null &&
       cell.timeWindowStart === selectedColumnStart;
@@ -324,7 +339,7 @@ export function drawBetCells(
         multiplier: followedActivity.multiplier,
         initials: getUserInitials(followedActivity.targetUserId),
       });
-    } else if (isHit && hasAnyBet) {
+    } else if (isHit) {
       _drawWinCell(ctx, {
         x: cx,
         y: cellTop,
@@ -339,7 +354,7 @@ export function drawBetCells(
         detailTxt: formatMultiplier(Number(cell.original.rewardRate)),
         isMobile,
       });
-    } else if (isLose && hasAnyBet) {
+    } else if (isLose) {
       _drawLoseCell(ctx, {
         x: cx,
         y: cellTop,
@@ -351,7 +366,9 @@ export function drawBetCells(
         cellRight: cx + cw,
         cellSize,
         multiplier: cell.multiplier,
-        detailTxt: `$${betAmountFormatter.format(displayBetAmount)}`,
+        detailTxt: hasAnyBet
+          ? `$${betAmountFormatter.format(displayBetAmount)}`
+          : "Settled",
         isMobile,
       });
     } else if (!isPast && hasAnyBet) {
@@ -368,12 +385,6 @@ export function drawBetCells(
         multTxt: formatMultiplier(cell.multiplier),
         displayBetAmount,
       });
-    } else if (isNext && !hasAnyBet) {
-      ctx.fillStyle = "rgba(246,70,93,0.06)";
-      ctx.fillRect(rx, ry, rw, rh);
-    } else if (isSelectedColumn && !hasAnyBet) {
-      ctx.fillStyle = "rgba(246,70,93,0.06)";
-      ctx.fillRect(rx, ry, rw, rh);
     }
 
     // Subtle outer border (always)
@@ -410,14 +421,14 @@ export function drawBetCells(
         ? COLOR_BLUE
         : isLose && hasAnyBet
           ? COLOR_RED_SOFT
-          : isHit && hasAnyBet
+        : isHit && hasAnyBet
           ? COLOR_GREEN
           : isNext && !hasAnyBet
-            ? COLOR_RED
+            ? `rgba(83,117,155,${0.42 + nextCellFadeAlpha * 0.3})`
             : cell.multiplier >= 100
               ? COLOR_RED
               : isSelectedColumn
-                ? COLOR_RED
+                ? COLOR_BLUE_SOFT
                 : cell.multiplier >= 10
                   ? COLOR_BLUE
                   : COLOR_TEXT_DIM;
@@ -457,11 +468,17 @@ export function drawBetCells(
       }
       if (needsClip) ctx.restore();
       continue;
-    } else if (isHit && hasAnyBet) {
+    } else if (isHit) {
+      if (needsClip) ctx.restore();
+      continue;
+    } else if (isLose) {
       if (needsClip) ctx.restore();
       continue;
     } else {
       // Plain multiplier
+      if (isNext && !hasAnyBet) {
+        ctx.globalAlpha = nextCellFadeAlpha;
+      }
       ctx.font = `${fontSize}px monospace`;
       ctx.fillStyle = multColor;
       ctx.fillText(multTxt, textX, textY);
@@ -482,6 +499,7 @@ export function drawBetCells(
           ctx.fill();
         }
       }
+      ctx.globalAlpha = 1;
     }
 
     ctx.shadowBlur = 0;
