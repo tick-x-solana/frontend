@@ -6,10 +6,17 @@ import { useAuth } from "@/src/components/providers/AuthProvider";
 import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
 import useDepositWithdraw from "@/src/hooks/useDepositWithdraw";
+import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
 import { useAccountControllerGetBalance } from "@/src/services/queries";
 import { ArrowLeft, ArrowUpDown, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
-import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Sheet } from "react-modal-sheet";
 import { toast } from "sonner";
 
@@ -117,17 +124,21 @@ const WalletActionPanel = () => {
         maximumFractionDigits: 2,
       });
 
+  const { miniAppUsername: worldUsername } = useMiniAppUsername({
+    username,
+    walletAddress,
+    logPrefix: "[WalletActionPanel]",
+  });
+
   const displayIdentity = useMemo(() => {
-    if (username) {
-      return `@${username}`;
+    const identity = worldUsername ?? username?.trim();
+    if (!identity) {
+      return "Unknown user";
     }
 
-    if (!walletAddress) {
-      return "Not connected";
-    }
-
-    return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
-  }, [username, walletAddress]);
+    return `@${identity}`;
+  }, [worldUsername, username]);
+  const hasVerifiedUsername = Boolean(worldUsername ?? username?.trim());
 
   const displayBalance = useMemo(() => {
     const apiBalance = extractBalance(balanceResponse);
@@ -266,7 +277,7 @@ const WalletActionPanel = () => {
               <p className="text-text-main text-sm font-medium tracking-[-0.01em]">
                 {displayIdentity}
               </p>
-              {username ? (
+              {hasVerifiedUsername ? (
                 <Image
                   src="/onboarding/verified-badge.svg"
                   alt="Verified badge"

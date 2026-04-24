@@ -283,10 +283,11 @@ function isWinRow(item: TradingHistoryItem): boolean {
 }
 
 const TradingHistoryTable = () => {
-  const { isAuthenticated, isLoggingIn, walletAddress } = useAuth();
+  const { isAuthenticated, isLoggingIn, username, walletAddress } = useAuth();
   const { data: wldUsdPrice } = useWldUsdPrice(isAuthenticated && !isLoggingIn);
   const { isSharing, shareUrl, copyShareLink, share, shareToWorldChat } =
-    useWinShareActions({ walletAddress });
+    useWinShareActions({ username, walletAddress });
+  console.log("shareUrl: ", shareUrl);
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
   const [shareItemId, setShareItemId] = useState<string | null>(null);
 

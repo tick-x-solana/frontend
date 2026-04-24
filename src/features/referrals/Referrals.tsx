@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Image from "next/image";
 import { MiniKit } from "@worldcoin/minikit-js";
 import type { MiniKitChatOptions } from "@worldcoin/minikit-js/commands";
@@ -14,6 +14,7 @@ import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { useGameStore } from "@/src/features/trade/store";
+import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
 import { useAccountControllerGetBalance } from "@/src/services/queries";
 import { toast } from "sonner";
 
@@ -79,63 +80,22 @@ const Referrals = () => {
     })}`;
   }, [resolvedBalance]);
 
-  const resolveMiniAppUsername = useCallback(async () => {
-    const authUsername = username?.trim();
-    if (authUsername) {
-      return authUsername;
-    }
+  const { miniAppUsername, refreshMiniAppUsername } = useMiniAppUsername({
+    username,
+    walletAddress,
+    logPrefix: "[Referrals]",
+  });
 
-    const directUsername = MiniKit.user?.username?.trim();
-    if (directUsername) {
-      return directUsername;
-    }
-
-    const resolvedAddress =
-      MiniKit.user?.walletAddress ?? walletAddress ?? undefined;
-    if (!resolvedAddress) {
-      return null;
-    }
-
-    try {
-      return (
-        (await MiniKit.getUserByAddress(resolvedAddress)).username?.trim() ||
-        null
-      );
-    } catch (error) {
-      console.warn("[Referrals] Failed to resolve username", { error });
-      return null;
-    }
-  }, [username, walletAddress]);
-
-  const [worldId, setWorldId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const syncWorldId = async () => {
-      const username = await resolveMiniAppUsername();
-      if (!cancelled) {
-        setWorldId(username);
-      }
-    };
-
-    void syncWorldId();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [resolveMiniAppUsername]);
-
-  const referralLink = buildMiniAppReferralLink(worldId ?? username);
+  const referralLink = buildMiniAppReferralLink(miniAppUsername ?? username);
   const displayUsername = useMemo(() => {
-    const identity = worldId ?? username;
+    const identity = miniAppUsername ?? username;
     if (!identity) {
       return "Unknown user";
     }
 
     return `@${identity}`;
-  }, [worldId, username]);
-  const hasVerifiedUsername = Boolean(worldId ?? username);
+  }, [miniAppUsername, username]);
+  const hasVerifiedUsername = Boolean(miniAppUsername ?? username);
 
   const shareToChat = async () => {
     try {
@@ -144,25 +104,23 @@ const Referrals = () => {
         return;
       }
 
-      const miniAppUsername = await resolveMiniAppUsername();
+      const resolvedMiniAppUsername = await refreshMiniAppUsername();
 
-      if (!miniAppUsername) {
+      if (!resolvedMiniAppUsername) {
         toast.error("Missing World username. Please set your username first.");
         return;
       }
 
-      if (miniAppUsername !== worldId) {
-        setWorldId(miniAppUsername);
-      }
-
-      const miniAppReferralLink = buildMiniAppReferralLink(miniAppUsername);
+      const miniAppReferralLink = buildMiniAppReferralLink(
+        resolvedMiniAppUsername,
+      );
       console.log("miniAppReferralLink: ", miniAppReferralLink);
 
       // World Chat can unfurl URLs and hide them in the text bubble, so include a
       // plain referral code line that always remains visible.
       const message = [
         "Use my referral to follow trade on TickX.",
-        `Referral code: ${miniAppUsername}`,
+        `Referral code: ${resolvedMiniAppUsername}`,
         `Link: ${miniAppReferralLink}`,
       ].join("\n");
 
@@ -239,7 +197,7 @@ const Referrals = () => {
           <div className="flex flex-col gap-5 pb-4">
             <ReferralsHeader
               onShareToChat={() => void shareToChat()}
-              worldId={worldId}
+              worldId={miniAppUsername}
             />
             <ReferAFriend referralLink={referralLink} />
             <HowItWork />

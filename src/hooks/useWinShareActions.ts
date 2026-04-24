@@ -4,21 +4,30 @@ import { useCallback, useMemo, useState } from "react";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
 import { appToast } from "@/src/features/trade/toast";
+import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
 
 type UseWinShareActionsParams = {
+  username?: string | null;
   walletAddress?: string | null;
   resolvedUserAddress?: string | null;
 };
 
 function useWinShareActions({
+  username,
   walletAddress,
   resolvedUserAddress,
 }: UseWinShareActionsParams = {}) {
   const [isSharing, setIsSharing] = useState(false);
-  const miniAppUsername = MiniKit.user?.username?.trim() ?? null;
+  const { miniAppUsername, refreshMiniAppUsername } = useMiniAppUsername({
+    username,
+    walletAddress,
+    resolvedUserAddress,
+    logPrefix: "[useWinShareActions]",
+  });
+
   const shareUrl = useMemo(
-    () => buildMiniAppReferralLink(miniAppUsername),
-    [miniAppUsername],
+    () => buildMiniAppReferralLink(miniAppUsername ?? username),
+    [miniAppUsername, username],
   );
 
   const copyShareLink = useCallback(async () => {
@@ -66,23 +75,17 @@ function useWinShareActions({
         return;
       }
 
-      const resolvedAddress =
-        MiniKit.user?.walletAddress ?? walletAddress ?? resolvedUserAddress;
-      const miniAppUsername =
-        MiniKit.user?.username?.trim() ??
-        (resolvedAddress
-          ? (await MiniKit.getUserByAddress(resolvedAddress)).username?.trim()
-          : undefined);
+      const resolvedMiniAppUsername = await refreshMiniAppUsername();
 
-      if (!miniAppUsername) {
+      if (!resolvedMiniAppUsername) {
         appToast.error("Missing World username", { icon: "⚠️" });
         return;
       }
 
-      const referralLink = buildMiniAppReferralLink(miniAppUsername);
+      const referralLink = buildMiniAppReferralLink(resolvedMiniAppUsername);
       const message = [
         "Use my referral to follow trade on TickX.",
-        `Referral code: ${miniAppUsername}`,
+        `Referral code: ${resolvedMiniAppUsername}`,
         `Link: ${referralLink}`,
       ].join("\n");
 
@@ -91,7 +94,7 @@ function useWinShareActions({
       console.error("Failed to share to WorldChat", error);
       appToast.error("Failed to share to WorldChat", { icon: "⚠️" });
     }
-  }, [resolvedUserAddress, walletAddress]);
+  }, [refreshMiniAppUsername]);
 
   return {
     isSharing,

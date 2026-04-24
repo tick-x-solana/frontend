@@ -4,6 +4,7 @@ import Image from "next/image";
 import { CopyOutlineIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
 import { toast } from "sonner";
+import { useAuth } from "@/src/components/providers/AuthProvider";
 
 const SOCIAL_LINKS = [
   { key: "facebook-main", href: "#", label: "Share on Facebook" },
@@ -28,6 +29,8 @@ const ReferAFriend = ({ referralLink }: ReferAFriendProps) => {
       toast.error("Failed to copy referral link");
     }
   };
+
+  const { logout } = useAuth();
 
   return (
     <section className="border-border-main bg-surface-card flex w-full max-w-full flex-col gap-4 rounded-[14px] border p-4 shadow-[0_16px_32px_rgba(0,0,0,0.16)]">
@@ -76,6 +79,7 @@ const ReferAFriend = ({ referralLink }: ReferAFriendProps) => {
       <Button
         type="button"
         className="bg-primary-light text-text-inverse hover:bg-primary-medium h-11 w-full rounded-[10px] px-3 text-sm font-semibold tracking-[-0.01em] shadow-none"
+        onClick={() => logout()}
       >
         Invite Friends
       </Button>

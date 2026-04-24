@@ -354,7 +354,7 @@ const StepThree = ({ onEnterApp }: StepThreeProps) => {
                 ? "Verified"
                 : "Verify with World ID"}
           </Button>
-          {verifyStatus !== "loading" && (
+          {verifyStatus !== "loading" && verifyStatus !== "success" && (
             <Button
               type="button"
               variant="ghost"
@@ -398,7 +398,13 @@ const AuthGate = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const wasAuthenticated = wasAuthenticatedRef.current;
-    if (!wasAuthenticated && isAuthenticated && pathname !== "/") {
+    const isReferralPath = pathname === "/ref" || pathname.startsWith("/ref/");
+    if (
+      !wasAuthenticated &&
+      isAuthenticated &&
+      pathname !== "/" &&
+      !isReferralPath
+    ) {
       router.replace("/");
     }
 

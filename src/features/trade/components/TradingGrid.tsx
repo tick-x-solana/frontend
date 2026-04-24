@@ -552,7 +552,7 @@ export const TradingGrid: React.FC = () => {
   const balance = useGameStore((s) => s.balance);
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
   const { address } = useAccount();
-  const { isAuthenticated, isLoggingIn, walletAddress } = useAuth();
+  const { isAuthenticated, isLoggingIn, username, walletAddress } = useAuth();
   const isMiniApp = MiniKit.isInWorldApp();
   const miniKitWalletAddress = isMiniApp
     ? (MiniKit.user?.walletAddress ?? null)
@@ -780,6 +780,7 @@ export const TradingGrid: React.FC = () => {
   const [shareCellId, setShareCellId] = useState<string | null>(null);
   const { isSharing, shareUrl, copyShareLink, share, shareToWorldChat } =
     useWinShareActions({
+      username,
       walletAddress,
       resolvedUserAddress,
     });
