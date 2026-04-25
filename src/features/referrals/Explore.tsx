@@ -91,7 +91,7 @@ const humanVaultDataset: VaultDataset = {
   ],
   userVaults: [
     [
-      { label: "Vault", value: "[ Systemic Strategies] HyperGrowth" },
+      { label: "Vault", value: "Primary Vault" },
       { label: "Leader", value: "0x2b80...6f6b" },
       { label: "APR", value: "-0.19%", valueClassName: "text-red-400" },
       { label: "TVL", value: "$12,340.00" },
@@ -126,8 +126,8 @@ const agentVaultDataset: VaultDataset = {
   ],
   userVaults: [
     [
-      { label: "Vault", value: "Agent Aave Auto-Rollover" },
-      { label: "Leader", value: "agent-aave-03" },
+      { label: "Vault", value: "Agent Auto-Rollover" },
+      { label: "Leader", value: "agent-03" },
       { label: "APR", value: "4.95%" },
       { label: "TVL", value: "$18,900" },
       { label: "Your Deposit", value: "$0.00" },
@@ -630,13 +630,6 @@ const Explore = () => {
               <p className="text-text-main text-[32px] font-semibold tracking-[-0.01em]">
                 {activeVaultDataset.totalValueLocked}
               </p>
-            </section>
-
-            <section className="flex flex-col gap-2">
-              <SectionTitle>Protocol Vaults</SectionTitle>
-              {activeVaultDataset.protocolVaults.map((rows, index) => (
-                <KVCard key={`protocol-${index}`} rows={rows} />
-              ))}
             </section>
 
             <section className="flex flex-col gap-2">
