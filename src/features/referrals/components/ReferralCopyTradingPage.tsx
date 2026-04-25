@@ -3,13 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { MiniKit } from "@worldcoin/minikit-js";
-import {
-  ArrowLeft,
-  CircleDollarSign,
-  Gauge,
-  TrendingUp,
-  UsersRound,
-} from "lucide-react";
+import { ArrowLeft, Star, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/src/components/shadcn/button";
@@ -227,45 +221,6 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
     selectedProfile,
   ]);
 
-  const selectedProfileStats = useMemo(() => {
-    if (!selectedProfile) {
-      return [];
-    }
-
-    return [
-      {
-        label: "Win rate",
-        value: selectedProfile.winRate,
-        Icon: Gauge,
-        valueClassName: "text-success-medium",
-      },
-      {
-        label: "ROI",
-        value: selectedProfile.roi,
-        Icon: TrendingUp,
-        valueClassName:
-          selectedProfile.roi.trim().startsWith("-")
-            ? "text-error-medium"
-            : "text-success-medium",
-      },
-      {
-        label: "7D PnL",
-        value: selectedProfile.pnl7d,
-        Icon: CircleDollarSign,
-        valueClassName:
-          selectedProfile.pnl7d.trim().startsWith("-")
-            ? "text-error-medium"
-            : "text-text-heading",
-      },
-      {
-        label: "Slots",
-        value: selectedProfile.slots,
-        Icon: UsersRound,
-        valueClassName: "text-text-heading",
-      },
-    ];
-  }, [selectedProfile]);
-
   return (
     <section className="bg-background-main mx-auto flex min-h-[100dvh] w-full max-w-[393px] flex-col">
       <div className="flex flex-col gap-2 px-4 pt-5 pb-4">
@@ -308,90 +263,108 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
 
       <Dialog open={isPayModalOpen} onOpenChange={handlePayModalOpenChange}>
         <DialogContent className="pointer-events-none">
-          <div className="border-border-main pointer-events-auto w-full max-w-[760px] rounded-[20px] border bg-[linear-gradient(112deg,var(--background-main)_0%,var(--surface-card-strong)_62%,var(--background-main)_100%)] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.35)] sm:p-6">
-            <div className="flex flex-col gap-5 sm:gap-6">
-              <DialogTitle className="text-text-heading text-lg font-semibold tracking-[-0.01em] sm:text-2xl">
-                Start Follow Trade
-              </DialogTitle>
+          <div className="border-border-main pointer-events-auto w-full max-w-[393px] rounded-[20px] border bg-[linear-gradient(112deg,var(--background-main)_0%,var(--surface-card-strong)_62%,var(--background-main)_100%)] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+            <DialogTitle className="sr-only">Start Follow Trade</DialogTitle>
+            <DialogDescription className="sr-only">
+              Confirm follow trade for {selectedProfile?.name}
+            </DialogDescription>
 
-              <DialogDescription className="text-text-sub text-sm font-medium tracking-[-0.01em] sm:text-base">
-                You need to pay {COPY_TRADE_PAYMENT_AMOUNT_WLD} WLD to start
-                follow trading this profile.
-              </DialogDescription>
-
-              {selectedProfile ? (
-                <div className="bg-surface-overlay-subtle border-border-main flex flex-col gap-4 rounded-[14px] border p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
-                        Selected profile
-                      </p>
-                      <p className="text-text-heading truncate text-base font-semibold tracking-[-0.01em] sm:text-lg">
-                        {selectedProfile.name}
-                      </p>
+            {selectedProfile ? (
+              <div className="flex flex-col gap-3">
+                {/* Header: avatar + name + slots + star */}
+                <div className="flex items-start gap-3">
+                  <div className="relative shrink-0">
+                    <div className="bg-primary-light text-text-inverse flex size-10 items-center justify-center rounded-full text-sm font-semibold tracking-[-0.01em]">
+                      {selectedProfile.initials}
                     </div>
-                    <span className="bg-surface-overlay border-border-main text-text-sub rounded-[999px] border px-2 py-1 text-xs font-medium tracking-[-0.01em]">
-                      Follow target
-                    </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                    {selectedProfileStats.map((item) => (
-                      <div
-                        key={item.label}
-                        className="bg-background-main border-border-main rounded-[10px] border p-3"
-                      >
-                        <p className="text-text-sub mb-1 flex items-center gap-1.5 text-xs font-medium tracking-[-0.01em]">
-                          <item.Icon className="size-3.5" aria-hidden="true" />
-                          {item.label}
-                        </p>
-                        <p
-                          className={cn(
-                            "text-sm font-semibold tracking-[-0.01em] sm:text-base",
-                            item.valueClassName,
-                          )}
-                        >
-                          {item.value}
-                        </p>
-                      </div>
-                    ))}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-text-heading truncate text-base font-semibold tracking-[-0.01em]">
+                      {selectedProfile.name}
+                    </p>
+                    <div className="bg-surface-overlay-subtle mt-1 flex w-max items-center gap-1 rounded-[4px] px-1.5 py-0.5">
+                      <UsersRound className="text-hint size-3.5" aria-hidden="true" />
+                      <span className="text-text-sub text-sm font-medium tracking-[-0.01em]">
+                        {selectedProfile.slots}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="bg-background-main border-border-main rounded-[10px] border px-3 py-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
-                        Follow fee
-                      </p>
-                      <p className="text-text-heading text-sm font-semibold tracking-[-0.01em]">
-                        {COPY_TRADE_PAYMENT_AMOUNT_WLD} WLD
-                      </p>
-                    </div>
+                  <div className="text-reward-gold shrink-0">
+                    <Star className="size-5" fill="currentColor" aria-hidden="true" />
                   </div>
                 </div>
-              ) : null}
 
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-border-main text-text-inverse hover:text-text-inverse disabled:opacity-100 h-12 rounded-[12px] bg-white text-base font-medium tracking-[-0.01em] hover:bg-white/90 sm:h-12 sm:text-base"
-                  onClick={handleCloseCopyTradeModal}
-                  disabled={isPaying || isSubmittingFollow}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  className="border-border-main bg-surface-overlay text-text-heading hover:bg-surface-overlay-medium h-12 rounded-[12px] border text-base font-medium tracking-[-0.01em] sm:h-12 sm:text-base"
-                  onClick={() => void handleConfirmCopyTrade()}
-                  disabled={isPaying || isSubmittingFollow}
-                >
-                  {isPaying || isSubmittingFollow
-                    ? "Processing..."
-                    : "Pay & Start"}
-                </Button>
+                {/* Divider */}
+                <div className="bg-border-main h-px w-full" />
+
+                {/* Stats: Win rate / ROI / 7D PnL */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-text-sub text-sm font-medium tracking-[-0.01em]">Win rate</p>
+                    <p className="text-success-medium text-sm font-semibold tracking-[-0.01em]">
+                      {selectedProfile.winRate}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-text-sub text-sm font-medium tracking-[-0.01em]">ROI</p>
+                    <p
+                      className={cn(
+                        "text-sm font-semibold tracking-[-0.01em]",
+                        selectedProfile.roi.trim().startsWith("-")
+                          ? "text-error-medium"
+                          : "text-text-heading",
+                      )}
+                    >
+                      {selectedProfile.roi}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-text-sub text-sm font-medium tracking-[-0.01em]">7D PnL</p>
+                    <p
+                      className={cn(
+                        "text-sm font-semibold tracking-[-0.01em]",
+                        selectedProfile.pnl7d.trim().startsWith("-")
+                          ? "text-error-medium"
+                          : "text-text-heading",
+                      )}
+                    >
+                      {selectedProfile.pnl7d}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Fee row */}
+                <div className="bg-surface-overlay-subtle border-border-main flex items-center justify-between gap-2 rounded-[8px] border px-3 py-2">
+                  <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">Follow fee</p>
+                  <p className="text-text-heading text-sm font-semibold tracking-[-0.01em]">
+                    {COPY_TRADE_PAYMENT_AMOUNT_WLD} WLD
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-border-main text-text-inverse hover:text-text-inverse disabled:opacity-100 h-11 rounded-[8px] bg-white text-sm font-medium tracking-[-0.01em] hover:bg-white/90"
+                    onClick={handleCloseCopyTradeModal}
+                    disabled={isPaying || isSubmittingFollow}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-primary-light text-text-inverse hover:bg-primary-light/90 h-11 rounded-[8px] text-sm font-medium tracking-[-0.01em]"
+                    onClick={() => void handleConfirmCopyTrade()}
+                    disabled={isPaying || isSubmittingFollow}
+                  >
+                    {isPaying || isSubmittingFollow ? "Processing..." : "Copy Trade"}
+                  </Button>
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

@@ -28,16 +28,12 @@ import {
 } from "@/src/components/shadcn/dialog";
 import { cn } from "@/lib/utils";
 import {
-  Activity,
   Copy,
   Eye,
   Info,
   LocateFixed,
   Rocket,
   Share2,
-  ShieldCheck,
-  Target,
-  UsersRound,
   Wallet,
 } from "lucide-react";
 import Image from "next/image";
@@ -1087,25 +1083,19 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const followReferralStats = useMemo(
     () => [
       {
-        label: "Target",
-        // value: followReferralHandle ? `@${followReferralHandle}` : "Shared link",
-        value: "kyan13",
-        Icon: Target,
+        label: "Win rate",
+        value: "68%",
+        color: "text-success-medium",
       },
       {
-        label: "Market",
-        value: MARKET_SYMBOL,
-        Icon: Activity,
+        label: "ROI",
+        value: "+24.5%",
+        color: "text-text-heading",
       },
       {
-        label: "Following",
-        value: `${availableFollowTargets.length} KOLs`,
-        Icon: UsersRound,
-      },
-      {
-        label: "Status",
-        value: isFollowReferralAlreadyActive ? "Already following" : "Ready",
-        Icon: ShieldCheck,
+        label: "7D PnL",
+        value: "+343.5",
+        color: "text-text-heading",
       },
     ],
     [
@@ -2857,23 +2847,22 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                   </p>
                 ) : null}
 
-                <div className="grid grid-cols-2 gap-2">
-                  {followReferralStats.map((item) => (
+                <div className="flex items-center">
+                  {followReferralStats.map((item, index) => (
                     <div
                       key={item.label}
-                      className="bg-background-main border-border-main rounded-[10px] border p-2.5"
+                      className={cn(
+                        "flex flex-1 flex-col gap-1 px-3 first:pl-0 last:pr-0",
+                        index !== 0 && "border-border-main border-l",
+                      )}
                     >
-                      <p className="text-text-sub mb-1 flex items-center gap-1 text-[11px] font-medium tracking-[-0.01em]">
-                        <item.Icon className="size-3.5" aria-hidden="true" />
+                      <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
                         {item.label}
                       </p>
                       <p
                         className={cn(
-                          "text-text-heading text-xs font-semibold tracking-[-0.01em] sm:text-sm",
-                          item.label === "Status" &&
-                            isFollowReferralAlreadyActive
-                            ? "text-success-medium"
-                            : "",
+                          "text-sm font-semibold tracking-[-0.01em]",
+                          item.color,
                         )}
                       >
                         {item.value}
