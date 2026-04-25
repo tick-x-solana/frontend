@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { MiniKit } from "@worldcoin/minikit-js";
-import { ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  CircleDollarSign,
+  Gauge,
+  TrendingUp,
+  UsersRound,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/src/components/shadcn/button";
@@ -24,6 +30,7 @@ import {
   useOrderFollowControllerListFollowing,
   useOrderFollowControllerRegister,
 } from "@/src/services/queries";
+import { cn } from "@/lib/utils";
 
 const REFERRAL_CODE_STORAGE_KEY = "tickx-referral-code";
 const COPY_TRADE_PAYMENT_TO = "0x0cb3e84e2c4bf88032e2279e7dd11b4e75ba7303";
@@ -220,6 +227,45 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
     selectedProfile,
   ]);
 
+  const selectedProfileStats = useMemo(() => {
+    if (!selectedProfile) {
+      return [];
+    }
+
+    return [
+      {
+        label: "Win rate",
+        value: selectedProfile.winRate,
+        Icon: Gauge,
+        valueClassName: "text-success-medium",
+      },
+      {
+        label: "ROI",
+        value: selectedProfile.roi,
+        Icon: TrendingUp,
+        valueClassName:
+          selectedProfile.roi.trim().startsWith("-")
+            ? "text-error-medium"
+            : "text-success-medium",
+      },
+      {
+        label: "7D PnL",
+        value: selectedProfile.pnl7d,
+        Icon: CircleDollarSign,
+        valueClassName:
+          selectedProfile.pnl7d.trim().startsWith("-")
+            ? "text-error-medium"
+            : "text-text-heading",
+      },
+      {
+        label: "Slots",
+        value: selectedProfile.slots,
+        Icon: UsersRound,
+        valueClassName: "text-text-heading",
+      },
+    ];
+  }, [selectedProfile]);
+
   return (
     <section className="bg-background-main mx-auto flex min-h-[100dvh] w-full max-w-[393px] flex-col">
       <div className="flex flex-col gap-2 px-4 pt-5 pb-4">
@@ -262,21 +308,73 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
 
       <Dialog open={isPayModalOpen} onOpenChange={handlePayModalOpenChange}>
         <DialogContent className="pointer-events-none">
-          <div className="border-border-main pointer-events-auto w-full max-w-[760px] rounded-[20px] border bg-[linear-gradient(112deg,var(--background-main)_0%,var(--surface-card-strong)_62%,var(--background-main)_100%)] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)] md:p-8">
-            <div className="flex flex-col gap-5 sm:gap-7">
-              <DialogTitle className="text-text-heading text-lg font-semibold tracking-[-0.03em] sm:text-[42px]">
+          <div className="border-border-main pointer-events-auto w-full max-w-[760px] rounded-[20px] border bg-[linear-gradient(112deg,var(--background-main)_0%,var(--surface-card-strong)_62%,var(--background-main)_100%)] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.35)] sm:p-6">
+            <div className="flex flex-col gap-5 sm:gap-6">
+              <DialogTitle className="text-text-heading text-lg font-semibold tracking-[-0.01em] sm:text-2xl">
                 Start Follow Trade
               </DialogTitle>
-              <DialogDescription className="text-text-sub text-[14px] font-medium tracking-[-0.01em] sm:max-w-[620px] sm:text-[42px] sm:tracking-[-0.02em]">
+
+              <DialogDescription className="text-text-sub text-sm font-medium tracking-[-0.01em] sm:text-base">
                 You need to pay {COPY_TRADE_PAYMENT_AMOUNT_WLD} WLD to start
                 follow trading this profile.
               </DialogDescription>
+
+              {selectedProfile ? (
+                <div className="bg-surface-overlay-subtle border-border-main flex flex-col gap-4 rounded-[14px] border p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
+                        Selected profile
+                      </p>
+                      <p className="text-text-heading truncate text-base font-semibold tracking-[-0.01em] sm:text-lg">
+                        {selectedProfile.name}
+                      </p>
+                    </div>
+                    <span className="bg-surface-overlay border-border-main text-text-sub rounded-[999px] border px-2 py-1 text-xs font-medium tracking-[-0.01em]">
+                      Follow target
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    {selectedProfileStats.map((item) => (
+                      <div
+                        key={item.label}
+                        className="bg-background-main border-border-main rounded-[10px] border p-3"
+                      >
+                        <p className="text-text-sub mb-1 flex items-center gap-1.5 text-xs font-medium tracking-[-0.01em]">
+                          <item.Icon className="size-3.5" aria-hidden="true" />
+                          {item.label}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-sm font-semibold tracking-[-0.01em] sm:text-base",
+                            item.valueClassName,
+                          )}
+                        >
+                          {item.value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-background-main border-border-main rounded-[10px] border px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
+                        Follow fee
+                      </p>
+                      <p className="text-text-heading text-sm font-semibold tracking-[-0.01em]">
+                        {COPY_TRADE_PAYMENT_AMOUNT_WLD} WLD
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-border-main text-text-inverse hover:text-text-inverse disabled:opacity-100 h-12 rounded-[12px] bg-white text-base font-medium tracking-[-0.01em] hover:bg-white/90 sm:h-16 sm:rounded-[16px] sm:text-[42px] sm:tracking-[-0.02em]"
+                  className="border-border-main text-text-inverse hover:text-text-inverse disabled:opacity-100 h-12 rounded-[12px] bg-white text-base font-medium tracking-[-0.01em] hover:bg-white/90 sm:h-12 sm:text-base"
                   onClick={handleCloseCopyTradeModal}
                   disabled={isPaying || isSubmittingFollow}
                 >
@@ -284,7 +382,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
                 </Button>
                 <Button
                   type="button"
-                  className="border-border-main bg-surface-overlay text-text-heading hover:bg-surface-overlay-medium h-12 rounded-[12px] border text-base font-medium tracking-[-0.01em] sm:h-16 sm:rounded-[16px] sm:text-[42px] sm:tracking-[-0.02em]"
+                  className="border-border-main bg-surface-overlay text-text-heading hover:bg-surface-overlay-medium h-12 rounded-[12px] border text-base font-medium tracking-[-0.01em] sm:h-12 sm:text-base"
                   onClick={() => void handleConfirmCopyTrade()}
                   disabled={isPaying || isSubmittingFollow}
                 >

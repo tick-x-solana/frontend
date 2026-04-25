@@ -27,7 +27,19 @@ import {
   DialogTitle,
 } from "@/src/components/shadcn/dialog";
 import { cn } from "@/lib/utils";
-import { Copy, Eye, Info, LocateFixed, Rocket, Share2 } from "lucide-react";
+import {
+  Activity,
+  Copy,
+  Eye,
+  Info,
+  LocateFixed,
+  Rocket,
+  Share2,
+  ShieldCheck,
+  Target,
+  UsersRound,
+  Wallet,
+} from "lucide-react";
 import Image from "next/image";
 import { Sheet } from "react-modal-sheet";
 import { io } from "socket.io-client";
@@ -134,7 +146,19 @@ const FAKE_WIN_TOAST_MIN_DELAY_MS = 5000;
 const FAKE_WIN_TOAST_MAX_DELAY_MS = 20000;
 const FAKE_WIN_TOAST_VISIBLE_MS = 1000;
 const WIN_EFFECT_VISIBLE_MS = 2000;
-const HEX_DIGITS = "0123456789abcdef";
+const WIN_EFFECT_AMOUNTS_VISIBLE_MS = 850;
+const FAKE_WIN_USERNAME_PREFIXES = [
+  "lion",
+  "tiger",
+  "eagle",
+  "wolf",
+  "shark",
+  "falcon",
+  "phoenix",
+  "panther",
+  "cobra",
+  "rhino",
+] as const;
 const MARKET_SYMBOL = "BTC/USD";
 const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
 const BINANCE_HISTORY_URL =
@@ -152,10 +176,13 @@ type ShareOverlayTarget = {
   basePayout: number;
   bonusPayout: number;
 };
+type ActiveWinEffectState = {
+  startedAt: number;
+  showTotal: boolean;
+};
 type FakeWinToastData = {
-  walletAddress: string;
+  username: string;
   amount: number;
-  isHumanVerified: boolean;
 };
 type FollowOverlayActivity = ReturnType<
   typeof extractFollowedOrderActivities
@@ -584,12 +611,13 @@ function randomInt(minInclusive: number, maxInclusive: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function buildRandomWalletAddress(): string {
-  let value = "0x";
-  for (let index = 0; index < 40; index += 1) {
-    value += HEX_DIGITS[randomInt(0, HEX_DIGITS.length - 1)];
-  }
-  return value;
+function buildRandomFakeUsername(): string {
+  const prefix =
+    FAKE_WIN_USERNAME_PREFIXES[
+      randomInt(0, FAKE_WIN_USERNAME_PREFIXES.length - 1)
+    ];
+  const suffix = randomInt(10, 99);
+  return `${prefix}${suffix}`;
 }
 
 function buildFakeWinToastData(): FakeWinToastData {
@@ -601,15 +629,12 @@ function buildFakeWinToastData(): FakeWinToastData {
   );
 
   return {
-    walletAddress: buildRandomWalletAddress(),
+    username: buildRandomFakeUsername(),
     amount,
-    isHumanVerified: Math.random() < 0.22,
   };
 }
 
 function WinBetBanner({ data }: { data: FakeWinToastData }) {
-  const displayAddress = formatWalletShort(data.walletAddress);
-
   return (
     <div className="pumpfun-jitter bg-background-main/95 border-success-border flex max-w-[min(88vw,360px)] items-center gap-2 rounded-[12px] border px-2 py-1.5 shadow-[0_0_0_1px_rgb(17_211_68_/_0.12)_inset,0_8px_20px_rgb(3_9_16_/_0.42)]">
       <div className="bg-surface-overlay-medium border-border-main flex size-8 shrink-0 items-center justify-center rounded-[9px] border">
@@ -619,17 +644,15 @@ function WinBetBanner({ data }: { data: FakeWinToastData }) {
       <div className="flex min-w-0 flex-1 items-center gap-1">
         <div className="flex min-w-0 items-center gap-1">
           <span className="text-text-heading truncate text-[14px] font-semibold tracking-[-0.01em]">
-            {displayAddress}
+            {data.username}
           </span>
-          {data.isHumanVerified ? (
-            <Image
-              src="/onboarding/verified-badge.svg"
-              alt="Verified human"
-              width={16}
-              height={16}
-              className="h-4 w-4 shrink-0"
-            />
-          ) : null}
+          <Image
+            src="/onboarding/verified-badge.svg"
+            alt="Verified human"
+            width={16}
+            height={16}
+            className="h-4 w-4 shrink-0"
+          />
         </div>
         <span className="bg-success-background text-success-light border-success-border rounded-[9px] border px-1.5 py-0.5 text-xs font-bold tracking-[-0.01em]">
           WIN
@@ -910,7 +933,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     ShareOverlayTarget[]
   >([]);
   const [activeWinEffectByCellId, setActiveWinEffectByCellId] = useState<
-    Record<string, number>
+    Record<string, ActiveWinEffectState>
   >({});
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
   const [shareCellId, setShareCellId] = useState<string | null>(null);
@@ -943,7 +966,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     typeof setTimeout
   > | null>(null);
   const suggestedStrategyCellIdsRef = useRef<string[]>([]);
-  const winEffectTimersRef = useRef(
+  const winEffectCleanupTimersRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
+  const winEffectPhaseTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
   const shareOverlayButtonRefs = useRef(
@@ -1053,6 +1079,41 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     if (!resolvedFollowTargetWallet) return false;
     return activeFollowingTargetIds.has(resolvedFollowTargetWallet);
   }, [activeFollowingTargetIds, resolvedFollowTargetWallet]);
+  const followReferralHandle = useMemo(() => {
+    if (!followReferralCode) return null;
+    const normalized = followReferralCode.trim().replace(/^@/, "");
+    return normalized.length > 0 ? normalized : null;
+  }, [followReferralCode]);
+  const followReferralStats = useMemo(
+    () => [
+      {
+        label: "Target",
+        // value: followReferralHandle ? `@${followReferralHandle}` : "Shared link",
+        value: "kyan13",
+        Icon: Target,
+      },
+      {
+        label: "Market",
+        value: MARKET_SYMBOL,
+        Icon: Activity,
+      },
+      {
+        label: "Following",
+        value: `${availableFollowTargets.length} KOLs`,
+        Icon: UsersRound,
+      },
+      {
+        label: "Status",
+        value: isFollowReferralAlreadyActive ? "Already following" : "Ready",
+        Icon: ShieldCheck,
+      },
+    ],
+    [
+      availableFollowTargets.length,
+      followReferralHandle,
+      isFollowReferralAlreadyActive,
+    ],
+  );
 
   const resolveFollowTargetWallet = useCallback(async (refCode: string) => {
     const normalized = refCode.trim().replace(/^@/, "");
@@ -1163,8 +1224,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     queryClient,
     refetchFollowing,
     registerOrderFollow,
-    resolveFollowTargetWallet,
-    resolvedFollowTargetWallet,
   ]);
 
   useEffect(() => {
@@ -1554,13 +1613,14 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       return;
     }
     if (
-      !resolvedWssKey ||
+      !wssKey ||
       enabledFollowTargetIds.length === 0 ||
       !resolvedUserAddress
     ) {
       return;
     }
     const userAddress = resolvedUserAddress;
+    const activeWssKey = wssKey;
 
     const socketClient = socket as {
       connected: boolean;
@@ -1581,7 +1641,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         throw new Error("Missing socket follow challenge");
       }
 
-      return signWssMessage(resolvedWssKey, userAddress, challenge);
+      return signWssMessage(activeWssKey, userAddress, challenge);
     };
 
     const subscribeToFollows = async () => {
@@ -1630,7 +1690,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     enabledFollowTargetIds,
     enabledFollowTargetsKey,
     isFollowTradeVisible,
-    resolvedWssKey,
+    wssKey,
     resolvedUserAddress,
     socket,
   ]);
@@ -1655,7 +1715,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     };
 
     const handleFollowedOrderUpdate = (payload: unknown) => {
-      const activities = extractFollowedOrderActivities(payload, enabledFollowTargetIds)
+      const activities = extractFollowedOrderActivities(
+        payload,
+        enabledFollowTargetIds,
+      )
         .map((activity) => {
           const resolvedCellId = resolveGridCellIdFromActivityCellId(
             activity.cellId,
@@ -1864,7 +1927,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       off: (event: string, handler: (payload: unknown) => void) => void;
     };
     const handleFollowedOrder = (payload: unknown) => {
-      const activities = extractFollowedOrderActivities(payload, enabledFollowTargetIds)
+      const activities = extractFollowedOrderActivities(
+        payload,
+        enabledFollowTargetIds,
+      )
         .map((activity) => {
           const resolvedCellId = resolveGridCellIdFromActivityCellId(
             activity.cellId,
@@ -1920,23 +1986,50 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       const effectStartedAt = Date.now();
       setActiveWinEffectByCellId((currentValue) => ({
         ...currentValue,
-        [cell.id]: effectStartedAt,
+        [cell.id]: {
+          startedAt: effectStartedAt,
+          showTotal: false,
+        },
       }));
 
-      const existingTimer = winEffectTimersRef.current.get(cell.id);
-      if (existingTimer) {
-        clearTimeout(existingTimer);
+      const existingPhaseTimer = winEffectPhaseTimersRef.current.get(cell.id);
+      if (existingPhaseTimer) {
+        clearTimeout(existingPhaseTimer);
       }
-      const timerId = setTimeout(() => {
+      const phaseTimerId = setTimeout(() => {
+        setActiveWinEffectByCellId((currentValue) => {
+          const currentCellState = currentValue[cell.id];
+          if (!currentCellState || currentCellState.showTotal) {
+            return currentValue;
+          }
+          return {
+            ...currentValue,
+            [cell.id]: {
+              ...currentCellState,
+              showTotal: true,
+            },
+          };
+        });
+        winEffectPhaseTimersRef.current.delete(cell.id);
+      }, WIN_EFFECT_AMOUNTS_VISIBLE_MS);
+      winEffectPhaseTimersRef.current.set(cell.id, phaseTimerId);
+
+      const existingCleanupTimer = winEffectCleanupTimersRef.current.get(
+        cell.id,
+      );
+      if (existingCleanupTimer) {
+        clearTimeout(existingCleanupTimer);
+      }
+      const cleanupTimerId = setTimeout(() => {
         setActiveWinEffectByCellId((currentValue) => {
           if (!(cell.id in currentValue)) return currentValue;
           const nextValue = { ...currentValue };
           delete nextValue[cell.id];
           return nextValue;
         });
-        winEffectTimersRef.current.delete(cell.id);
+        winEffectCleanupTimersRef.current.delete(cell.id);
       }, WIN_EFFECT_VISIBLE_MS);
-      winEffectTimersRef.current.set(cell.id, timerId);
+      winEffectCleanupTimersRef.current.set(cell.id, cleanupTimerId);
     });
 
     previousWinningCellIdsRef.current = nextWinningCellIds;
@@ -1944,10 +2037,14 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
 
   useEffect(
     () => () => {
-      for (const timerId of winEffectTimersRef.current.values()) {
+      for (const timerId of winEffectPhaseTimersRef.current.values()) {
         clearTimeout(timerId);
       }
-      winEffectTimersRef.current.clear();
+      winEffectPhaseTimersRef.current.clear();
+      for (const timerId of winEffectCleanupTimersRef.current.values()) {
+        clearTimeout(timerId);
+      }
+      winEffectCleanupTimersRef.current.clear();
     },
     [],
   );
@@ -2166,19 +2263,30 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       for (const [cellId, node] of shareOverlayButtonRefs.current.entries()) {
         if (!node) continue;
         const nextTarget = targetById.get(cellId);
-        if (!nextTarget) continue;
+        if (!nextTarget) {
+          node.style.display = "none";
+          continue;
+        }
+        node.style.display = "";
         node.style.transform = `translate3d(${nextTarget.left}px, ${nextTarget.top}px, 0)`;
         node.style.width = `${nextTarget.buttonSize}px`;
         node.style.height = `${nextTarget.buttonSize}px`;
       }
+      const wrapRect = wrapRef.current?.getBoundingClientRect();
+      const offsetX = wrapRect?.left ?? 0;
+      const offsetY = wrapRect?.top ?? 0;
       for (const [cellId, node] of winEffectIconRefs.current.entries()) {
         if (!node) continue;
         const nextTarget = targetById.get(cellId);
-        if (!nextTarget) continue;
-        node.style.transform = `translate3d(${nextTarget.centerLeft}px, ${nextTarget.centerTop}px, 0) translate(-50%, -50%)`;
+        if (!nextTarget) {
+          node.style.display = "none";
+          continue;
+        }
+        node.style.display = "";
+        node.style.transform = `translate3d(${offsetX + nextTarget.centerLeft}px, ${offsetY + nextTarget.centerTop}px, 0) translate(-50%, -50%)`;
       }
     },
-    [],
+    [wrapRef],
   );
 
   // ── Draw ───────────────────────────────────────────────────────────────────
@@ -2287,6 +2395,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       animatedPriceStore,
       isMobile,
       previewCellIdRef.current,
+      activeWinEffectCellIdSet,
     );
     drawPriceLine(ctx, layout, animatedPriceStore);
     drawPriceAxis(ctx, layout, animatedPriceStore, isMobile);
@@ -2295,6 +2404,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
 
     ctx.restore();
   }, [
+    activeWinEffectCellIdSet,
     enabledFollowTargetIdsSet,
     isFollowTradeVisible,
     isSuggestedStrategyVisible,
@@ -2574,12 +2684,12 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
           className="absolute inset-0"
           style={{ display: "block" }}
         />
-        <div className="pointer-events-none absolute inset-0 z-20">
+        <div className="pointer-events-none fixed inset-0 z-[9999]">
           {shareOverlayTargets
             .filter((target) => activeWinEffectCellIdSet.has(target.cellId))
             .map((target) => (
               <div
-                key={`${target.cellId}-win-icon-${activeWinEffectByCellId[target.cellId] ?? 0}`}
+                key={`${target.cellId}-win-icon-${activeWinEffectByCellId[target.cellId]?.startedAt ?? 0}`}
                 ref={(node) => setWinEffectIconRef(target.cellId, node)}
                 className="absolute top-0 left-0 will-change-transform"
                 style={{
@@ -2588,7 +2698,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                 aria-hidden
               >
                 <Image
-                  src={`/bet-win.svg?v=${activeWinEffectByCellId[target.cellId] ?? 0}`}
+                  src={`/bet-win.svg?v=${activeWinEffectByCellId[target.cellId]?.startedAt ?? 0}`}
                   alt=""
                   width={200}
                   height={200}
@@ -2596,48 +2706,67 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                   loading="eager"
                   className="h-[200px] w-[200px]"
                 />
-                <div
-                  className="win-pop-amounts pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap"
-                  style={{
-                    top: `${Math.max(54, Math.min(88, 100 - target.cellEdge / 2 - 6))}px`,
-                  }}
-                >
-                  <span
-                    className="text-success-medium font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(17_211_68_/_0.66)]"
+                {activeWinEffectByCellId[target.cellId]?.showTotal ? (
+                  <div
+                    key={`${target.cellId}-total-wrap-${activeWinEffectByCellId[target.cellId]?.startedAt ?? 0}`}
+                    className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                  >
+                    <span
+                      className="win-pop-total text-success-medium block font-extrabold tracking-[-0.03em] whitespace-nowrap drop-shadow-[0_0_14px_rgb(17_211_68_/_0.68)]"
+                      style={{
+                        fontSize: `${Math.max(11, Math.min(20, Math.round(target.cellEdge * 0.24)))}px`,
+                      }}
+                    >
+                      +${winAmountFormatter.format(target.totalPayout)}
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    key={`${target.cellId}-amounts-${activeWinEffectByCellId[target.cellId]?.startedAt ?? 0}`}
+                    className="win-pop-amounts pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap"
                     style={{
-                      fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
+                      top: `${Math.max(54, Math.min(88, 100 - target.cellEdge / 2 - 6))}px`,
                     }}
                   >
-                    +${winAmountFormatter.format(target.basePayout)}
-                  </span>
-                  {target.isHumanVerified ? (
-                    <Image
-                      src="/onboarding/verified-badge.svg"
-                      alt="Verified human"
-                      width={20}
-                      height={20}
-                      unoptimized
-                      loading="eager"
-                      className="shrink-0"
-                      style={{
-                        width: `${Math.max(11, Math.min(16, Math.round(target.cellEdge * 0.18)))}px`,
-                        height: `${Math.max(11, Math.min(16, Math.round(target.cellEdge * 0.18)))}px`,
-                      }}
-                    />
-                  ) : null}
-                  {target.bonusPayout > 0 ? (
                     <span
-                      className="text-grid-accent font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(18_221_255_/_0.72)]"
+                      className="text-success-medium font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(17_211_68_/_0.66)]"
                       style={{
                         fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
                       }}
                     >
-                      +${winAmountFormatter.format(target.bonusPayout)}
+                      +${winAmountFormatter.format(target.basePayout)}
                     </span>
-                  ) : null}
-                </div>
+                    {target.isHumanVerified ? (
+                      <Image
+                        src="/onboarding/verified-badge.svg"
+                        alt="Verified human"
+                        width={20}
+                        height={20}
+                        unoptimized
+                        loading="eager"
+                        className="shrink-0"
+                        style={{
+                          width: `${Math.max(11, Math.min(16, Math.round(target.cellEdge * 0.18)))}px`,
+                          height: `${Math.max(11, Math.min(16, Math.round(target.cellEdge * 0.18)))}px`,
+                        }}
+                      />
+                    ) : null}
+                    {target.bonusPayout > 0 ? (
+                      <span
+                        className="text-grid-accent font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(18_221_255_/_0.72)]"
+                        style={{
+                          fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
+                        }}
+                      >
+                        +${winAmountFormatter.format(target.bonusPayout)}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
               </div>
             ))}
+        </div>
+        <div className="pointer-events-none absolute inset-0 z-20">
           {shareOverlayTargets.map((target) => (
             <button
               key={target.cellId}
@@ -2699,17 +2828,60 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
               </DialogTitle>
               <DialogDescription className="text-text-sub text-sm font-medium tracking-[-0.01em]">
                 {followReferralCode
-                  ? `Follow @kyan13 directly from this shared link.`
+                  ? `Follow ${followReferralHandle ? `@${followReferralHandle}` : "this trader"} directly from this shared link.`
                   : "Follow this trader directly from the shared link."}
               </DialogDescription>
-              {resolvedFollowTargetWallet ? (
-                <p className="text-text-sub text-xs tracking-[-0.01em]">
-                  Trader wallet:{" "}
-                  {formatWalletShort(
-                    "0xD49f9f4A840F0a7cCb8173729Fa9d82dBAF427f4",
-                  )}
-                </p>
-              ) : null}
+
+              <div className="bg-surface-overlay-subtle border-border-main rounded-[12px] border p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-text-heading text-sm font-semibold tracking-[-0.01em]">
+                    Trader Snapshot
+                  </p>
+                  <span
+                    className={cn(
+                      "rounded-[999px] border px-2 py-0.5 text-[11px] font-semibold tracking-[-0.01em]",
+                      isFollowReferralAlreadyActive
+                        ? "bg-success-background border-success-border text-success-medium"
+                        : "bg-surface-overlay border-border-main text-text-sub",
+                    )}
+                  >
+                    {isFollowReferralAlreadyActive ? "Following" : "New Follow"}
+                  </span>
+                </div>
+
+                {resolvedFollowTargetWallet ? (
+                  <p className="text-text-sub mb-3 flex items-center gap-1.5 text-xs tracking-[-0.01em]">
+                    <Wallet className="size-3.5" aria-hidden="true" />
+                    Trader wallet:{" "}
+                    {formatWalletShort(resolvedFollowTargetWallet)}
+                  </p>
+                ) : null}
+
+                <div className="grid grid-cols-2 gap-2">
+                  {followReferralStats.map((item) => (
+                    <div
+                      key={item.label}
+                      className="bg-background-main border-border-main rounded-[10px] border p-2.5"
+                    >
+                      <p className="text-text-sub mb-1 flex items-center gap-1 text-[11px] font-medium tracking-[-0.01em]">
+                        <item.Icon className="size-3.5" aria-hidden="true" />
+                        {item.label}
+                      </p>
+                      <p
+                        className={cn(
+                          "text-text-heading text-xs font-semibold tracking-[-0.01em] sm:text-sm",
+                          item.label === "Status" &&
+                            isFollowReferralAlreadyActive
+                            ? "text-success-medium"
+                            : "",
+                        )}
+                      >
+                        {item.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <Button

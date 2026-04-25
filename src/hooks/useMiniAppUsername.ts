@@ -21,32 +21,9 @@ function useMiniAppUsername({
   );
 
   const resolveMiniAppUsername = useCallback(async () => {
-    const authUsername = username?.trim();
-    if (authUsername) {
-      return authUsername;
-    }
-
-    const directUsername = MiniKit.user?.username?.trim();
-    if (directUsername) {
-      return directUsername;
-    }
-
-    const resolvedAddress =
-      MiniKit.user?.walletAddress ?? walletAddress ?? resolvedUserAddress;
-    if (!resolvedAddress) {
-      return null;
-    }
-
-    try {
-      return (
-        (await MiniKit.getUserByAddress(resolvedAddress)).username?.trim() ||
-        null
-      );
-    } catch (error) {
-      console.warn(`${logPrefix} Failed to resolve username`, { error });
-      return null;
-    }
-  }, [logPrefix, resolvedUserAddress, username, walletAddress]);
+    // TODO: remove mock — hardcoded for demo
+    return "kyan13";
+  }, []);
 
   const refreshMiniAppUsername = useCallback(async () => {
     const resolvedUsername = await resolveMiniAppUsername();

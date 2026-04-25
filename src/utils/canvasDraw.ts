@@ -224,6 +224,7 @@ export function drawBetCells(
   store: StoreSnapshot,
   isMobile: boolean,
   previewCellId: string | null = null,
+  activeWinEffectCellIds: Set<string> = new Set(),
 ) {
   const {
     w,
@@ -387,6 +388,7 @@ export function drawBetCells(
         settledTotalPayout > 0
           ? settledTotalPayout
           : Math.max(0, displayBetAmount * rewardRate);
+      const shouldHideReceivedAmount = activeWinEffectCellIds.has(cell.id);
       _drawWinCell(ctx, {
         x: cx,
         y: cellTop,
@@ -399,7 +401,9 @@ export function drawBetCells(
         cellSize,
         multiplier: rewardRate,
         detailTxt: hasAnyBet
-          ? `+$${receivedAmountFormatter.format(receivedAmount)}`
+          ? shouldHideReceivedAmount
+            ? ""
+            : `+$${receivedAmountFormatter.format(receivedAmount)}`
           : "",
         isMobile,
       });
@@ -801,8 +805,7 @@ function _drawWinCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
   const titleY = y + height * 0.44;
   const detailY = y + height * 0.68;
   const safeMultiplier = Number.isFinite(multiplier) ? multiplier : 0;
-  const receivedAmountText =
-    detailTxt.length > 0 ? detailTxt : `+$${receivedAmountFormatter.format(0)}`;
+  const receivedAmountText = detailTxt.trim();
 
   ctx.save();
   ctx.shadowColor = "rgba(17,211,68,0.18)";
@@ -845,9 +848,11 @@ function _drawWinCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#11D344";
-  ctx.font = `${isMobile ? 600 : 700} ${titleSize}px sans-serif`;
-  ctx.fillText(receivedAmountText, x + width / 2, titleY);
+  if (receivedAmountText.length > 0) {
+    ctx.fillStyle = "#11D344";
+    ctx.font = `${isMobile ? 600 : 700} ${titleSize}px sans-serif`;
+    ctx.fillText(receivedAmountText, x + width / 2, titleY);
+  }
 
   ctx.fillStyle = "#7A9BB5";
   ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
