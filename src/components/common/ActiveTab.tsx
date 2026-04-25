@@ -40,7 +40,7 @@ const ActiveTabItem = ({
       aria-pressed={isActive}
       onClick={() => onClick(value)}
       className={cn(
-        "relative cursor-pointer overflow-hidden rounded-[8px] px-2 py-1.5 text-center text-base font-semibold",
+        "relative cursor-pointer overflow-hidden rounded-[8px] px-2 py-1.5 text-center text-[14px] font-semibold",
         isActive
           ? "bg-background-surface/80 text-primary-medium after:bg-primary-medium after:absolute after:right-[19.64%] after:bottom-0 after:left-[19.64%] after:h-[3px] after:rounded-full after:content-['']"
           : "text-hint",

@@ -98,6 +98,7 @@
   --color-podium-glow: var(--podium-glow);
   --color-podium-title-dark: var(--podium-title-dark);
   --color-podium-title-fade: var(--podium-title-fade);
+  --color-error-light: var(--error-light);
 }
 
 :root {
@@ -183,6 +184,7 @@
   --podium-glow: #a9ffc3;
   --podium-title-dark: #192636;
   --podium-title-fade: #0b141f;
+  --error-light: #fea2a2;
   --scrollbar-track: var(--background-main);
   --scrollbar-thumb: var(--stroke-main);
   --scrollbar-thumb-hover: var(--background-subtle);

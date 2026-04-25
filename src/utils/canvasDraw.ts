@@ -28,6 +28,10 @@ const betAmountFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const receivedAmountFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
@@ -351,6 +355,11 @@ export function drawBetCells(
         cellSize,
       });
     } else if (isHit) {
+      const rewardRate =
+        hasAnyBet
+          ? cell.multiplier
+          : Number(cell.original.rewardRate || cell.multiplier);
+      const receivedAmount = Math.max(0, displayBetAmount * rewardRate);
       _drawWinCell(ctx, {
         x: cx,
         y: cellTop,
@@ -361,10 +370,10 @@ export function drawBetCells(
         cellLeft: cx,
         cellRight: cx + cw,
         cellSize,
-        multiplier: cell.multiplier,
+        multiplier: rewardRate,
         detailTxt: hasAnyBet
-          ? `$${betAmountFormatter.format(displayBetAmount)}`
-          : formatMultiplier(Number(cell.original.rewardRate)),
+          ? `+$${receivedAmountFormatter.format(receivedAmount)}`
+          : "",
         isMobile,
       });
     } else if (isLose && !shouldHideLosingBet) {
@@ -755,12 +764,14 @@ function _drawWinCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
   } = p;
   const radius = clamp(cellSize * 0.16, 6, 8);
   const innerInset = 0.75;
-  const titleSize = clamp(Math.round(cellSize * 0.25), 10, 12);
-  const detailSize = clamp(Math.round(cellSize * 0.22), 10, 14);
+  const titleSize = clamp(Math.round(cellSize * 0.3), 12, 16);
+  const detailSize = clamp(Math.round(cellSize * 0.18), 9, 12);
   const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
   const titleY = y + height * 0.44;
   const detailY = y + height * 0.68;
   const safeMultiplier = Number.isFinite(multiplier) ? multiplier : 0;
+  const receivedAmountText =
+    detailTxt.length > 0 ? detailTxt : `+$${receivedAmountFormatter.format(0)}`;
 
   ctx.save();
   ctx.shadowColor = "rgba(17,211,68,0.18)";
@@ -805,11 +816,11 @@ function _drawWinCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#11D344";
   ctx.font = `${isMobile ? 600 : 700} ${titleSize}px sans-serif`;
-  ctx.fillText(formatMultiplier(safeMultiplier), x + width / 2, titleY);
+  ctx.fillText(receivedAmountText, x + width / 2, titleY);
 
   ctx.fillStyle = "#7A9BB5";
   ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
-  ctx.fillText(detailTxt, x + width / 2, detailY);
+  ctx.fillText(formatMultiplier(safeMultiplier), x + width / 2, detailY);
 
   ctx.fillStyle = "#12DDFF";
   const corners = [

@@ -32,9 +32,13 @@ export interface CellData {
   original: RemoteCell;
 }
 
-type SettledOutcome = {
+export type SettledOutcome = {
   isWin: boolean;
   revealed: boolean;
+  payout: number | null;
+  basePayout: number | null;
+  bonusPayout: number | null;
+  isHumanVerified: boolean;
 };
 
 interface GameState {
@@ -110,6 +114,12 @@ function toFiniteNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function toNonNegativeFiniteNumber(value: unknown): number | null {
+  const parsed = toFiniteNumber(value);
+  if (parsed === null) return null;
+  return parsed >= 0 ? parsed : null;
 }
 
 function toNonEmptyString(value: unknown): string | null {
@@ -567,11 +577,45 @@ export const useGameStore = create<GameState>((set) => ({
         nextSettledOutcomes[cellId] = {
           isWin: resolvedIsWin,
           revealed: nextSettledOutcomes[cellId]?.revealed ?? false,
+          payout: nextSettledOutcomes[cellId]?.payout ?? null,
+          basePayout: nextSettledOutcomes[cellId]?.basePayout ?? null,
+          bonusPayout: nextSettledOutcomes[cellId]?.bonusPayout ?? null,
+          isHumanVerified: nextSettledOutcomes[cellId]?.isHumanVerified ?? false,
         };
 
         if (resolvedIsWin) {
           const baseAmount = amount ?? nextBets[cellId] ?? nextPendingBets[cellId] ?? 0;
-          if (baseAmount > 0) {
+          const settledBasePayout = toNonNegativeFiniteNumber(
+            record.settledBasePayout,
+          );
+          const settledBonusPayout = toNonNegativeFiniteNumber(
+            record.settledBonusPayout,
+          );
+          const settledPayout = toNonNegativeFiniteNumber(record.settledPayout);
+          const hasSettledPayoutParts =
+            settledBasePayout !== null || settledBonusPayout !== null;
+          const resolvedPayoutFromParts = hasSettledPayoutParts
+            ? (settledBasePayout ?? 0) + (settledBonusPayout ?? 0)
+            : null;
+          const resolvedPayout =
+            resolvedPayoutFromParts ?? settledPayout ?? null;
+          const isHumanVerified = (settledBonusPayout ?? 0) > 0;
+
+          nextSettledOutcomes[cellId] = {
+            ...nextSettledOutcomes[cellId],
+            payout: resolvedPayout,
+            basePayout:
+              settledBasePayout ??
+              (resolvedPayout !== null
+                ? Math.max(resolvedPayout - (settledBonusPayout ?? 0), 0)
+                : null),
+            bonusPayout: settledBonusPayout ?? 0,
+            isHumanVerified,
+          };
+
+          if (resolvedPayout !== null && resolvedPayout > 0) {
+            nextPendingWins[cellId] = resolvedPayout;
+          } else if (baseAmount > 0) {
             const mult =
               rewardRateNum ??
               state.cells.find((c) => c.id === cellId)?.multiplier ??

@@ -132,6 +132,8 @@ type ShareOverlayTarget = {
   top: number;
   centerLeft: number;
   centerTop: number;
+  buttonSize: number;
+  isHumanVerified: boolean;
 };
 type FakeWinToastData = {
   walletAddress: string;
@@ -534,6 +536,7 @@ export const TradingGrid: React.FC = () => {
   const bets = useGameStore((s) => s.bets);
   const pendingBets = useGameStore((s) => s.pendingBets);
   const pendingWins = useGameStore((s) => s.pendingWins);
+  const settledOutcomes = useGameStore((s) => s.settledOutcomes);
   const socket = useGameStore((s) => s.socket);
   const wssKey = useGameStore((s) => s.wssKey);
   const followedOrderActivities = useGameStore(
@@ -707,6 +710,7 @@ export const TradingGrid: React.FC = () => {
     bets,
     pendingBets,
     pendingWins,
+    settledOutcomes,
     basePrice,
     modePriceStep,
     modeIntervalSeconds,
@@ -738,6 +742,7 @@ export const TradingGrid: React.FC = () => {
       bets,
       pendingBets,
       pendingWins,
+      settledOutcomes,
       basePrice,
       modePriceStep,
       modeIntervalSeconds,
@@ -1814,10 +1819,18 @@ export const TradingGrid: React.FC = () => {
       betAmount
     : betAmount;
   const selectedShareProfit = useMemo(
-    () =>
-      selectedShareAmount *
-      Math.max((selectedShareCell?.multiplier ?? 0) - 1, 0),
-    [selectedShareAmount, selectedShareCell?.multiplier],
+    () => {
+      if (!selectedShareCell) return 0;
+      const settledPayout = pendingWins[selectedShareCell.id];
+      if (typeof settledPayout === "number" && Number.isFinite(settledPayout)) {
+        return Math.max(settledPayout, 0);
+      }
+      return (
+        selectedShareAmount *
+        Math.max((selectedShareCell.multiplier ?? 0) - 1, 0)
+      );
+    },
+    [pendingWins, selectedShareAmount, selectedShareCell],
   );
   const selectedShareTime = useMemo(() => {
     if (!selectedShareCell) return "--:--:--";
@@ -1863,6 +1876,8 @@ export const TradingGrid: React.FC = () => {
         const nextTarget = targetById.get(cellId);
         if (!nextTarget) continue;
         node.style.transform = `translate3d(${nextTarget.left}px, ${nextTarget.top}px, 0)`;
+        node.style.width = `${nextTarget.buttonSize}px`;
+        node.style.height = `${nextTarget.buttonSize}px`;
       }
       for (const [cellId, node] of winEffectIconRefs.current.entries()) {
         if (!node) continue;
@@ -1923,12 +1938,25 @@ export const TradingGrid: React.FC = () => {
       const h = layout.cellH;
       if (x + w < 0 || x > layout.w || y + h < 0 || y > layout.h) continue;
 
+      const minEdge = Math.max(1, Math.min(w, h));
+      const inset = Math.max(1, Math.min(4, Math.round(minEdge * 0.12)));
+      const maxButtonSize = Math.max(10, Math.round(minEdge - inset * 2));
+      const buttonSize = Math.max(
+        10,
+        Math.min(24, maxButtonSize, Math.round(minEdge * 0.4)),
+      );
+
       nextShareTargets.push({
         cellId: cell.id,
-        left: Math.min(layout.w - 34, x + w - 30),
-        top: Math.max(4, Math.min(layout.h - 34, y + 4)),
+        left: Math.max(
+          0,
+          Math.min(layout.w - buttonSize, x + w - buttonSize - inset),
+        ),
+        top: Math.max(0, Math.min(layout.h - buttonSize, y + inset)),
         centerLeft: x + w / 2,
         centerTop: y + h / 2,
+        buttonSize,
+        isHumanVerified: store.settledOutcomes[cell.id]?.isHumanVerified ?? false,
       });
     }
     shareTargetsRef.current = nextShareTargets;
@@ -2024,7 +2052,9 @@ export const TradingGrid: React.FC = () => {
       draw();
       const nextTargets = shareTargetsRef.current;
       syncShareOverlayPositions(nextTargets);
-      const nextIdsHash = nextTargets.map((item) => item.cellId).join("|");
+      const nextIdsHash = nextTargets
+        .map((item) => `${item.cellId}:${item.isHumanVerified ? 1 : 0}`)
+        .join("|");
       if (nextIdsHash !== shareTargetIdsHashRef.current) {
         shareTargetIdsHashRef.current = nextIdsHash;
         setShareOverlayTargets(nextTargets);
@@ -2252,6 +2282,17 @@ export const TradingGrid: React.FC = () => {
                   loading="eager"
                   className="h-[200px] w-[200px]"
                 />
+                {target.isHumanVerified ? (
+                  <Image
+                    src="/onboarding/verified-badge.svg"
+                    alt="Verified human"
+                    width={32}
+                    height={32}
+                    unoptimized
+                    loading="eager"
+                    className="absolute top-[52px] left-[126px] h-8 w-8"
+                  />
+                ) : null}
               </div>
             ))}
           {shareOverlayTargets.map((target) => (
@@ -2259,9 +2300,11 @@ export const TradingGrid: React.FC = () => {
               key={target.cellId}
               ref={(node) => setShareOverlayButtonRef(target.cellId, node)}
               type="button"
-              className="bg-background-main/90 border-border-main text-grid-accent pointer-events-auto absolute top-0 left-0 flex size-7 items-center justify-center rounded-md border shadow-[0_6px_18px_rgba(0,0,0,0.35)] will-change-transform"
+              className="bg-background-main/90 border-border-main text-grid-accent pointer-events-auto absolute top-0 left-0 flex items-center justify-center rounded-md border shadow-[0_6px_18px_rgba(0,0,0,0.35)] will-change-transform"
               style={{
                 transform: `translate3d(${target.left}px, ${target.top}px, 0)`,
+                width: `${target.buttonSize}px`,
+                height: `${target.buttonSize}px`,
               }}
               onClick={(event) => {
                 event.stopPropagation();
@@ -2269,7 +2312,10 @@ export const TradingGrid: React.FC = () => {
               }}
               aria-label="Share winning cell"
             >
-              <Share2 className="size-3.5" strokeWidth={2} />
+              <Share2
+                className="h-1/2 w-1/2 shrink-0"
+                strokeWidth={2}
+              />
             </button>
           ))}
         </div>

@@ -12,6 +12,14 @@ type UseWinShareActionsParams = {
   resolvedUserAddress?: string | null;
 };
 
+function isWorldChatUserRejectedError(
+  error: unknown,
+): error is Error & { error_code: string } {
+  if (!(error instanceof Error)) return false;
+  const chatError = error as Error & { error_code?: string };
+  return chatError.name === "ChatError" && chatError.error_code === "user_rejected";
+}
+
 function useWinShareActions({
   username,
   walletAddress,
@@ -91,6 +99,10 @@ function useWinShareActions({
 
       await MiniKit.chat({ message });
     } catch (error) {
+      if (isWorldChatUserRejectedError(error)) {
+        appToast.info("User cancelled share to WorldChat", { icon: "ℹ️" });
+        return;
+      }
       console.error("Failed to share to WorldChat", error);
       appToast.error("Failed to share to WorldChat", { icon: "⚠️" });
     }

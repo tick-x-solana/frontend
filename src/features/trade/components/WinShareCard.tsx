@@ -16,6 +16,11 @@ const amountFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
+const receivedAmountFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
 const percentFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 1,
@@ -27,6 +32,7 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
     ref,
   ) {
     const pnlPercent = Math.max((multiplier - 1) * 100, 0);
+    const receivedAmount = amount * Math.max(multiplier, 0);
     const fadedRates = [
       { value: "1.1x", col: 2, row: 0 },
       { value: "2.42x", col: 3, row: 0 },
@@ -117,7 +123,7 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
 
             <div className="border-success-medium absolute top-[70px] left-[140px] flex h-[68px] w-[71px] flex-col items-center justify-center rounded-[8px] border bg-[#0a151a] shadow-[0_0_16.5px_rgb(0_229_255_/_0.25),0_0_24.8px_rgb(0_229_255_/_0.25),inset_0_0_16.8px_rgb(0_229_255_/_0.25)]">
               <p className="text-success-medium text-[16px] font-extrabold tracking-[-0.01em]">
-                ${amountFormatter.format(amount)}
+                +${receivedAmountFormatter.format(receivedAmount)}
               </p>
               <p className="text-text-disabled text-[11px] tracking-[-0.01em]">
                 {multiplier.toFixed(2)}x

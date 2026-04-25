@@ -1,5 +1,5 @@
-import Referrals from "@/src/features/referrals/Referrals";
+import Explore from "@/src/features/referrals/Explore";
 
-const ReferralsPage = () => <Referrals />;
+const ExplorePage = () => <Explore />;
 
-export default ReferralsPage;
+export default ExplorePage;

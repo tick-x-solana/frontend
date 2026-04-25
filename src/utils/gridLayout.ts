@@ -8,7 +8,7 @@
 
 import { computeGridDimensions } from "./gridDimensions";
 import type { GridDimensions } from "./gridDimensions";
-import type { CellData } from "@/src/features/trade/store";
+import type { CellData, SettledOutcome } from "@/src/features/trade/store";
 import type { FollowedOrderActivity } from "@/src/features/trade/orderFollow";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,6 +53,7 @@ export interface StoreSnapshot {
   bets: Record<string, number>;
   pendingBets: Record<string, number>;
   pendingWins: Record<string, number>;
+  settledOutcomes: Record<string, SettledOutcome>;
   basePrice: number;
   modePriceStep: number;
   modeIntervalSeconds: number;
