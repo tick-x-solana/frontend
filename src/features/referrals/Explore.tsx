@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import BrowseCopyTrade from "@/src/features/referrals/components/BrowseCopyTrade";
+import CREProofView from "@/src/features/referrals/components/CREProofView";
 import HowItWork from "@/src/features/referrals/components/HowItWork";
 import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
 import ReferralsHeader from "@/src/features/referrals/components/ReferralsHeader";
@@ -36,6 +37,7 @@ type ExploreView =
   | "liquidity"
   | "follow-trade"
   | "referrals"
+  | "integrity"
   | "ai-agent";
 
 type VaultRow = {
@@ -48,7 +50,6 @@ type LiquidityPool = {
   id: string;
   pair: string;
   apr: string;
-  fee: string;
   tvl: string;
   volume: string;
 };
@@ -99,7 +100,7 @@ const socialButtons = [
 ];
 
 const humanVaultDataset: VaultDataset = {
-  totalValueLocked: "$8,426,120",
+  totalValueLocked: "$3,645,650",
   protocolVaults: [
     [
       { label: "Vault", value: "Morpho USDC Prime (World Chain)" },
@@ -122,10 +123,10 @@ const humanVaultDataset: VaultDataset = {
   ],
   userVaults: [
     [
-      { label: "Vault", value: "BTC Long Shot,..." },
+      { label: "Vault", value: "BTC Long Momentum" },
       { label: "Leader", value: "0x88d1...4f0e" },
       { label: "APR", value: "5.17%" },
-      { label: "TVL", value: "$318,450" },
+      { label: "TVL", value: "$98,450" },
       { label: "Your Deposit", value: "$125.00" },
       { label: "Age (days)", value: "33" },
       { label: "Snapshot", value: "2026-04-24" },
@@ -134,7 +135,7 @@ const humanVaultDataset: VaultDataset = {
 };
 
 const agentVaultDataset: VaultDataset = {
-  totalValueLocked: "$6,912,450",
+  totalValueLocked: "$3,258,700",
   protocolVaults: [
     [
       { label: "Vault", value: "Agent Morpho Delta Neutral" },
@@ -160,7 +161,7 @@ const agentVaultDataset: VaultDataset = {
       { label: "Vault", value: "Agent Aave Auto-Rollover" },
       { label: "Leader", value: "agent-aave-03" },
       { label: "APR", value: "4.95%" },
-      { label: "TVL", value: "$286,900" },
+      { label: "TVL", value: "$38,900" },
       { label: "Your Deposit", value: "$0.00" },
       { label: "Age (days)", value: "29" },
       { label: "Snapshot", value: "2026-04-24" },
@@ -171,41 +172,36 @@ const agentVaultDataset: VaultDataset = {
 const liquidityPools: LiquidityPool[] = [
   {
     id: "wld-usdt-005",
-    pair: "WLD/USDT · 0.05%",
+    pair: "WLD/USDT Market · 0.05%",
     apr: "2.31%",
-    fee: "$178.42",
     tvl: "$184,220",
     volume: "$412,740",
   },
   {
     id: "wld-usdt-03",
-    pair: "WLD/USDT · 0.30%",
+    pair: "WLD/USDT Market · 0.30%",
     apr: "3.84%",
-    fee: "$224.19",
     tvl: "$96,870",
     volume: "$238,510",
   },
   {
     id: "wld-usdt-100",
-    pair: "WLD/USDT · 1.00%",
+    pair: "WLD/USDT Market · 1.00%",
     apr: "5.12%",
-    fee: "$312.05",
     tvl: "$58,430",
     volume: "$121,980",
   },
   {
     id: "wld-usdt-wide",
-    pair: "WLD/USDT · Wide Range",
+    pair: "WLD/USDT Market · Wide Range",
     apr: "1.92%",
-    fee: "$88.70",
     tvl: "$41,260",
     volume: "$67,540",
   },
   {
     id: "wld-usdt-narrow",
-    pair: "WLD/USDT · Narrow Range",
+    pair: "WLD/USDT Market · Narrow Range",
     apr: "6.28%",
-    fee: "$267.33",
     tvl: "$74,510",
     volume: "$159,230",
   },
@@ -216,7 +212,7 @@ const jumpToViewMap: Record<string, ExploreView> = {
   liquidity: "liquidity",
   "follow-trade": "follow-trade",
   referrals: "referrals",
-  integrity: "home",
+  integrity: "integrity",
   "ai-agent": "ai-agent",
 };
 const FOLLOW_TRADE_SHARE_WIN_RATE = "68%";
@@ -315,21 +311,13 @@ function LiquidityCard({ pool }: { pool: LiquidityPool }) {
 
       <div className="bg-border-main mb-2 h-px w-full" />
 
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <div>
           <p className="text-text-sub text-[12px] font-medium tracking-[-0.01em]">
             APR
           </p>
           <p className="text-success-medium text-[14px] font-semibold tracking-[-0.01em]">
             {pool.apr}
-          </p>
-        </div>
-        <div>
-          <p className="text-text-sub text-[12px] font-medium tracking-[-0.01em]">
-            Fee
-          </p>
-          <p className="text-text-main text-[14px] font-semibold tracking-[-0.01em]">
-            {pool.fee}
           </p>
         </div>
         <div>
@@ -560,6 +548,13 @@ const Explore = () => {
             />
             <ReferAFriend referralLink={referralLink} />
             <HowItWork />
+          </div>
+        ) : null}
+
+        {activeView === "integrity" ? (
+          <div className="flex flex-col gap-4">
+            <BackButton onClick={() => setActiveView("home")} />
+            <CREProofView />
           </div>
         ) : null}
 

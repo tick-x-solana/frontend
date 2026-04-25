@@ -80,8 +80,8 @@ function formatMultiplier(value: number): string {
   return `${rounded.toString()}x`;
 }
 
-function hasChartReachedColumn(chartX: number, columnX: number) {
-  return chartX >= columnX - 0.5;
+function hasChartPassedColumn(chartX: number, columnStartX: number, columnWidth: number) {
+  return chartX >= columnStartX + columnWidth - 0.5;
 }
 
 function getClosingFadeAlpha(
@@ -238,7 +238,7 @@ export function drawBetCells(
     cellH,
     effectivePriceStep,
   } = layout;
-  const { cells, bets, history, pendingBets } = store;
+  const { cells, bets, history, pendingBets, settledOutcomes } = store;
   const followedActivitiesByCellId = store.followedOrderActivities.reduce<
     Record<string, (typeof store.followedOrderActivities)[number]>
   >((acc, activity) => {
@@ -258,7 +258,7 @@ export function drawBetCells(
     cells
       .filter(
         (cell) =>
-          !hasChartReachedColumn(chartHeadX, toCanvasX(cell.timeWindowStart)),
+          !hasChartPassedColumn(chartHeadX, toCanvasX(cell.timeWindowStart), cellW),
       )
       .reduce<
         number | null
@@ -286,20 +286,18 @@ export function drawBetCells(
 
     const cx = toCanvasX(cell.timeWindowStart);
     const cellTop = toCellY(cell.priceLevel + effectivePriceStep / 2);
-    const chartReachedColumn = hasChartReachedColumn(chartHeadX, cx);
+    const chartPassedColumn = hasChartPassedColumn(chartHeadX, cx, cellW);
     const hasSuggestedStrategy = suggestedStrategyCellIds.has(cell.id);
     const hasOverlayActivity = hasFollowedActivity || hasSuggestedStrategy;
-    const overlayVisualAlpha = hasOverlayActivity
-      ? clamp((cx - chartHeadX + cellW * 0.2) / (cellW * 0.8), 0, 1)
-      : 1;
-    const hasVisibleOverlayActivity = hasOverlayActivity && overlayVisualAlpha > 0;
+    const chartPassedCell = chartTime >= cell.timeWindowEnd;
+    const hasVisibleOverlayActivity = hasOverlayActivity && !chartPassedCell;
     const hasTrackedState =
       (hasAnyBet && !shouldHideLosingBet) ||
       isHit ||
       (isLose && !shouldHideLosingBet) ||
       hasVisibleOverlayActivity;
 
-    if (chartReachedColumn && !hasTrackedState) continue;
+    if (chartPassedColumn && !hasTrackedState) continue;
 
     const isFuture = cell.timeWindowStart > hideThresholdTime;
     const isNext = isFuture && cell.timeWindowStart - now <= CLOSING_MS;
@@ -347,8 +345,6 @@ export function drawBetCells(
         isMobile,
       });
     } else if (!hasAnyBet && hasVisibleOverlayActivity) {
-      ctx.save();
-      ctx.globalAlpha *= overlayVisualAlpha;
       _drawCopyTradeCell(ctx, {
         x: cx,
         y: cellTop,
@@ -360,13 +356,24 @@ export function drawBetCells(
         cellRight: cx + cw,
         cellSize,
       });
-      ctx.restore();
     } else if (isHit) {
       const rewardRate =
         hasAnyBet
           ? cell.multiplier
           : Number(cell.original.rewardRate || cell.multiplier);
-      const receivedAmount = Math.max(0, displayBetAmount * rewardRate);
+      const settledOutcome = settledOutcomes[cell.id];
+      const hasSettledBreakdown =
+        settledOutcome?.basePayout !== null ||
+        settledOutcome?.bonusPayout !== null;
+      const settledBasePayout = Math.max(settledOutcome?.basePayout ?? 0, 0);
+      const settledBonusPayout = Math.max(settledOutcome?.bonusPayout ?? 0, 0);
+      const settledTotalPayout = hasSettledBreakdown
+        ? settledBasePayout + settledBonusPayout
+        : Math.max(settledOutcome?.payout ?? 0, 0);
+      const receivedAmount =
+        settledTotalPayout > 0
+          ? settledTotalPayout
+          : Math.max(0, displayBetAmount * rewardRate);
       _drawWinCell(ctx, {
         x: cx,
         y: cellTop,

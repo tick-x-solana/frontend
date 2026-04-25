@@ -2,22 +2,14 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  BarChart3,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Layers,
   ShieldCheck,
-  TrendingUp,
   XCircle,
   Zap,
 } from "lucide-react";
-import {
-  PriceIntegrityCREWorkflow,
-  ProofOfReserveWorkflow,
-  RegimeModelCREWorkflow,
-  SettlementCREWorkflow,
-} from "./WorkflowDiagrams";
+import { PriceIntegrityCREWorkflow } from "./WorkflowDiagrams";
 
 type CreRow = Record<string, string | number | boolean | undefined>;
 
@@ -222,46 +214,6 @@ export default function CREProofView() {
     [],
   );
 
-  const settlementRows = useMemo(
-    () =>
-      txHashes.map((hash, index) => ({
-        batchId: shortHash(hash),
-        merkleRoot: `0x${hash.slice(2, 66)}`,
-        totalPayout: index % 3 === 0 ? -82.2 + index : 14.4 + index * 1.9,
-        cap: 8.5 + index * 0.6,
-        windowStart: new Date(
-          nowTimestamp - index * 1_800_000,
-        ).toLocaleString(),
-        windowEnd: new Date(nowTimestamp - index * 1_200_000).toLocaleString(),
-      })),
-    [],
-  );
-
-  const solvencyRows = useMemo(
-    () =>
-      txHashes.map((_, index) => ({
-        timeWindow: to15mWindowLabel(index),
-        poolBalance: 12.5 + index * 0.8,
-        totalLiability: 10.9 + index * 0.7,
-        utilization: 88.2 + index * 0.35,
-        exposure: 2.5 + index * 1.2,
-      })),
-    [],
-  );
-
-  const volatilityRows = useMemo(
-    () =>
-      txHashes.map((hash, index) => ({
-        regimeId: 1772187117578 + index,
-        bandWidth: `BTC $${(18.5 + index * 0.5).toFixed(2)}`,
-        deltaT: `${5 + (index % 2)}s`,
-        multiplierRange: `${(1.1 + index * 0.04).toFixed(2)}x → ${(92 + index * 1.8).toFixed(1)}x`,
-        baseMargin: `${(2 + index * 0.06).toFixed(2)}%`,
-        txHash: hash,
-      })),
-    [],
-  );
-
   const avgScoreBps = Math.round(
     priceRows.reduce((sum, row) => sum + Number(row.scoreBps), 0) /
       Math.max(priceRows.length, 1),
@@ -288,14 +240,14 @@ export default function CREProofView() {
           <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-4">
             <StatChip
               label="Total Batches"
-              value={fmt(priceRows.length * 8)}
+              value={fmt(priceRows.length)}
               valueClassName="text-primary-light"
             />
             <StatChip
               label="Passed"
               value={
                 <span className="text-success-light inline-flex items-center gap-1">
-                  <CheckCircle2 size={13} /> {priceRows.length * 8}
+                  <CheckCircle2 size={13} /> {priceRows.length}
                 </span>
               }
             />
@@ -384,123 +336,6 @@ export default function CREProofView() {
         />
         <CompactWorkflow>
           <PriceIntegrityCREWorkflow />
-        </CompactWorkflow>
-      </CreSection>
-
-      <CreSection
-        icon={<Layers size={16} />}
-        title="Committed Settlements"
-        subtitle="SettlementBatchCommitted events · Committed payouts"
-        badge={<SectionCountBadge count={settlementRows.length} />}
-      >
-        <DataTable
-          columns={[
-            { key: "batchId", label: "Batch ID" },
-            {
-              key: "merkleRoot",
-              label: "Merkle Root",
-              render: (row) => shortHash(String(row.merkleRoot)),
-            },
-            {
-              key: "totalPayout",
-              label: "Total Payout",
-              render: (row) => {
-                const payout = Number(row.totalPayout);
-                return (
-                  <span
-                    className={
-                      payout <= 0 ? "text-success-light" : "text-warning-medium"
-                    }
-                  >
-                    {payout.toFixed(2)}
-                  </span>
-                );
-              },
-            },
-            {
-              key: "cap",
-              label: "Withdrawable Cap",
-              render: (row) => `${Number(row.cap).toFixed(2)} LINK`,
-            },
-            { key: "windowStart", label: "Window Start" },
-            { key: "windowEnd", label: "Window End" },
-          ]}
-          rows={settlementRows}
-        />
-        <CompactWorkflow>
-          <SettlementCREWorkflow />
-        </CompactWorkflow>
-      </CreSection>
-
-      <CreSection
-        icon={<BarChart3 size={16} />}
-        title="Pool Solvency Report"
-        subtitle="Solvency snapshots"
-        badge={<SectionCountBadge count={solvencyRows.length} />}
-      >
-        <DataTable
-          columns={[
-            { key: "timeWindow", label: "15m Window" },
-            {
-              key: "poolBalance",
-              label: "Pool Balance",
-              render: (row) => `${Number(row.poolBalance).toFixed(2)} LINK`,
-            },
-            {
-              key: "totalLiability",
-              label: "Total Liability",
-              render: (row) => `${Number(row.totalLiability).toFixed(2)} LINK`,
-            },
-            {
-              key: "utilization",
-              label: "Utilization",
-              render: (row) => `${Number(row.utilization).toFixed(2)}%`,
-            },
-            {
-              key: "exposure",
-              label: "Max Bet Exposure",
-              render: (row) => `${Number(row.exposure).toFixed(2)} LINK`,
-            },
-          ]}
-          rows={solvencyRows}
-        />
-        <CompactWorkflow>
-          <ProofOfReserveWorkflow />
-        </CompactWorkflow>
-      </CreSection>
-
-      <CreSection
-        icon={<TrendingUp size={16} />}
-        title="Volatility Regime Changes"
-        subtitle="Non-constant model params"
-        badge={<SectionCountBadge count={volatilityRows.length} />}
-      >
-        <DataTable
-          columns={[
-            { key: "regimeId", label: "Regime ID" },
-            { key: "bandWidth", label: "Band Width" },
-            { key: "deltaT", label: "ΔT" },
-            { key: "multiplierRange", label: "Multiplier Range" },
-            { key: "baseMargin", label: "Base Margin" },
-            {
-              key: "txHash",
-              label: "Tx Hash",
-              render: (row) => (
-                <a
-                  className="text-text-link-main hover:text-primary-light transition-colors"
-                  href={`https://sepolia.etherscan.io/tx/${String(row.txHash)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {shortHash(String(row.txHash))}
-                </a>
-              ),
-            },
-          ]}
-          rows={volatilityRows}
-        />
-        <CompactWorkflow>
-          <RegimeModelCREWorkflow />
         </CompactWorkflow>
       </CreSection>
 

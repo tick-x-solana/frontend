@@ -416,16 +416,23 @@ function extractSuggestedStrategyCellIds(
   return [...cellIds];
 }
 
-function extractCellStartTsFromCellId(cellId: string): number | null {
-  const [rawStartTs] = cellId.split(":");
-  const parsed = Number(rawStartTs);
-  return Number.isFinite(parsed) ? parsed : null;
+function extractCellTimeRangeFromCellId(cellId: string): {
+  startTs: number;
+  endTs: number;
+} | null {
+  const [rawStartTs, rawEndTs] = cellId.split(":");
+  const startTs = Number(rawStartTs);
+  const endTs = Number(rawEndTs);
+  if (!Number.isFinite(startTs) || !Number.isFinite(endTs)) {
+    return null;
+  }
+  return { startTs, endTs };
 }
 
 function isCellIdStillAheadOfChart(cellId: string, chartTime: number): boolean {
-  const startTs = extractCellStartTsFromCellId(cellId);
-  if (startTs === null) return true;
-  return startTs > chartTime;
+  const range = extractCellTimeRangeFromCellId(cellId);
+  if (!range) return true;
+  return range.endTs > chartTime;
 }
 
 function extractUserOrders(value: unknown): unknown[] {
@@ -1133,11 +1140,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     }
 
     const chartTime = getLatestChartTime(history, nowRef.current);
-    const visibleCellIds = suggestedStrategyCellIds.filter((cellId) => {
-      const startTs = extractCellStartTsFromCellId(cellId);
-      if (startTs === null) return true;
-      return startTs > chartTime;
-    });
+    const visibleCellIds = suggestedStrategyCellIds.filter((cellId) =>
+      isCellIdStillAheadOfChart(cellId, chartTime),
+    );
 
     if (visibleCellIds.length !== suggestedStrategyCellIds.length) {
       suggestedStrategyCellIdsRef.current = visibleCellIds;

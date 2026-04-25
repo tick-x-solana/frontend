@@ -54,7 +54,7 @@ const Providers = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     try {
       void import("eruda").then(({ default: eruda }) => {
-        // eruda.init();
+        eruda.init();
       });
 
       const { success } = MiniKit.install();

@@ -34,9 +34,7 @@ const seededPnlInRange = (seed: number, min: number, max: number) => {
 const createDescendingPnls = (count: number, min: number, max: number) =>
   Array.from({ length: count }, (_, index) =>
     seededPnlInRange(index + 1, min, max),
-  ).sort(
-    (a, b) => b - a,
-  );
+  ).sort((a, b) => b - a);
 
 const makeEntry = (
   rank: number,
@@ -174,7 +172,7 @@ export default function LeaderboardPage() {
 
   const podiumImage =
     activeTab === "human"
-      ? "/leaderboard-human6.png"
+      ? "/leaderboard-human7.png"
       : "/leaderboard-agent-1.png";
 
   return (

@@ -401,10 +401,10 @@ export const useGameStore = create<GameState>((set) => ({
             state.pendingWins[cell.id] !== undefined ||
             state.settledOutcomes[cell.id] !== undefined;
 
-          // Keep cells the server has already rolled off only until the chart
-          // reaches that column. This keeps store retention aligned with the
-          // canvas hide threshold.
-          return cell.timeWindowStart > hideThresholdTime || hasTrackedState;
+          // Keep cells the server has already rolled off until the chart has
+          // passed the full cell window (right edge), so overlays do not
+          // disappear when the chart only enters the column.
+          return cell.timeWindowEnd > hideThresholdTime || hasTrackedState;
         })
         .map((cell) => ({
           ...cell,
