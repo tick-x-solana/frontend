@@ -42,9 +42,7 @@ import {
   extractOrderFollowings,
   extractWssKey,
 } from "@/src/features/trade/orderFollow";
-import {
-  getLatestChartTime,
-} from "@/src/features/trade/gridTiming";
+import { getLatestChartTime } from "@/src/features/trade/gridTiming";
 import type { CellData, RemoteCell } from "@/src/features/trade/store";
 import { BACKEND_URL } from "@/src/features/trade/constant";
 import { useGameStore } from "@/src/features/trade/store";
@@ -297,7 +295,9 @@ function formatWalletShort(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function normalizeReferralCode(value: string | null | undefined): string | null {
+function normalizeReferralCode(
+  value: string | null | undefined,
+): string | null {
   if (!value || typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -494,7 +494,8 @@ function extractBinanceKlineHistory(value: unknown): StoreSnapshot["history"] {
         : Number.parseInt(String(openTimeRaw), 10);
     const price = Number(closePriceRaw);
 
-    if (!Number.isFinite(time) || !Number.isFinite(price) || time <= 0) continue;
+    if (!Number.isFinite(time) || !Number.isFinite(price) || time <= 0)
+      continue;
     points.push({ time, price });
   }
 
@@ -971,8 +972,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, [dismissedFollowReferralCode, normalizedInitialFollowRefCode]);
   const isFollowReferralModalOpen = followReferralCode !== null;
   const resolvedFollowTargetWallet =
-    followReferralCode &&
-    resolvedFollowTarget?.refCode === followReferralCode
+    followReferralCode && resolvedFollowTarget?.refCode === followReferralCode
       ? resolvedFollowTarget.wallet
       : null;
   const isFollowReferralAlreadyActive = useMemo(() => {
@@ -1127,12 +1127,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, [followReferralCode, resolveFollowTargetWallet]);
 
   useEffect(() => {
-    storeRef.current.suggestedStrategyCellIds =
-      isSuggestedStrategyVisible ? suggestedStrategyCellIds : [];
-  }, [
-    isSuggestedStrategyVisible,
-    suggestedStrategyCellIds,
-  ]);
+    storeRef.current.suggestedStrategyCellIds = isSuggestedStrategyVisible
+      ? suggestedStrategyCellIds
+      : [];
+  }, [isSuggestedStrategyVisible, suggestedStrategyCellIds]);
 
   useEffect(() => {
     if (!isSuggestedStrategyVisible || suggestedStrategyCellIds.length === 0) {
@@ -1312,7 +1310,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
           signal: abortController.signal,
         });
         if (!response.ok) {
-          throw new Error(`Binance history request failed (${response.status})`);
+          throw new Error(
+            `Binance history request failed (${response.status})`,
+          );
         }
 
         const payload: unknown = await response.json();
@@ -1322,7 +1322,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         }
       } catch (error) {
         if (abortController.signal.aborted) return;
-        console.error("[TradingGrid] Failed to load Binance chart history", error);
+        console.error(
+          "[TradingGrid] Failed to load Binance chart history",
+          error,
+        );
       }
     };
 
@@ -1985,20 +1988,16 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       pendingBets[selectedShareCell.id] ||
       betAmount
     : betAmount;
-  const selectedShareProfit = useMemo(
-    () => {
-      if (!selectedShareCell) return 0;
-      const settledPayout = settledOutcomes[selectedShareCell.id]?.payout;
-      if (typeof settledPayout === "number" && Number.isFinite(settledPayout)) {
-        return Math.max(settledPayout, 0);
-      }
-      return (
-        selectedShareAmount *
-        Math.max((selectedShareCell.multiplier ?? 0) - 1, 0)
-      );
-    },
-    [selectedShareAmount, selectedShareCell, settledOutcomes],
-  );
+  const selectedShareProfit = useMemo(() => {
+    if (!selectedShareCell) return 0;
+    const settledPayout = settledOutcomes[selectedShareCell.id]?.payout;
+    if (typeof settledPayout === "number" && Number.isFinite(settledPayout)) {
+      return Math.max(settledPayout, 0);
+    }
+    return (
+      selectedShareAmount * Math.max((selectedShareCell.multiplier ?? 0) - 1, 0)
+    );
+  }, [selectedShareAmount, selectedShareCell, settledOutcomes]);
   const shareWinRate = useMemo(() => {
     const settled = Object.values(settledOutcomes);
     if (settled.length === 0) return null;
@@ -2539,10 +2538,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
               }}
               aria-label="Share winning cell"
             >
-              <Share2
-                className="h-1/2 w-1/2 shrink-0"
-                strokeWidth={2}
-              />
+              <Share2 className="h-1/2 w-1/2 shrink-0" strokeWidth={2} />
             </button>
           ))}
         </div>
@@ -2586,7 +2582,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
               </DialogTitle>
               <DialogDescription className="text-text-sub text-sm font-medium tracking-[-0.01em]">
                 {followReferralCode
-                  ? `Follow @${followReferralCode.replace(/^@/, "")} directly from this shared link.`
+                  ? `Follow @kyan13 directly from this shared link.`
                   : "Follow this trader directly from the shared link."}
               </DialogDescription>
               {resolvedFollowTargetWallet ? (
@@ -2601,7 +2597,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                   variant="outline"
                   onClick={handleCloseFollowReferralModal}
                   disabled={isSubmittingFollowReferral}
-                  className="border-border-main text-text-inverse hover:text-text-inverse h-11 rounded-[10px] bg-white hover:bg-white/90"
+                  className="border-border-main text-text-inverse hover:text-text-inverse h-11 rounded-[10px] bg-white hover:bg-white/90 disabled:opacity-100"
                 >
                   Cancel
                 </Button>

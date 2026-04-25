@@ -276,7 +276,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-border-main text-text-inverse hover:text-text-inverse h-12 rounded-[12px] bg-white text-base font-medium tracking-[-0.01em] hover:bg-white/90 sm:h-16 sm:rounded-[16px] sm:text-[42px] sm:tracking-[-0.02em]"
+                  className="border-border-main text-text-inverse hover:text-text-inverse disabled:opacity-100 h-12 rounded-[12px] bg-white text-base font-medium tracking-[-0.01em] hover:bg-white/90 sm:h-16 sm:rounded-[16px] sm:text-[42px] sm:tracking-[-0.02em]"
                   onClick={handleCloseCopyTradeModal}
                   disabled={isPaying || isSubmittingFollow}
                 >

@@ -53,8 +53,7 @@ function ToggleSwitch({
         aria-hidden
         className="bg-background-main absolute top-1/2 h-3 w-4 -translate-y-1/2 rounded-full transition-all"
         style={{ left: checked ? "calc(100% - 19px)" : "3px" }}
-      >
-      </span>
+      ></span>
     </button>
   );
 }
@@ -72,7 +71,8 @@ export default function OverlayModePanel({
   const [isStrategyConfigOpen, setIsStrategyConfigOpen] = useState(true);
   const [isFollowTradeConfigOpen, setIsFollowTradeConfigOpen] = useState(false);
   const hasFollowTradeTargets = followTradeTargets.length > 0;
-  const isFollowTradeConfigExpanded = followTradeEnabled && isFollowTradeConfigOpen;
+  const isFollowTradeConfigExpanded =
+    followTradeEnabled && isFollowTradeConfigOpen;
 
   return (
     <div className="flex flex-col gap-4">
@@ -104,8 +104,10 @@ export default function OverlayModePanel({
         <div className="bg-background-surface rounded-[8px] px-2 py-2">
           <button
             type="button"
-            onClick={() => setIsStrategyConfigOpen((currentValue) => !currentValue)}
-            className="flex min-w-0 w-full items-center gap-1.5 rounded-[6px] py-1 text-left"
+            onClick={() =>
+              setIsStrategyConfigOpen((currentValue) => !currentValue)
+            }
+            className="flex w-full min-w-0 items-center gap-1.5 rounded-[6px] py-1 text-left"
           >
             <ArrowRightCircle
               aria-hidden
@@ -120,7 +122,9 @@ export default function OverlayModePanel({
               className="text-text-sub ml-auto size-4 shrink-0 transition-transform"
               strokeWidth={1.75}
               style={{
-                transform: isStrategyConfigOpen ? "rotate(180deg)" : "rotate(0deg)",
+                transform: isStrategyConfigOpen
+                  ? "rotate(180deg)"
+                  : "rotate(0deg)",
               }}
             />
           </button>
@@ -214,8 +218,10 @@ export default function OverlayModePanel({
                       className="bg-background-main/40 border-border-main flex items-center justify-between gap-2 rounded-[6px] border px-2 py-1.5"
                     >
                       <div className="min-w-0">
+                        {/* TODO */}
                         <p className="text-text-heading truncate text-xs font-semibold tracking-[-0.01em]">
-                          {target.label}
+                          {/* {"kyan13" || target.label} */}
+                          kyan13
                         </p>
                       </div>
 

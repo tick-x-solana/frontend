@@ -26,7 +26,9 @@ function isWorldChatUserRejectedError(
 ): error is Error & { error_code: string } {
   if (!(error instanceof Error)) return false;
   const chatError = error as Error & { error_code?: string };
-  return chatError.name === "ChatError" && chatError.error_code === "user_rejected";
+  return (
+    chatError.name === "ChatError" && chatError.error_code === "user_rejected"
+  );
 }
 
 function useWinShareActions({
@@ -42,8 +44,10 @@ function useWinShareActions({
     logPrefix: "[useWinShareActions]",
   });
 
+  // TODO
   const shareUrl = useMemo(
-    () => buildMiniAppReferralLink(miniAppUsername ?? username),
+    () =>
+      "https://worldcoin.org/mini-app?app_id=app_fe8a4559be4f53707ad19a676492a4d6&path=/ref/0xD49f9f4A840F0a7cCb8173729Fa9d82dBAF427f4",
     [miniAppUsername, username],
   );
 
