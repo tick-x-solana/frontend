@@ -1137,8 +1137,12 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       throw new Error("Cannot resolve target wallet from referral code");
     }
 
-    const userByAddress = await MiniKit.getUserByAddress(walletAddressFromUsername);
-    return parseAddress(userByAddress.walletAddress) ?? walletAddressFromUsername;
+    const userByAddress = await MiniKit.getUserByAddress(
+      walletAddressFromUsername,
+    );
+    return (
+      parseAddress(userByAddress.walletAddress) ?? walletAddressFromUsername
+    );
   }, []);
 
   const handleCloseFollowReferralModal = useCallback(() => {

@@ -10,16 +10,24 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
+import {
+  IDKitRequestWidget,
+  deviceLegacy,
+  type IDKitErrorCodes,
+  type IDKitResult,
+  type RpContext,
+} from "@worldcoin/idkit";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { TICKX_MINI_APP_ID } from "@/src/features/referrals/constants";
 
 const SPLASH_DURATION_MS = 1100;
-const VERIFY_LOADING_MS = 1400;
 const VERIFY_SUCCESS_MS = 900;
 const ONBOARDING_COMPLETE_KEY = "tickx-onboarding-complete";
 const REDIRECT_HOME_AFTER_LOGIN_KEY = "tickx-redirect-home-after-login";
+const VERIFY_HUMAN_ACTION = "verify-human";
 
 function setRedirectHomeAfterLoginFlag() {
   if (typeof window === "undefined") return;
@@ -126,6 +134,15 @@ const StepOne = ({ isLoggingIn, onLogin }: StepOneProps) => (
 
 type StepTwoProps = {
   onEnterApp: () => void;
+  walletAddress: string | null;
+};
+
+type RpSignatureResponse = {
+  sig: string;
+  nonce: string;
+  created_at: number;
+  expires_at: number;
+  rp_id: string;
 };
 
 const BenefitRow = ({
@@ -150,37 +167,106 @@ const BenefitRow = ({
   </div>
 );
 
-const StepTwo = ({ onEnterApp }: StepTwoProps) => {
+const StepTwo = ({ onEnterApp, walletAddress }: StepTwoProps) => {
   const [verifyStatus, setVerifyStatus] = useState<
     "idle" | "loading" | "success"
   >("idle");
-  const loadingTimerRef = useRef<number | null>(null);
+  const [isPreparingVerify, setIsPreparingVerify] = useState(false);
+  const [isVerifyWidgetOpen, setIsVerifyWidgetOpen] = useState(false);
+  const [rpContext, setRpContext] = useState<RpContext | null>(null);
   const successTimerRef = useRef<number | null>(null);
-  const isVerifying = verifyStatus === "loading";
+  const isVerifying = verifyStatus === "loading" || isPreparingVerify;
 
-  const handleVerify = useCallback(() => {
-    if (isVerifying) {
+  const fetchRpContext = useCallback(async () => {
+    const response = await fetch("/api/rp-signature", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: VERIFY_HUMAN_ACTION }),
+    });
+    if (!response.ok) {
+      throw new Error("Failed to create RP signature");
+    }
+
+    const data = (await response.json()) as RpSignatureResponse;
+
+    return {
+      rp_id: data.rp_id,
+      nonce: data.nonce,
+      created_at: data.created_at,
+      expires_at: data.expires_at,
+      signature: data.sig,
+    } satisfies RpContext;
+  }, []);
+
+  const handleOpenVerifyFlow = useCallback(async () => {
+    if (isVerifying || verifyStatus === "success") {
       return;
     }
 
-    setVerifyStatus("loading");
+    if (!walletAddress) {
+      toast.error("Missing wallet address. Please sign in again.");
+      return;
+    }
 
-    loadingTimerRef.current = window.setTimeout(() => {
-      setVerifyStatus("success");
-      toast.success("Verification successful. Welcome to TickX.");
+    try {
+      setIsPreparingVerify(true);
+      const nextRpContext = await fetchRpContext();
+      setRpContext(nextRpContext);
+      setIsVerifyWidgetOpen(true);
+    } catch {
+      toast.error("Unable to start verification. Please try again.");
+    } finally {
+      setIsPreparingVerify(false);
+    }
+  }, [fetchRpContext, isVerifying, verifyStatus, walletAddress]);
 
-      successTimerRef.current = window.setTimeout(() => {
-        onEnterApp();
-      }, VERIFY_SUCCESS_MS);
-    }, VERIFY_LOADING_MS);
-  }, [isVerifying, onEnterApp]);
+  const handleVerify = useCallback(
+    async (result: IDKitResult) => {
+      if (!rpContext) {
+        throw new Error("Missing RP context");
+      }
+
+      setVerifyStatus("loading");
+
+      const response = await fetch("/api/verify-proof", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          rp_id: rpContext.rp_id,
+          idkitResponse: result,
+        }),
+      });
+
+      if (!response.ok) {
+        setVerifyStatus("idle");
+        throw new Error("Backend proof verification failed");
+      }
+    },
+    [rpContext],
+  );
+
+  const handleVerifySuccess = useCallback(() => {
+    setIsVerifyWidgetOpen(false);
+    setVerifyStatus("success");
+    toast.success("Verification successful. Welcome to TickX.");
+
+    successTimerRef.current = window.setTimeout(() => {
+      onEnterApp();
+    }, VERIFY_SUCCESS_MS);
+  }, [onEnterApp]);
+
+  const handleVerifyError = useCallback((errorCode: IDKitErrorCodes) => {
+    setIsVerifyWidgetOpen(false);
+    setVerifyStatus("idle");
+    if (errorCode === "user_rejected") {
+      toast.error("You rejected the verification request.");
+      return;
+    }
+    toast.error("World ID verification failed. Please try again.");
+  }, []);
 
   useEffect(() => {
     return () => {
-      if (loadingTimerRef.current) {
-        window.clearTimeout(loadingTimerRef.current);
-      }
-
       if (successTimerRef.current) {
         window.clearTimeout(successTimerRef.current);
       }
@@ -248,15 +334,17 @@ const StepTwo = ({ onEnterApp }: StepTwoProps) => {
           <Button
             type="button"
             size="lg"
-            onClick={handleVerify}
+            onClick={() => void handleOpenVerifyFlow()}
             disabled={isVerifying || verifyStatus === "success"}
             className="bg-primary-light text-text-inverse hover:bg-primary-medium h-11 w-full rounded-[8px] text-sm font-medium tracking-[-0.01em] shadow-none disabled:opacity-70"
           >
-            {verifyStatus === "loading"
-              ? "Verifying..."
-              : verifyStatus === "success"
-                ? "Verified"
-                : "Verify with World ID"}
+            {isPreparingVerify
+              ? "Preparing..."
+              : verifyStatus === "loading"
+                ? "Verifying..."
+                : verifyStatus === "success"
+                  ? "Verified"
+                  : "Verify with World ID"}
           </Button>
           {verifyStatus !== "loading" && verifyStatus !== "success" && (
             <Button
@@ -276,6 +364,12 @@ const StepTwo = ({ onEnterApp }: StepTwoProps) => {
             </p>
           ) : null}
 
+          {isPreparingVerify ? (
+            <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
+              Preparing verification request...
+            </p>
+          ) : null}
+
           {verifyStatus === "success" ? (
             <p className="text-success-medium text-xs font-medium tracking-[-0.01em]">
               Verification successful. Entering the app...
@@ -283,12 +377,32 @@ const StepTwo = ({ onEnterApp }: StepTwoProps) => {
           ) : null}
         </div>
       </div>
+      {rpContext ? (
+        <IDKitRequestWidget
+          open={isVerifyWidgetOpen}
+          onOpenChange={setIsVerifyWidgetOpen}
+          app_id={TICKX_MINI_APP_ID}
+          action={VERIFY_HUMAN_ACTION}
+          rp_context={rpContext}
+          allow_legacy_proofs={true}
+          // Verify level: Orb | Device
+          preset={
+            walletAddress
+              ? deviceLegacy({ signal: walletAddress.toLowerCase() })
+              : deviceLegacy()
+          }
+          handleVerify={handleVerify}
+          onSuccess={handleVerifySuccess}
+          onError={handleVerifyError}
+        />
+      ) : null}
     </OnboardingShell>
   );
 };
 
 const AuthGate = ({ children }: { children: ReactNode }) => {
-  const { isAuthenticated, isLoggingIn, isMiniApp, login } = useAuth();
+  const { isAuthenticated, isLoggingIn, isMiniApp, login, walletAddress } =
+    useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const wasAuthenticatedRef = useRef(isAuthenticated);
@@ -342,7 +456,7 @@ const AuthGate = ({ children }: { children: ReactNode }) => {
   };
 
   if (isAuthenticated) {
-    return <StepTwo onEnterApp={enterApp} />;
+    return <StepTwo onEnterApp={enterApp} walletAddress={walletAddress} />;
   }
 
   return (

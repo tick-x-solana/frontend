@@ -9,7 +9,6 @@ import {
   formatUnits,
   http,
   isAddress,
-  parseEther,
   parseUnits,
   type Address,
   type Hash,
@@ -21,7 +20,6 @@ import {
   getAccountControllerGetBalanceQueryKey,
   paymentControllerDebugDeposit,
   paymentControllerDebugFinalizeWithdrawal,
-  paymentControllerGetActiveWithdrawalSession,
   paymentControllerRequestWithdrawal,
 } from "@/src/services/queries";
 import { fetchWldUsdPrice } from "@/src/hooks/useWldUsdPrice";
@@ -78,13 +76,6 @@ function parsePositiveNumber(value: string, label: string): number {
   return parsed;
 }
 
-type OnChainAmountCandidate = {
-  key: string;
-  value: string;
-  raw: bigint;
-  amountWld: number;
-};
-
 function extractRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") {
     return {};
@@ -100,93 +91,6 @@ function asOptionalString(value: unknown): string | undefined {
     return String(value);
   }
   return undefined;
-}
-
-function buildOnChainAmountCandidates(
-  payload: Record<string, unknown>,
-): OnChainAmountCandidate[] {
-  const amountKeys = [
-    "onChainAmount",
-    "tokenAmount",
-    "amountWld",
-    "claimAmount",
-    "withdrawAmount",
-    "amount",
-  ];
-
-  const candidates: OnChainAmountCandidate[] = [];
-
-  for (const key of amountKeys) {
-    const stringValue = asOptionalString(payload[key]);
-    if (!stringValue) {
-      continue;
-    }
-
-    const trimmed = stringValue.trim();
-    const possibleRawAmounts = trimmed.includes(".")
-      ? [parseUnits(trimmed, WLD_TOKEN_DECIMALS)]
-      : [BigInt(trimmed), parseUnits(trimmed, WLD_TOKEN_DECIMALS)];
-
-    for (const raw of possibleRawAmounts) {
-      const amountWld = Number(formatUnits(raw, WLD_TOKEN_DECIMALS));
-      if (!Number.isFinite(amountWld)) {
-        continue;
-      }
-      candidates.push({
-        key,
-        value: trimmed,
-        raw,
-        amountWld,
-      });
-    }
-  }
-
-  return candidates;
-}
-
-function pickBestOnChainAmountCandidate(
-  candidates: OnChainAmountCandidate[],
-  expectedAmountWld: number,
-): OnChainAmountCandidate | null {
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  const keyPriority = new Map<string, number>([
-    ["onChainAmount", 0],
-    ["tokenAmount", 1],
-    ["amountWld", 2],
-    ["claimAmount", 3],
-    ["withdrawAmount", 4],
-    ["amount", 5],
-  ]);
-
-  const sorted = [...candidates].sort((a, b) => {
-    const aDiff = Math.abs(a.amountWld - expectedAmountWld);
-    const bDiff = Math.abs(b.amountWld - expectedAmountWld);
-    if (aDiff !== bDiff) {
-      return aDiff - bDiff;
-    }
-
-    const keyScoreDiff =
-      (keyPriority.get(a.key) ?? 99) - (keyPriority.get(b.key) ?? 99);
-    if (keyScoreDiff !== 0) {
-      return keyScoreDiff;
-    }
-    return 0;
-  });
-
-  const best = sorted[0];
-  const mismatchRatio =
-    expectedAmountWld > 0
-      ? Math.abs(best.amountWld - expectedAmountWld) / expectedAmountWld
-      : 0;
-
-  if (mismatchRatio > 0.2) {
-    return null;
-  }
-
-  return best;
 }
 
 function extractUserOpHash(value: unknown): string | null {
@@ -332,17 +236,6 @@ function buildAuthHeaders(): HeadersInit | undefined {
   return {
     Authorization: `Bearer ${token}`,
   };
-}
-
-function extractSessionId(value: unknown): string | undefined {
-  const record = extractRecord(value);
-  const nestedData = extractRecord(record.data);
-  return (
-    asOptionalString(record.sessionId) ??
-    asOptionalString(nestedData.sessionId) ??
-    asOptionalString(record.withdrawalSessionId) ??
-    asOptionalString(nestedData.withdrawalSessionId)
-  );
 }
 
 const useDepositWithdraw = () => {
@@ -498,9 +391,6 @@ const useDepositWithdraw = () => {
       setIsWithdrawing(true);
 
       try {
-        const wldUsdPrice = await fetchWldUsdPrice();
-        const expectedAmountWld = parsedAmountUsd / wldUsdPrice;
-        const amountWld = trimTrailingZeros(expectedAmountWld.toFixed(8));
         const authHeaders = buildAuthHeaders();
 
         const withdrawalResponse = await paymentControllerRequestWithdrawal(
@@ -519,52 +409,35 @@ const useDepositWithdraw = () => {
 
         const responseData = extractRecord(withdrawalResponse);
         const nestedData = extractRecord(responseData.data);
-        console.log("withdrawalResponse: ", withdrawalResponse);
-        const candidates = buildOnChainAmountCandidates({
-          ...responseData,
-          ...nestedData,
-        });
-        const selectedCandidate = pickBestOnChainAmountCandidate(
-          candidates,
-          expectedAmountWld,
-        );
-        const onChainAmount =
-          selectedCandidate?.value ?? candidates[0]?.value ?? undefined;
+
+        const claimAmount =
+          asOptionalString(responseData.claimAmount) ??
+          asOptionalString(nestedData.claimAmount);
         const deadline =
           asOptionalString(responseData.deadline) ??
           asOptionalString(nestedData.deadline);
-        console.log("deadline: ", deadline);
-        const adminSignature = (asOptionalString(
+        const approvalSignature = (asOptionalString(
           responseData.approvalSignature,
         ) ?? asOptionalString(nestedData.approvalSignature)) as
           | `0x${string}`
           | undefined;
 
-        console.log("adminSignature: ", adminSignature);
-        if (!onChainAmount || !deadline || !adminSignature) {
+        if (!claimAmount || !deadline || !approvalSignature) {
           throw new Error(
-            "Withdrawal response missing required on-chain parameters (amount, deadline, adminSignature)",
+            "Withdrawal response missing required on-chain parameters (claimAmount, deadline, approvalSignature)",
           );
         }
 
-        console.log("selectedCandidate: ", selectedCandidate);
-        console.log("onChainAmount: ", onChainAmount);
-        // if (!selectedCandidate) {
-        //   throw new Error(
-        //     `Signed withdrawal amount mismatches expected WLD amount. Expected ~${amountWld} WLD from ${trimTrailingZeros(parsedAmountUsd.toFixed(6))} USD, but backend response did not provide a compatible on-chain token amount.`,
-        //   );
-        // }
-
-        // const withdrawTokenAmountRaw = selectedCandidate.raw;
-        const withdrawTokenAmountRaw = parseEther("3");
+        const withdrawTokenAmountRaw = BigInt(claimAmount);
 
         const deadlineBigInt = BigInt(deadline);
+
         console.log(
-          "-- contract input withdrawTokenAmountRaw",
+          "withdraw contract input withdrawTokenAmountRaw",
           withdrawTokenAmountRaw,
         );
-        console.log("-- contract input deadlineBigInt", deadlineBigInt);
-        console.log("-- contract input adminSignature", adminSignature);
+        console.log("withdraw contract input deadlineBigInt", deadlineBigInt);
+        console.log("withdraw contract approvalSignature", approvalSignature);
 
         const claimTraderCalldata = encodeFunctionData({
           abi: [
@@ -585,7 +458,7 @@ const useDepositWithdraw = () => {
             },
           ],
           functionName: "claimTrader",
-          args: [withdrawTokenAmountRaw, deadlineBigInt, adminSignature],
+          args: [withdrawTokenAmountRaw, deadlineBigInt, approvalSignature],
         });
 
         const txResult = await MiniKit.sendTransaction({
@@ -616,26 +489,12 @@ const useDepositWithdraw = () => {
           hash: claimTxHash,
         });
 
-        const sessionResponse =
-          await paymentControllerGetActiveWithdrawalSession(
-            authHeaders
-              ? {
-                  headers: authHeaders,
-                }
-              : undefined,
-          );
-        const sessionId = extractSessionId(sessionResponse);
-
-        if (!sessionId) {
-          throw new Error(
-            "Withdrawal session is missing sessionId for finalization",
-          );
-        }
+        const now = Date.now();
 
         await paymentControllerDebugFinalizeWithdrawal(
           {
-            sessionId,
-            txHash: claimTxHash,
+            sessionId: `debug-session-${now}`,
+            txHash: `debug-tx-${now}`,
             logIndex: 0,
           },
           authHeaders
@@ -656,8 +515,9 @@ const useDepositWithdraw = () => {
 
         return {
           amountUsd: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
-          amountWld,
-          wldUsdPrice,
+          amountWld: trimTrailingZeros(
+            formatUnits(withdrawTokenAmountRaw, WLD_TOKEN_DECIMALS),
+          ),
           txResult,
           userOpHash,
           txHash: claimTxHash,

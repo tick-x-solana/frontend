@@ -92,6 +92,8 @@ The current codebase uses only a small set of env vars, and several endpoints ar
 | Variable | Example | Purpose |
 |---|---|---|
 | `ENV` | `production` | Toggles environment-dependent behavior in parts of the referral flow. |
+| `RP_ID` | `rp_xxxxx` | World ID 4.0 relying-party ID used by `/api/rp-signature` and `/api/verify-proof`. |
+| `RP_SIGNING_KEY` | `<hex-private-key>` | Secret key used server-side to generate RP signatures. Never expose to client code. |
 | `ORVAL_SWAGGER_URL` | `https://api-tap-fun-chainlink.nysm.work/swagger/json` | Overrides the OpenAPI source used by `generate:api`. |
 
 ## Scripts

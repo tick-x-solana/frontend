@@ -76,7 +76,7 @@ const ReferAFriend = ({ referralLink }: ReferAFriendProps) => {
       <Button
         type="button"
         className="bg-primary-light text-text-inverse hover:bg-primary-medium h-11 w-full rounded-[10px] px-3 text-sm font-semibold tracking-[-0.01em] shadow-none"
-        // onClick={() => logout()}
+        onClick={() => logout()}
       >
         Invite Friends
       </Button>
