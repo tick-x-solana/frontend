@@ -85,6 +85,9 @@ const MOBILE_ZOOM_MIN = 1.3;
 const MIN_PRICE_MOTION_MS = 250;
 const MAX_PRICE_MOTION_MS = 5000;
 const TICK_CADENCE_SMOOTHING = 0.2;
+const LARGE_MOVE_STEPS_START = 2;
+const LARGE_MOVE_STEPS_FULL = 12;
+const LARGE_MOVE_DURATION_FACTOR_MIN = 0.38;
 const RESIZE_COMMIT_DEBOUNCE_MS = 180;
 const FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS = 250;
 const SUGGESTED_STRATEGY_MIN_HOLD_MS = 3000;
@@ -201,6 +204,11 @@ function GridActionButton({
 
 function formatPercent(value: number) {
   return `${percentageFormatter.format(value)}%`;
+}
+
+function easeOutCubic(progress: number): number {
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+  return 1 - (1 - clampedProgress) ** 3;
 }
 
 type BalanceChipProps = {
@@ -1982,19 +1990,36 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       MAX_PRICE_MOTION_MS,
       Math.max(MIN_PRICE_MOTION_MS, tickCadenceMsRef.current * 0.92),
     );
+    const priceJump = Math.abs(lastPoint.price - cameraPriceRef.current);
+    const safePriceStep = Math.max(modePriceStep, 1e-6);
+    const jumpInSteps = priceJump / safePriceStep;
+    const largeMoveRatio = Math.max(
+      0,
+      Math.min(
+        1,
+        (jumpInSteps - LARGE_MOVE_STEPS_START) /
+          Math.max(1e-6, LARGE_MOVE_STEPS_FULL - LARGE_MOVE_STEPS_START),
+      ),
+    );
+    const largeMoveDurationFactor =
+      1 - largeMoveRatio * (1 - LARGE_MOVE_DURATION_FACTOR_MIN);
+    const adaptiveDurationMs = Math.max(
+      MIN_PRICE_MOTION_MS,
+      durationMs * largeMoveDurationFactor,
+    );
 
     priceMotionRef.current = {
       startPrice: cameraPriceRef.current,
       targetPrice: lastPoint.price,
       startTime:
         nowRef.current > 0 ? nowRef.current : Date.now() + serverTimeOffset,
-      durationMs,
+      durationMs: adaptiveDurationMs,
     };
     lastHistoryPointRef.current = {
       time: lastPoint.time,
       price: lastPoint.price,
     };
-  }, [history, serverTimeOffset]);
+  }, [history, modePriceStep, serverTimeOffset]);
 
   // ── Resize observer ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -2306,9 +2331,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       if (motion && motion.durationMs > 0) {
         const elapsed = nextNow - motion.startTime;
         const progress = Math.min(1, Math.max(0, elapsed / motion.durationMs));
+        const easedProgress = easeOutCubic(progress);
         cameraPriceRef.current =
           motion.startPrice +
-          (motion.targetPrice - motion.startPrice) * progress;
+          (motion.targetPrice - motion.startPrice) * easedProgress;
 
         if (progress >= 1) {
           cameraPriceRef.current = motion.targetPrice;

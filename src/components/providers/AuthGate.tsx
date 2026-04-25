@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
@@ -269,12 +270,26 @@ const StepTwo = ({ onEnterApp }: StepTwoProps) => {
 
 const AuthGate = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated, isLoggingIn, isMiniApp, login } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const wasAuthenticatedRef = useRef(isAuthenticated);
   const [showSplash, setShowSplash] = useState(true);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(
     () =>
       typeof window !== "undefined" &&
       window.localStorage.getItem(ONBOARDING_COMPLETE_KEY) === "true",
   );
+
+  useEffect(() => {
+    const justAuthenticated = !wasAuthenticatedRef.current && isAuthenticated;
+    wasAuthenticatedRef.current = isAuthenticated;
+
+    if (!justAuthenticated || pathname === "/") {
+      return;
+    }
+
+    router.replace("/");
+  }, [isAuthenticated, pathname, router]);
 
   useEffect(() => {
     if (!isMiniApp) return;
