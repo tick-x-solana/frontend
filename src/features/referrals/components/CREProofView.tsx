@@ -29,16 +29,13 @@ type CreSectionProps = {
 };
 
 const txHashes = [
-  "0xd1a6cc31adff06b33b1fe7049118d813d285a2f19a8fed84678127b7479665d5",
-  "0xf27e0dc75e6b89ea5e86f108776374294f3ab018baa2334c72ef9248037f72cb",
-  "0x6e87eb9ed1aa1512070bf643bca9f89a921ad41c99a44b0fd3d72910d8fd9538",
-  "0x61640cf1c59c3ca367675e30b2c5def1b7f7ff80956323caae0c47ce7ff86e33",
-  "0x4bad771a5bd953e785abe03f1a2f490f4aacdfb4fed4bc2b1fd494aea8cb000b",
-  "0x1a22d4333a1edbe5d25392a71881fb4df1fffa5bac369eb6d11935eb86d05604",
-  "0x91e98b4a7deb6bef78a2ed4479bcd8b3f716c626b1fce9790364cd5d6748d67c",
-  "0x254dcda958234e6b21dcbb419912525ebcd32b7422f45b04ffc0af97e21175cf",
-  "0xb2a802a2edd22e11f8f6eba51df8038898afce5e7b3368e4adbb9e84094782c7",
-  "0xcd75e2a779bbe73438ae1e77d404a0c1f78bf21d107ff7e5a8e30394519d76fb",
+  "0x4fab246383c2a73d61bcb7040a017e48f0e5bfc897bcda9118f54328769a269e",
+  "0x40a9682d7a17b4cefd00ed7e158ac9d94690d0cd7eb70317bf86a1508259211c",
+  "0x95af04427f0d4855c1b456b3073b6da72890673c177c16a7c3a54b8687ea87c6",
+  "0x070575ef375180ff49db864bec90a8112001c8c0bfc45fdf0ca4c394972b364c",
+  "0x802cc8c9c9be4801ec2b69b879174c3867e01a78b7677b351587f469bd3cbe4c",
+  "0xbc7975c18b8c1d933ffd80f434c93f641daf259d9c97144d5acee31b9a5a8eeb",
+  "0x9dc16f41ce8a2fc8b198500232e7d471c5dfebb9168c7168db8ca84b150fcb08",
 ];
 const nowTimestamp = Date.now();
 const fifteenMinutesMs = 15 * 60 * 1000;
@@ -55,10 +52,6 @@ function bpsToPercent(bps: number) {
 
 function fmt(n: number) {
   return n.toLocaleString();
-}
-
-function hashToAddress(hash: string) {
-  return `0x${hash.slice(-40)}`;
 }
 
 function to15mWindowLabel(index: number) {
@@ -209,7 +202,6 @@ export default function CREProofView() {
         pass: true,
         failFlags: "0x00",
         txHash: hash,
-        contract: hashToAddress(hash),
       })),
     [],
   );
@@ -309,25 +301,11 @@ export default function CREProofView() {
               render: (row) => (
                 <a
                   className="text-text-link-main hover:text-primary-light transition-colors"
-                  href={`https://sepolia.etherscan.io/tx/${String(row.txHash)}`}
+                  href={`https://worldscan.org/tx/${String(row.txHash)}`}
                   target="_blank"
                   rel="noreferrer"
                 >
                   {shortHash(String(row.txHash))}
-                </a>
-              ),
-            },
-            {
-              key: "contract",
-              label: "Contract",
-              render: (row) => (
-                <a
-                  className="text-text-link-main hover:text-primary-light transition-colors"
-                  href={`https://sepolia.etherscan.io/address/${String(row.contract)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {shortHash(String(row.contract))}
                 </a>
               ),
             },
