@@ -85,6 +85,7 @@ import {
 import { useGridInteraction } from "@/src/hooks/useGridInteraction";
 import useWinShareActions from "@/src/hooks/useWinShareActions";
 import { getAddress } from "viem";
+import { BetWinEffect } from "./BetWinEffect";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -142,7 +143,7 @@ const FAKE_WIN_TOAST_MIN_DELAY_MS = 5000;
 const FAKE_WIN_TOAST_MAX_DELAY_MS = 20000;
 const FAKE_WIN_TOAST_VISIBLE_MS = 1000;
 const WIN_EFFECT_VISIBLE_MS = 2000;
-const WIN_EFFECT_AMOUNTS_VISIBLE_MS = 850;
+const WIN_EFFECT_AMOUNTS_VISIBLE_MS = 1300;
 const FAKE_WIN_USERNAME_PREFIXES = [
   "lion",
   "tiger",
@@ -2681,21 +2682,13 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
               <div
                 key={`${target.cellId}-win-icon-${activeWinEffectByCellId[target.cellId]?.startedAt ?? 0}`}
                 ref={(node) => setWinEffectIconRef(target.cellId, node)}
-                className="absolute top-0 left-0 will-change-transform"
+                className="absolute top-0 left-0 h-[200px] w-[200px] will-change-transform"
                 style={{
                   transform: `translate3d(${target.centerLeft}px, ${target.centerTop}px, 0) translate(-50%, -50%)`,
                 }}
                 aria-hidden
               >
-                <Image
-                  src={`/bet-win.svg?v=${activeWinEffectByCellId[target.cellId]?.startedAt ?? 0}`}
-                  alt=""
-                  width={200}
-                  height={200}
-                  unoptimized
-                  loading="eager"
-                  className="h-[200px] w-[200px]"
-                />
+                <BetWinEffect />
                 {activeWinEffectByCellId[target.cellId]?.showTotal ? (
                   <div
                     key={`${target.cellId}-total-wrap-${activeWinEffectByCellId[target.cellId]?.startedAt ?? 0}`}
@@ -2713,10 +2706,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                 ) : (
                   <div
                     key={`${target.cellId}-amounts-${activeWinEffectByCellId[target.cellId]?.startedAt ?? 0}`}
-                    className="win-pop-amounts pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap"
-                    style={{
-                      top: `${Math.max(54, Math.min(88, 100 - target.cellEdge / 2 - 6))}px`,
-                    }}
+                    className="win-pop-amounts pointer-events-none absolute flex items-center gap-1.5 whitespace-nowrap"
+                    style={{ top: "100px", left: "100px" }}
                   >
                     <span
                       className="text-success-medium font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(17_211_68_/_0.66)]"

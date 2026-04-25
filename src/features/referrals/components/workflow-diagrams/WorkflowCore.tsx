@@ -1497,12 +1497,12 @@ export const SETTLEMENT_CONFIG: WorkflowConfig = {
     },
   ],
   edges: [
-    // User → Order engine (place bet)
+    // User → Order engine (place trade)
     {
       id: "e1",
       from: "user",
       to: "order",
-      label: "place bet",
+      label: "place trade",
       labelPos: { x: 138, y: 33 },
     },
     // Order engine → Settlements & Payouts (calculate)
@@ -1574,7 +1574,7 @@ export const SETTLEMENT_CONFIG: WorkflowConfig = {
   steps: [
     {
       edgeId: "e1",
-      desc: "User places a bet, which is routed to the Order engine for processing.",
+      desc: "User places a trade, which is routed to the Order engine for processing.",
     },
     {
       edgeId: "e3",
@@ -1586,7 +1586,7 @@ export const SETTLEMENT_CONFIG: WorkflowConfig = {
     },
     {
       edgeId: "e2",
-      desc: "Order engine forwards the bet details to Settlements & Payouts for final calculation.",
+      desc: "Order engine forwards the trade details to Settlements & Payouts for final calculation.",
     },
     {
       edgeId: "e5",

@@ -280,15 +280,15 @@ export function useGridInteraction({
             !isStarted && anyCell.timeWindowStart - now <= 5000;
 
           if (hasBet) {
-            appToast.info("You already placed a bet on this cell.", {
+            appToast.info("You already have an open trade on this cell.", {
               icon: "🧾",
             });
           } else if (isStarted || isClosingSoon) {
-            appToast.warning("This cell is no longer available for betting.", {
+            appToast.warning("This cell is no longer available for trading.", {
               icon: "⏳",
             });
           } else {
-            appToast.warning("Cannot place bet on this cell.", {
+            appToast.warning("Cannot open a trade on this cell.", {
               icon: "⚠️",
             });
           }
@@ -313,7 +313,7 @@ export function useGridInteraction({
         }
 
         if (!betAmount || betAmount <= 0) {
-          appToast.warning("Invalid bet amount!", { icon: "⚠️" });
+          appToast.warning("Invalid trade amount!", { icon: "⚠️" });
           return;
         }
         console.log("balance: ", balance);

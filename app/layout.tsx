@@ -38,6 +38,9 @@ export default function RootLayout({
       lang="en"
       className={`${interDisplay.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <link rel="preload" href="/bet-win.svg" as="image" type="image/svg+xml" />
+      </head>
       <body className="flex min-h-full flex-col">
         <Providers>{children}</Providers>
       </body>
