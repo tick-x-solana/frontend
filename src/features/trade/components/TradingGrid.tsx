@@ -125,6 +125,10 @@ const winAmountFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const percentageFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
 const FAKE_WIN_TOAST_MIN_DELAY_MS = 5000;
 const FAKE_WIN_TOAST_MAX_DELAY_MS = 20000;
 const FAKE_WIN_TOAST_VISIBLE_MS = 1000;
@@ -195,6 +199,10 @@ function GridActionButton({
       {children}
     </Button>
   );
+}
+
+function formatPercent(value: number) {
+  return `${percentageFormatter.format(value)}%`;
 }
 
 type BalanceChipProps = {
@@ -1986,6 +1994,16 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     },
     [selectedShareAmount, selectedShareCell, settledOutcomes],
   );
+  const shareWinRate = useMemo(() => {
+    const settled = Object.values(settledOutcomes);
+    if (settled.length === 0) return null;
+    const wins = settled.filter((item) => item.isWin).length;
+    return formatPercent((wins / settled.length) * 100);
+  }, [settledOutcomes]);
+  const selectedShareRoi = useMemo(() => {
+    if (!selectedShareCell || selectedShareAmount <= 0) return null;
+    return formatPercent((selectedShareProfit / selectedShareAmount) * 100);
+  }, [selectedShareAmount, selectedShareCell, selectedShareProfit]);
   const selectedShareTime = useMemo(() => {
     if (!selectedShareCell) return "--:--:--";
     return shareTimeFormatter.format(
@@ -2457,11 +2475,16 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                   loading="eager"
                   className="h-[200px] w-[200px]"
                 />
-                <div className="win-pop-amounts pointer-events-none absolute top-2 left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap">
+                <div
+                  className="win-pop-amounts pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap"
+                  style={{
+                    top: `${Math.max(54, Math.min(88, 100 - target.cellEdge / 2 - 6))}px`,
+                  }}
+                >
                   <span
                     className="text-success-medium font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(17_211_68_/_0.66)]"
                     style={{
-                      fontSize: `${Math.max(11, Math.min(22, Math.round(target.cellEdge * 0.24)))}px`,
+                      fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
                     }}
                   >
                     +${winAmountFormatter.format(target.basePayout)}
@@ -2476,8 +2499,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                       loading="eager"
                       className="shrink-0"
                       style={{
-                        width: `${Math.max(12, Math.min(20, Math.round(target.cellEdge * 0.22)))}px`,
-                        height: `${Math.max(12, Math.min(20, Math.round(target.cellEdge * 0.22)))}px`,
+                        width: `${Math.max(11, Math.min(16, Math.round(target.cellEdge * 0.18)))}px`,
+                        height: `${Math.max(11, Math.min(16, Math.round(target.cellEdge * 0.18)))}px`,
                       }}
                     />
                   ) : null}
@@ -2485,7 +2508,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                     <span
                       className="text-grid-accent font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(18_221_255_/_0.72)]"
                       style={{
-                        fontSize: `${Math.max(11, Math.min(22, Math.round(target.cellEdge * 0.24)))}px`,
+                        fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
                       }}
                     >
                       +${winAmountFormatter.format(target.bonusPayout)}
@@ -2714,7 +2737,14 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                       type="button"
                       variant="outline"
                       className="border-primary-light text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[8px] bg-transparent text-base font-medium tracking-[-0.01em]"
-                      onClick={shareToWorldChat}
+                      onClick={() =>
+                        void shareToWorldChat({
+                          metrics: {
+                            winRate: shareWinRate,
+                            roi: selectedShareRoi,
+                          },
+                        })
+                      }
                     >
                       <Share2 className="mr-2 size-4" strokeWidth={1.9} />
                       WorldChat

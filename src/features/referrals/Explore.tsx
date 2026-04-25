@@ -21,6 +21,7 @@ import HowItWork from "@/src/features/referrals/components/HowItWork";
 import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
 import ReferralsHeader from "@/src/features/referrals/components/ReferralsHeader";
 import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
+import { buildWorldChatShareMessage } from "@/src/features/referrals/worldChatShare";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
 
@@ -218,6 +219,8 @@ const jumpToViewMap: Record<string, ExploreView> = {
   integrity: "home",
   "ai-agent": "ai-agent",
 };
+const FOLLOW_TRADE_SHARE_WIN_RATE = "68%";
+const FOLLOW_TRADE_SHARE_ROI = "+24.5%";
 
 function StatusBar() {
   return (
@@ -416,11 +419,14 @@ const Explore = () => {
       const miniAppReferralLink = buildMiniAppReferralLink(
         resolvedMiniAppUsername,
       );
-      const message = [
-        "Use my referral to follow trade on TickX.",
-        `Referral code: ${resolvedMiniAppUsername}`,
-        `Link: ${miniAppReferralLink}`,
-      ].join("\n");
+      const message = buildWorldChatShareMessage({
+        referralCode: resolvedMiniAppUsername,
+        referralLink: miniAppReferralLink,
+        metrics: {
+          winRate: FOLLOW_TRADE_SHARE_WIN_RATE,
+          roi: FOLLOW_TRADE_SHARE_ROI,
+        },
+      });
 
       const input = {
         message,

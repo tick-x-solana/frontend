@@ -59,6 +59,21 @@ function parseAddress(value: unknown): string | null {
   }
 }
 
+function normalizeUsername(value: string | null): string | null {
+  if (!value) return null;
+
+  const parts = value
+    .split("|")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0];
+
+  const firstNonAddressPart = parts.find((part) => parseAddress(part) === null);
+  return firstNonAddressPart ?? parts[0];
+}
+
 function readNestedRecord(
   value: UnknownRecord | null,
   key: string,
@@ -155,7 +170,7 @@ export function extractWssKey(response: unknown): string | null {
 function readFollowingUsername(record: UnknownRecord): string | null {
   const targetUser = asRecord(record.targetUser);
   const user = asRecord(record.user);
-  return (
+  const rawUsername =
     asString(record.targetUsername) ??
     asString(record.username) ??
     asString(record.targetUserName) ??
@@ -163,8 +178,9 @@ function readFollowingUsername(record: UnknownRecord): string | null {
     asString(targetUser?.displayName) ??
     asString(targetUser?.name) ??
     asString(user?.username) ??
-    null
-  );
+    null;
+
+  return normalizeUsername(rawUsername);
 }
 
 function toFollowingItem(value: unknown): OrderFollowingItem | null {

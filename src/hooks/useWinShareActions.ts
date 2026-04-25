@@ -85,38 +85,38 @@ function useWinShareActions({
 
   const shareToWorldChat = useCallback(
     async (options?: ShareToWorldChatOptions) => {
-    try {
-      if (!MiniKit.isInWorldApp()) {
-        appToast.error("WorldChat share is only available in World App", {
-          icon: "⚠️",
+      try {
+        if (!MiniKit.isInWorldApp()) {
+          appToast.error("WorldChat share is only available in World App", {
+            icon: "⚠️",
+          });
+          return;
+        }
+
+        const resolvedMiniAppUsername = await refreshMiniAppUsername();
+
+        if (!resolvedMiniAppUsername) {
+          appToast.error("Missing World username", { icon: "⚠️" });
+          return;
+        }
+
+        const referralLink = buildMiniAppReferralLink(resolvedMiniAppUsername);
+        const message = buildWorldChatShareMessage({
+          referralCode: resolvedMiniAppUsername,
+          referralLink,
+          introLine: options?.introLine,
+          metrics: options?.metrics,
         });
-        return;
+
+        await MiniKit.chat({ message });
+      } catch (error) {
+        if (isWorldChatUserRejectedError(error)) {
+          appToast.info("User cancelled share to WorldChat", { icon: "ℹ️" });
+          return;
+        }
+        console.error("Failed to share to WorldChat", error);
+        appToast.error("Failed to share to WorldChat", { icon: "⚠️" });
       }
-
-      const resolvedMiniAppUsername = await refreshMiniAppUsername();
-
-      if (!resolvedMiniAppUsername) {
-        appToast.error("Missing World username", { icon: "⚠️" });
-        return;
-      }
-
-      const referralLink = buildMiniAppReferralLink(resolvedMiniAppUsername);
-      const message = buildWorldChatShareMessage({
-        referralCode: resolvedMiniAppUsername,
-        referralLink,
-        introLine: options?.introLine,
-        metrics: options?.metrics,
-      });
-
-      await MiniKit.chat({ message });
-    } catch (error) {
-      if (isWorldChatUserRejectedError(error)) {
-        appToast.info("User cancelled share to WorldChat", { icon: "ℹ️" });
-        return;
-      }
-      console.error("Failed to share to WorldChat", error);
-      appToast.error("Failed to share to WorldChat", { icon: "⚠️" });
-    }
     },
     [refreshMiniAppUsername],
   );

@@ -51,6 +51,10 @@ const compactFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 4,
 });
+const percentageFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
 
 function asRecord(value: unknown): UnknownRecord | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -117,6 +121,10 @@ function formatRelativeTime(timestampMs: number): string {
 
 function formatClockTime(timestampMs: number): string {
   return dayjs(timestampMs).format("hh:mm:ss A");
+}
+
+function formatPercent(value: number): string {
+  return `${percentageFormatter.format(value)}%`;
 }
 
 function extractOrders(value: unknown): unknown[] {
@@ -335,6 +343,21 @@ const TradingHistoryTable = () => {
   const selectedShareMultiplier = selectedShareItem?.multiplier ?? 1;
   const selectedShareAmount = selectedShareItem?.amountUsd ?? 0;
   const selectedShareProfit = Math.max(selectedShareItem?.pnl ?? 0, 0);
+  const settledItems = useMemo(
+    () => items.filter((item) => !item.inProgress && item.pnl !== null),
+    [items],
+  );
+  const shareWinRate = useMemo(() => {
+    if (settledItems.length === 0) return null;
+    const wins = settledItems.filter(isWinRow).length;
+    return formatPercent((wins / settledItems.length) * 100);
+  }, [settledItems]);
+  const selectedShareRoi = useMemo(() => {
+    if (!selectedShareItem || selectedShareAmount <= 0) return null;
+    const pnl = selectedShareItem.pnl;
+    if (pnl === null) return null;
+    return formatPercent((pnl / selectedShareAmount) * 100);
+  }, [selectedShareAmount, selectedShareItem]);
 
   const handleOpenShareSheet = (itemId: string) => {
     setShareItemId(itemId);
@@ -457,7 +480,14 @@ const TradingHistoryTable = () => {
                       type="button"
                       variant="outline"
                       className="border-primary-light text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[8px] bg-transparent text-base font-medium tracking-[-0.01em]"
-                      onClick={shareToWorldChat}
+                      onClick={() =>
+                        void shareToWorldChat({
+                          metrics: {
+                            winRate: shareWinRate,
+                            roi: selectedShareRoi,
+                          },
+                        })
+                      }
                     >
                       <Share2 className="mr-2 size-4" strokeWidth={1.9} />
                       WorldChat

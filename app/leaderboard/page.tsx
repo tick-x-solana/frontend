@@ -69,23 +69,23 @@ const makeEntryWithPnl = (
 const humanTailPnls = createDescendingPnls(4, 1000, 3000);
 
 const humanLeaderboardEntries: LeaderboardEntry[] = [
-  { ...makeEntry(1, "travis12.66", "$192,190,290.19", 99), isHumanVerified: true },
-  { ...makeEntry(2, "nova88.17", "$5,443.18", 21), isHumanVerified: true },
-  { ...makeEntry(3, "kai14.02", "$3,854.13", 37), isHumanVerified: true },
+  { ...makeEntry(1, "travis12", "$192,190,290.19", 99), isHumanVerified: true },
+  { ...makeEntry(2, "nova88", "$5,443.18", 21), isHumanVerified: true },
+  { ...makeEntry(3, "kai14", "$3,854.13", 37), isHumanVerified: true },
   {
-    ...makeEntryWithPnl(4, "lyra29.41", "$2,100.41", humanTailPnls[0]),
+    ...makeEntryWithPnl(4, "lyra29", "$2,100.41", humanTailPnls[0]),
     isHumanVerified: true,
   },
   {
-    ...makeEntryWithPnl(5, "rio73.58", "$2,050.25", humanTailPnls[1]),
+    ...makeEntryWithPnl(5, "rio73", "$2,050.25", humanTailPnls[1]),
     isHumanVerified: true,
   },
   {
-    ...makeEntryWithPnl(6, "soren64.33", "$1,550.98", humanTailPnls[2]),
+    ...makeEntryWithPnl(6, "soren64", "$1,550.98", humanTailPnls[2]),
     isHumanVerified: true,
   },
   {
-    ...makeEntryWithPnl(7, "hana11.90", "$1,908.74", humanTailPnls[3]),
+    ...makeEntryWithPnl(7, "hana11", "$1,908.74", humanTailPnls[3]),
     isHumanVerified: true,
   },
 ];
