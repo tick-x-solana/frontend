@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { MiniKit } from "@worldcoin/minikit-js";
 import type { MiniKitChatOptions } from "@worldcoin/minikit-js/commands";
+import Image from "next/image";
 import TetherIcon from "@/src/assets/icons/tether.svg";
 import WldMarketIcon from "@/src/assets/icons/wld-market.svg";
 import {
@@ -79,28 +80,19 @@ const socialButtons = [
       </svg>
     ),
   },
+
   {
-    id: "discord",
-    label: "Open Discord",
+    id: "world-app",
+    label: "Open World App",
     icon: (
-      <svg viewBox="0 0 24 24" aria-hidden className="size-5">
-        <path
-          d="M8.3 6.5a15.3 15.3 0 0 1 2.3-.6l.3.7a10.3 10.3 0 0 1 2.2 0l.3-.7c.8.1 1.5.3 2.3.6 1.3 1.8 2 3.8 2.3 5.9-.7.6-1.5 1.2-2.4 1.5l-.5-.9c-.5.3-1 .4-1.6.5a6.6 6.6 0 0 1-2.6 0 6 6 0 0 1-1.6-.5l-.5.9c-.9-.3-1.7-.9-2.4-1.5.3-2.1 1-4.1 2.3-5.9Zm2.1 4.9c0-.6-.4-1-1-1s-1 .4-1 1 .4 1 1 1 1-.4 1-1Zm4.2 0c0-.6-.4-1-1-1s-1 .4-1 1 .4 1 1 1 1-.4 1-1Z"
-          fill="currentColor"
-        />
-      </svg>
-    ),
-  },
-  {
-    id: "facebook",
-    label: "Open Facebook",
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden className="size-5">
-        <path
-          d="M13.6 20v-7h2.3l.4-2.8h-2.7V8.4c0-.8.2-1.4 1.3-1.4h1.4V4.5c-.2 0-1-.1-2-.1-2 0-3.3 1.2-3.3 3.5v2.3H9v2.8h2.3v7h2.3Z"
-          fill="currentColor"
-        />
-      </svg>
+      <Image
+        src="/world-app.avif"
+        alt=""
+        width={20}
+        height={20}
+        aria-hidden="true"
+        className="size-5 rounded-[4px] object-cover"
+      />
     ),
   },
 ];
@@ -129,7 +121,7 @@ const humanVaultDataset: VaultDataset = {
   ],
   userVaults: [
     [
-      { label: "Vault", value: "Aave v3 USDC Carry (World Chain)" },
+      { label: "Vault", value: "BTC Long Shot,..." },
       { label: "Leader", value: "0x88d1...4f0e" },
       { label: "APR", value: "5.17%" },
       { label: "TVL", value: "$318,450" },
@@ -244,7 +236,10 @@ function FeatureIcon() {
     <span className="relative flex size-12 items-center justify-center">
       <Cloud className="text-primary-light size-11" strokeWidth={1.75} />
       <span className="bg-background-surface border-primary-light absolute right-[11px] bottom-[8px] flex size-4 items-center justify-center rounded-[4px] border">
-        <Smartphone className="text-primary-light size-[9px]" strokeWidth={2.4} />
+        <Smartphone
+          className="text-primary-light size-[9px]"
+          strokeWidth={2.4}
+        />
       </span>
     </span>
   );
@@ -302,7 +297,7 @@ function LiquidityCard({ pool }: { pool: LiquidityPool }) {
             <span className="bg-background-subtle flex size-6 items-center justify-center rounded-full">
               <WldMarketIcon aria-hidden className="size-4" />
             </span>
-            <span className="-ml-2 bg-background-subtle flex size-6 items-center justify-center rounded-full">
+            <span className="bg-background-subtle -ml-2 flex size-6 items-center justify-center rounded-full">
               <TetherIcon aria-hidden className="size-4" />
             </span>
           </span>
@@ -441,8 +436,6 @@ const Explore = () => {
   return (
     <div className="bg-background-main min-h-full w-full">
       <div className="mx-auto flex w-full max-w-[393px] flex-col px-4 pt-5 pb-6">
-        <StatusBar />
-
         {activeView === "home" ? (
           <>
             <h1 className="text-text-heading mb-4 text-[24px] font-semibold tracking-[-0.01em]">
@@ -455,7 +448,7 @@ const Explore = () => {
                   key={feature.id}
                   type="button"
                   onClick={() => setActiveView(jumpToViewMap[feature.id])}
-                  className="bg-background-surface flex h-[180px] cursor-pointer flex-col items-center justify-center gap-[10px] px-6 py-8 text-center transition-colors active:bg-background-subtle"
+                  className="bg-background-surface active:bg-background-subtle flex h-[180px] cursor-pointer flex-col items-center justify-center gap-[10px] px-6 py-8 text-center transition-colors"
                 >
                   <FeatureIcon />
                   <span className="text-text-heading text-[16px] font-semibold tracking-[-0.01em]">
@@ -521,13 +514,6 @@ const Explore = () => {
               <p className="text-text-main text-[44px] font-semibold tracking-[-0.01em]">
                 {activeVaultDataset.totalValueLocked}
               </p>
-            </section>
-
-            <section className="flex flex-col gap-2">
-              <SectionTitle>Protocol Vaults</SectionTitle>
-              {activeVaultDataset.protocolVaults.map((rows, index) => (
-                <KVCard key={`protocol-${index}`} rows={rows} />
-              ))}
             </section>
 
             <section className="flex flex-col gap-2">

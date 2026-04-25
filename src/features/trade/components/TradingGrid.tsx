@@ -17,8 +17,15 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { WalletIcon } from "@/src/assets/icons";
 import { Button } from "@/src/components/shadcn/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/src/components/shadcn/dialog";
 import { cn } from "@/lib/utils";
 import { Copy, Eye, Info, LocateFixed, Rocket, Share2 } from "lucide-react";
 import Image from "next/image";
@@ -41,13 +48,16 @@ import {
 import type { CellData, RemoteCell } from "@/src/features/trade/store";
 import { BACKEND_URL } from "@/src/features/trade/constant";
 import { useGameStore } from "@/src/features/trade/store";
+import { appToast } from "@/src/features/trade/toast";
 import {
   authControllerGetWssKey,
   authControllerGetChallenge,
+  getOrderFollowControllerListFollowingQueryKey,
   useAccountControllerGetBalance,
   useAuthControllerGetWssKey,
   useOrderControllerGetUserOrders,
   useOrderFollowControllerListFollowing,
+  useOrderFollowControllerRegister,
 } from "@/src/services/queries";
 import { signWssMessage } from "@/src/features/trade/socketSignature";
 import {
@@ -80,9 +90,6 @@ const TICK_CADENCE_SMOOTHING = 0.2;
 const RESIZE_COMMIT_DEBOUNCE_MS = 180;
 const FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS = 4000;
 const SUGGESTED_STRATEGY_MIN_HOLD_MS = 3000;
-const SUGGESTED_STRATEGY_CLEAR_HOLD_MS = 2000;
-const SUGGESTED_STRATEGY_VISIBLE_MS = 2000;
-const SUGGESTED_STRATEGY_HIDDEN_MS = 1000;
 const FOLLOW_ORDER_EVENTS = [
   "order_follow",
   "order_follow_update",
@@ -124,6 +131,7 @@ const FAKE_WIN_TOAST_VISIBLE_MS = 1000;
 const WIN_EFFECT_VISIBLE_MS = 2000;
 const HEX_DIGITS = "0123456789abcdef";
 const MARKET_SYMBOL = "BTC/USD";
+const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
 const BINANCE_HISTORY_URL =
   "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1s&limit=600";
 type ShareOverlayTarget = {
@@ -132,8 +140,12 @@ type ShareOverlayTarget = {
   top: number;
   centerLeft: number;
   centerTop: number;
+  cellEdge: number;
   buttonSize: number;
   isHumanVerified: boolean;
+  totalPayout: number;
+  basePayout: number;
+  bonusPayout: number;
 };
 type FakeWinToastData = {
   walletAddress: string;
@@ -277,6 +289,12 @@ function formatWalletShort(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+function normalizeReferralCode(value: string | null | undefined): string | null {
+  if (!value || typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function normalizeTimestampToMs(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value > 1_000_000_000_000 ? value : value * 1000;
@@ -388,6 +406,18 @@ function extractSuggestedStrategyCellIds(
   }
 
   return [...cellIds];
+}
+
+function extractCellStartTsFromCellId(cellId: string): number | null {
+  const [rawStartTs] = cellId.split(":");
+  const parsed = Number(rawStartTs);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isCellIdStillAheadOfChart(cellId: string, chartTime: number): boolean {
+  const startTs = extractCellStartTsFromCellId(cellId);
+  if (startTs === null) return true;
+  return startTs > chartTime;
 }
 
 function extractUserOrders(value: unknown): unknown[] {
@@ -524,7 +554,14 @@ function WinBetBanner({ data }: { data: FakeWinToastData }) {
 }
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export const TradingGrid: React.FC = () => {
+type TradingGridProps = {
+  initialFollowRefCode?: string | null;
+};
+
+export const TradingGrid: React.FC<TradingGridProps> = ({
+  initialFollowRefCode = null,
+}) => {
+  const queryClient = useQueryClient();
   // ── Store selectors ────────────────────────────────────────────────────────
   const cells = useGameStore((s) => s.cells);
   const history = useGameStore((s) => s.history);
@@ -583,6 +620,8 @@ export const TradingGrid: React.FC = () => {
       refetchOnWindowFocus: true,
     },
   });
+  const { mutateAsync: registerOrderFollow } =
+    useOrderFollowControllerRegister();
   const { data: userOrdersResponse } = useOrderControllerGetUserOrders(
     {
       limit: 200,
@@ -643,6 +682,10 @@ export const TradingGrid: React.FC = () => {
   const availableFollowTargetIds = useMemo(
     () => availableFollowTargets.map((item) => item.targetUserId),
     [availableFollowTargets],
+  );
+  const activeFollowingTargetIds = useMemo(
+    () => new Set(availableFollowTargetIds),
+    [availableFollowTargetIds],
   );
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -771,8 +814,6 @@ export const TradingGrid: React.FC = () => {
   const [suggestedStrategyCellIds, setSuggestedStrategyCellIds] = useState<
     string[]
   >([]);
-  const [isSuggestedStrategyOverlayOn, setIsSuggestedStrategyOverlayOn] =
-    useState(true);
   const [isOverlaySheetOpen, setIsOverlaySheetOpen] = useState(false);
   const [isInfoSheetOpen, setIsInfoSheetOpen] = useState(false);
   const [shareOverlayTargets, setShareOverlayTargets] = useState<
@@ -783,6 +824,14 @@ export const TradingGrid: React.FC = () => {
   >({});
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
   const [shareCellId, setShareCellId] = useState<string | null>(null);
+  const [dismissedFollowReferralCode, setDismissedFollowReferralCode] =
+    useState<string | null>(null);
+  const [resolvedFollowTarget, setResolvedFollowTarget] = useState<{
+    refCode: string;
+    wallet: string | null;
+  } | null>(null);
+  const [isSubmittingFollowReferral, setIsSubmittingFollowReferral] =
+    useState(false);
   const { isSharing, shareUrl, copyShareLink, share, shareToWorldChat } =
     useWinShareActions({
       username,
@@ -801,12 +850,6 @@ export const TradingGrid: React.FC = () => {
   > | null>(null);
   const suggestedStrategyPendingCellIdsRef = useRef<string[] | null>(null);
   const suggestedStrategyFlushTimerRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
-  const suggestedStrategyClearTimerRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
-  const suggestedStrategyBlinkTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
   const suggestedStrategyCellIdsRef = useRef<string[]>([]);
@@ -900,66 +943,199 @@ export const TradingGrid: React.FC = () => {
       })),
     [availableFollowTargets, followTradeTargetEnabledDraft],
   );
+  const normalizedInitialFollowRefCode = useMemo(
+    () => normalizeReferralCode(initialFollowRefCode),
+    [initialFollowRefCode],
+  );
+  const followReferralCode = useMemo(() => {
+    if (!normalizedInitialFollowRefCode) return null;
+    if (dismissedFollowReferralCode === normalizedInitialFollowRefCode) {
+      return null;
+    }
+    return normalizedInitialFollowRefCode;
+  }, [dismissedFollowReferralCode, normalizedInitialFollowRefCode]);
+  const isFollowReferralModalOpen = followReferralCode !== null;
+  const resolvedFollowTargetWallet =
+    followReferralCode &&
+    resolvedFollowTarget?.refCode === followReferralCode
+      ? resolvedFollowTarget.wallet
+      : null;
+  const isFollowReferralAlreadyActive = useMemo(() => {
+    if (!resolvedFollowTargetWallet) return false;
+    return activeFollowingTargetIds.has(resolvedFollowTargetWallet);
+  }, [activeFollowingTargetIds, resolvedFollowTargetWallet]);
+
+  const resolveFollowTargetWallet = useCallback(async (refCode: string) => {
+    const normalized = refCode.trim().replace(/^@/, "");
+    if (!normalized) {
+      throw new Error("Missing referral code");
+    }
+    if (EVM_ADDRESS_REGEX.test(normalized)) {
+      return getAddress(normalized);
+    }
+
+    const user = await MiniKit.getUserByUsername(normalized);
+    if (!user.walletAddress || !EVM_ADDRESS_REGEX.test(user.walletAddress)) {
+      throw new Error("Cannot resolve target wallet from referral code");
+    }
+    return getAddress(user.walletAddress);
+  }, []);
+
+  const handleCloseFollowReferralModal = useCallback(() => {
+    if (isSubmittingFollowReferral) return;
+    if (!followReferralCode) return;
+    setDismissedFollowReferralCode(followReferralCode);
+  }, [followReferralCode, isSubmittingFollowReferral]);
+
+  const handleFollowReferralModalOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) return;
+      handleCloseFollowReferralModal();
+    },
+    [handleCloseFollowReferralModal],
+  );
+
+  const handleFollowByReferral = useCallback(async () => {
+    if (!followReferralCode) return;
+    if (!isAuthenticated || isLoggingIn) {
+      appToast.error("Please sign in before starting follow trade.", {
+        icon: "⚠️",
+      });
+      return;
+    }
+
+    setIsSubmittingFollowReferral(true);
+    try {
+      const targetUserId =
+        resolvedFollowTargetWallet ??
+        (await resolveFollowTargetWallet(followReferralCode));
+
+      if (activeFollowingTargetIds.has(targetUserId)) {
+        setFollowTradeEnabled(true);
+        setFollowTradeEnabledDraft(true);
+        setFollowTradeTargetEnabled((prev) => ({
+          ...prev,
+          [targetUserId]: true,
+        }));
+        setFollowTradeTargetEnabledDraft((prev) => ({
+          ...prev,
+          [targetUserId]: true,
+        }));
+        appToast.info("You are already following this trader.", {
+          icon: "ℹ️",
+        });
+        handleCloseFollowReferralModal();
+        return;
+      }
+
+      await registerOrderFollow({
+        data: { targetUserId },
+      });
+
+      await queryClient.invalidateQueries({
+        queryKey: getOrderFollowControllerListFollowingQueryKey(),
+      });
+      await refetchFollowing();
+
+      setFollowTradeEnabled(true);
+      setFollowTradeEnabledDraft(true);
+      setFollowTradeTargetEnabled((prev) => ({
+        ...prev,
+        [targetUserId]: true,
+      }));
+      setFollowTradeTargetEnabledDraft((prev) => ({
+        ...prev,
+        [targetUserId]: true,
+      }));
+      appToast.success("Follow trade started successfully.", {
+        icon: "✅",
+      });
+      handleCloseFollowReferralModal();
+    } catch (error) {
+      console.error("[TradingGrid] Failed to follow by referral", {
+        followReferralCode,
+        error,
+      });
+      appToast.error("Unable to start follow trade. Please try again.", {
+        icon: "⚠️",
+      });
+    } finally {
+      setIsSubmittingFollowReferral(false);
+    }
+  }, [
+    activeFollowingTargetIds,
+    followReferralCode,
+    handleCloseFollowReferralModal,
+    isAuthenticated,
+    isLoggingIn,
+    queryClient,
+    refetchFollowing,
+    registerOrderFollow,
+    resolveFollowTargetWallet,
+    resolvedFollowTargetWallet,
+  ]);
+
+  useEffect(() => {
+    if (!followReferralCode) {
+      return;
+    }
+
+    let cancelled = false;
+    const resolve = async () => {
+      try {
+        const wallet = await resolveFollowTargetWallet(followReferralCode);
+        if (!cancelled) {
+          setResolvedFollowTarget({
+            refCode: followReferralCode,
+            wallet,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setResolvedFollowTarget({
+            refCode: followReferralCode,
+            wallet: null,
+          });
+        }
+        console.warn("[TradingGrid] Failed to resolve follow referral target", {
+          followReferralCode,
+          error,
+        });
+      }
+    };
+
+    void resolve();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [followReferralCode, resolveFollowTargetWallet]);
 
   useEffect(() => {
     storeRef.current.suggestedStrategyCellIds =
-      isSuggestedStrategyVisible && isSuggestedStrategyOverlayOn
-        ? suggestedStrategyCellIds
-        : [];
+      isSuggestedStrategyVisible ? suggestedStrategyCellIds : [];
   }, [
-    isSuggestedStrategyOverlayOn,
     isSuggestedStrategyVisible,
     suggestedStrategyCellIds,
   ]);
 
   useEffect(() => {
-    if (
-      !isSuggestedStrategyVisible ||
-      suggestedStrategyCellIds.length === 0
-    ) {
-      setIsSuggestedStrategyOverlayOn(true);
-      if (suggestedStrategyBlinkTimerRef.current) {
-        clearTimeout(suggestedStrategyBlinkTimerRef.current);
-        suggestedStrategyBlinkTimerRef.current = null;
-      }
+    if (!isSuggestedStrategyVisible || suggestedStrategyCellIds.length === 0) {
       return;
     }
 
-    let isCancelled = false;
-    const scheduleVisiblePhase = () => {
-      if (isCancelled) return;
-      setIsSuggestedStrategyOverlayOn(true);
-      suggestedStrategyBlinkTimerRef.current = setTimeout(() => {
-        scheduleHiddenPhase();
-      }, SUGGESTED_STRATEGY_VISIBLE_MS);
-    };
-    const scheduleHiddenPhase = () => {
-      if (isCancelled) return;
-      setIsSuggestedStrategyOverlayOn(false);
-      suggestedStrategyBlinkTimerRef.current = setTimeout(() => {
-        scheduleVisiblePhase();
-      }, SUGGESTED_STRATEGY_HIDDEN_MS);
-    };
+    const chartTime = getLatestChartTime(history, nowRef.current);
+    const visibleCellIds = suggestedStrategyCellIds.filter((cellId) => {
+      const startTs = extractCellStartTsFromCellId(cellId);
+      if (startTs === null) return true;
+      return startTs > chartTime;
+    });
 
-    scheduleVisiblePhase();
-
-    return () => {
-      isCancelled = true;
-      if (suggestedStrategyBlinkTimerRef.current) {
-        clearTimeout(suggestedStrategyBlinkTimerRef.current);
-        suggestedStrategyBlinkTimerRef.current = null;
-      }
-    };
-  }, [isSuggestedStrategyVisible, suggestedStrategyCellIds]);
-
-  useEffect(() => {
-    if (isSuggestedStrategyVisible) return;
-    setIsSuggestedStrategyOverlayOn(true);
-    if (suggestedStrategyBlinkTimerRef.current) {
-      clearTimeout(suggestedStrategyBlinkTimerRef.current);
-      suggestedStrategyBlinkTimerRef.current = null;
+    if (visibleCellIds.length !== suggestedStrategyCellIds.length) {
+      suggestedStrategyCellIdsRef.current = visibleCellIds;
+      setSuggestedStrategyCellIds(visibleCellIds);
     }
-  }, [isSuggestedStrategyVisible]);
+  }, [history, isSuggestedStrategyVisible, suggestedStrategyCellIds]);
 
   useEffect(() => {
     suggestedStrategyCellIdsRef.current = suggestedStrategyCellIds;
@@ -1003,41 +1179,27 @@ export const TradingGrid: React.FC = () => {
     [applyFollowOverlayActivities],
   );
 
-  const clearSuggestedStrategyClearTimer = useCallback(() => {
-    if (suggestedStrategyClearTimerRef.current) {
-      clearTimeout(suggestedStrategyClearTimerRef.current);
-      suggestedStrategyClearTimerRef.current = null;
-    }
-  }, []);
-
   const applySuggestedStrategyCellIds = useCallback(
-    (nextCellIds: string[]) => {
-      clearSuggestedStrategyClearTimer();
+    (incomingCellIds: string[]) => {
       lastSuggestedStrategyUpdateAtRef.current = Date.now();
+      const chartTime = getLatestChartTime(history, nowRef.current);
+      const mergedCellIds = [
+        ...suggestedStrategyCellIdsRef.current.filter((cellId) =>
+          isCellIdStillAheadOfChart(cellId, chartTime),
+        ),
+        ...incomingCellIds.filter((cellId) =>
+          isCellIdStillAheadOfChart(cellId, chartTime),
+        ),
+      ];
+      const nextCellIds = [...new Set(mergedCellIds)];
       suggestedStrategyCellIdsRef.current = nextCellIds;
       setSuggestedStrategyCellIds(nextCellIds);
     },
-    [clearSuggestedStrategyClearTimer],
+    [history],
   );
 
   const queueSuggestedStrategyCellIds = useCallback(
     (nextCellIds: string[]) => {
-      if (nextCellIds.length > 0) {
-        clearSuggestedStrategyClearTimer();
-      } else if (suggestedStrategyCellIdsRef.current.length > 0) {
-        suggestedStrategyPendingCellIdsRef.current = [];
-        if (!suggestedStrategyClearTimerRef.current) {
-          suggestedStrategyClearTimerRef.current = setTimeout(() => {
-            suggestedStrategyClearTimerRef.current = null;
-            if ((suggestedStrategyPendingCellIdsRef.current?.length ?? 0) > 0) {
-              return;
-            }
-            applySuggestedStrategyCellIds([]);
-          }, SUGGESTED_STRATEGY_CLEAR_HOLD_MS);
-        }
-        return;
-      }
-
       const now = Date.now();
       const elapsed = now - lastSuggestedStrategyUpdateAtRef.current;
 
@@ -1058,7 +1220,7 @@ export const TradingGrid: React.FC = () => {
         applySuggestedStrategyCellIds(queuedCellIds);
       }, waitMs);
     },
-    [applySuggestedStrategyCellIds, clearSuggestedStrategyClearTimer],
+    [applySuggestedStrategyCellIds],
   );
 
   useEffect(() => {
@@ -1083,16 +1245,11 @@ export const TradingGrid: React.FC = () => {
 
     lastSuggestedStrategyUpdateAtRef.current = 0;
     suggestedStrategyPendingCellIdsRef.current = null;
-    clearSuggestedStrategyClearTimer();
-    if (suggestedStrategyBlinkTimerRef.current) {
-      clearTimeout(suggestedStrategyBlinkTimerRef.current);
-      suggestedStrategyBlinkTimerRef.current = null;
-    }
     if (suggestedStrategyFlushTimerRef.current) {
       clearTimeout(suggestedStrategyFlushTimerRef.current);
       suggestedStrategyFlushTimerRef.current = null;
     }
-  }, [clearSuggestedStrategyClearTimer, isSuggestedStrategyVisible]);
+  }, [isSuggestedStrategyVisible]);
 
   useEffect(() => {
     return () => {
@@ -1102,12 +1259,6 @@ export const TradingGrid: React.FC = () => {
       if (suggestedStrategyFlushTimerRef.current) {
         clearTimeout(suggestedStrategyFlushTimerRef.current);
       }
-      if (suggestedStrategyClearTimerRef.current) {
-        clearTimeout(suggestedStrategyClearTimerRef.current);
-      }
-      if (suggestedStrategyBlinkTimerRef.current) {
-        clearTimeout(suggestedStrategyBlinkTimerRef.current);
-      }
     };
   }, []);
 
@@ -1115,7 +1266,9 @@ export const TradingGrid: React.FC = () => {
     if (
       !isAuthenticated ||
       isLoggingIn ||
-      (!isFollowTradeVisible && !isFollowTradeConfigVisibleDraft)
+      (!isFollowTradeVisible &&
+        !isFollowTradeConfigVisibleDraft &&
+        !isFollowReferralModalOpen)
     ) {
       return;
     }
@@ -1123,6 +1276,7 @@ export const TradingGrid: React.FC = () => {
     void refetchFollowing();
   }, [
     isAuthenticated,
+    isFollowReferralModalOpen,
     isFollowTradeConfigVisibleDraft,
     isFollowTradeVisible,
     isLoggingIn,
@@ -1821,7 +1975,7 @@ export const TradingGrid: React.FC = () => {
   const selectedShareProfit = useMemo(
     () => {
       if (!selectedShareCell) return 0;
-      const settledPayout = pendingWins[selectedShareCell.id];
+      const settledPayout = settledOutcomes[selectedShareCell.id]?.payout;
       if (typeof settledPayout === "number" && Number.isFinite(settledPayout)) {
         return Math.max(settledPayout, 0);
       }
@@ -1830,7 +1984,7 @@ export const TradingGrid: React.FC = () => {
         Math.max((selectedShareCell.multiplier ?? 0) - 1, 0)
       );
     },
-    [pendingWins, selectedShareAmount, selectedShareCell],
+    [selectedShareAmount, selectedShareCell, settledOutcomes],
   );
   const selectedShareTime = useMemo(() => {
     if (!selectedShareCell) return "--:--:--";
@@ -1937,6 +2091,20 @@ export const TradingGrid: React.FC = () => {
       const w = layout.cellW;
       const h = layout.cellH;
       if (x + w < 0 || x > layout.w || y + h < 0 || y > layout.h) continue;
+      const settled = store.settledOutcomes[cell.id];
+      const hasSettledBreakdown =
+        settled?.basePayout !== null || settled?.bonusPayout !== null;
+      const fallbackTotalPayout = Math.max(
+        settled?.payout ?? store.pendingWins[cell.id] ?? 0,
+        0,
+      );
+      const bonusPayout = Math.max(settled?.bonusPayout ?? 0, 0);
+      const basePayout = hasSettledBreakdown
+        ? Math.max(settled?.basePayout ?? 0, 0)
+        : fallbackTotalPayout;
+      const totalPayout = hasSettledBreakdown
+        ? basePayout + bonusPayout
+        : fallbackTotalPayout;
 
       const minEdge = Math.max(1, Math.min(w, h));
       const inset = Math.max(1, Math.min(4, Math.round(minEdge * 0.12)));
@@ -1955,8 +2123,12 @@ export const TradingGrid: React.FC = () => {
         top: Math.max(0, Math.min(layout.h - buttonSize, y + inset)),
         centerLeft: x + w / 2,
         centerTop: y + h / 2,
+        cellEdge: minEdge,
         buttonSize,
-        isHumanVerified: store.settledOutcomes[cell.id]?.isHumanVerified ?? false,
+        isHumanVerified: settled?.isHumanVerified ?? false,
+        totalPayout,
+        basePayout,
+        bonusPayout,
       });
     }
     shareTargetsRef.current = nextShareTargets;
@@ -2053,7 +2225,10 @@ export const TradingGrid: React.FC = () => {
       const nextTargets = shareTargetsRef.current;
       syncShareOverlayPositions(nextTargets);
       const nextIdsHash = nextTargets
-        .map((item) => `${item.cellId}:${item.isHumanVerified ? 1 : 0}`)
+        .map(
+          (item) =>
+            `${item.cellId}:${item.isHumanVerified ? 1 : 0}:${item.totalPayout.toFixed(6)}:${item.basePayout.toFixed(6)}:${item.bonusPayout.toFixed(6)}:${Math.round(item.cellEdge)}`,
+        )
         .join("|");
       if (nextIdsHash !== shareTargetIdsHashRef.current) {
         shareTargetIdsHashRef.current = nextIdsHash;
@@ -2282,17 +2457,41 @@ export const TradingGrid: React.FC = () => {
                   loading="eager"
                   className="h-[200px] w-[200px]"
                 />
-                {target.isHumanVerified ? (
-                  <Image
-                    src="/onboarding/verified-badge.svg"
-                    alt="Verified human"
-                    width={32}
-                    height={32}
-                    unoptimized
-                    loading="eager"
-                    className="absolute top-[52px] left-[126px] h-8 w-8"
-                  />
-                ) : null}
+                <div className="win-pop-amounts pointer-events-none absolute top-2 left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap">
+                  <span
+                    className="text-success-medium font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(17_211_68_/_0.66)]"
+                    style={{
+                      fontSize: `${Math.max(11, Math.min(22, Math.round(target.cellEdge * 0.24)))}px`,
+                    }}
+                  >
+                    +${winAmountFormatter.format(target.basePayout)}
+                  </span>
+                  {target.isHumanVerified ? (
+                    <Image
+                      src="/onboarding/verified-badge.svg"
+                      alt="Verified human"
+                      width={20}
+                      height={20}
+                      unoptimized
+                      loading="eager"
+                      className="shrink-0"
+                      style={{
+                        width: `${Math.max(12, Math.min(20, Math.round(target.cellEdge * 0.22)))}px`,
+                        height: `${Math.max(12, Math.min(20, Math.round(target.cellEdge * 0.22)))}px`,
+                      }}
+                    />
+                  ) : null}
+                  {target.bonusPayout > 0 ? (
+                    <span
+                      className="text-grid-accent font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(18_221_255_/_0.72)]"
+                      style={{
+                        fontSize: `${Math.max(11, Math.min(22, Math.round(target.cellEdge * 0.24)))}px`,
+                      }}
+                    >
+                      +${winAmountFormatter.format(target.bonusPayout)}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             ))}
           {shareOverlayTargets.map((target) => (
@@ -2346,6 +2545,57 @@ export const TradingGrid: React.FC = () => {
           <BalanceChip balance={balance} />
         </div>
       </div>
+
+      <Dialog
+        open={isFollowReferralModalOpen}
+        onOpenChange={handleFollowReferralModalOpenChange}
+      >
+        <DialogContent className="pointer-events-none">
+          <div className="border-border-main pointer-events-auto w-full max-w-[540px] rounded-[20px] border bg-[linear-gradient(112deg,var(--background-main)_0%,var(--surface-card-strong)_62%,var(--background-main)_100%)] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+            <div className="flex flex-col gap-4">
+              <DialogTitle className="text-text-heading text-xl font-semibold tracking-[-0.01em]">
+                Start Follow Trade
+              </DialogTitle>
+              <DialogDescription className="text-text-sub text-sm font-medium tracking-[-0.01em]">
+                {followReferralCode
+                  ? `Follow @${followReferralCode.replace(/^@/, "")} directly from this shared link.`
+                  : "Follow this trader directly from the shared link."}
+              </DialogDescription>
+              {resolvedFollowTargetWallet ? (
+                <p className="text-text-sub text-xs tracking-[-0.01em]">
+                  Trader wallet: {formatWalletShort(resolvedFollowTargetWallet)}
+                </p>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloseFollowReferralModal}
+                  disabled={isSubmittingFollowReferral}
+                  className="border-border-main text-text-inverse hover:text-text-inverse h-11 rounded-[10px] bg-white hover:bg-white/90"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleFollowByReferral()}
+                  disabled={
+                    isSubmittingFollowReferral || isFollowReferralAlreadyActive
+                  }
+                  className="bg-primary-medium text-text-inverse hover:bg-primary-light h-11 rounded-[10px]"
+                >
+                  {isSubmittingFollowReferral
+                    ? "Processing..."
+                    : isFollowReferralAlreadyActive
+                      ? "Following"
+                      : "Follow"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Sheet
         isOpen={isInfoSheetOpen}

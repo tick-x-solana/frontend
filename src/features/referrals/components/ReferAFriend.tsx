@@ -8,9 +8,6 @@ import { useAuth } from "@/src/components/providers/AuthProvider";
 
 const SOCIAL_LINKS = [
   { key: "facebook-main", href: "#", label: "Share on Facebook" },
-  { key: "facebook-feed", href: "#", label: "Share on Facebook feed" },
-  { key: "facebook-story", href: "#", label: "Share on Facebook story" },
-  { key: "facebook-group", href: "#", label: "Share on Facebook group" },
 ];
 
 type ReferAFriendProps = {
@@ -83,27 +80,6 @@ const ReferAFriend = ({ referralLink }: ReferAFriendProps) => {
       >
         Invite Friends
       </Button>
-
-      <div className="flex items-center gap-3">
-        {SOCIAL_LINKS.map((social) => (
-          <Button
-            key={social.key}
-            type="button"
-            variant="outline"
-            size="icon"
-            className="border-border-main hover:bg-surface-overlay size-10 rounded-[8px] bg-transparent text-white"
-            aria-label={social.label}
-          >
-            <Image
-              src="/world-app.avif"
-              alt=""
-              width={24}
-              height={24}
-              aria-hidden="true"
-            />
-          </Button>
-        ))}
-      </div>
     </section>
   );
 };

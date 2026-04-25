@@ -289,11 +289,15 @@ export function drawBetCells(
     const chartReachedColumn = hasChartReachedColumn(chartHeadX, cx);
     const hasSuggestedStrategy = suggestedStrategyCellIds.has(cell.id);
     const hasOverlayActivity = hasFollowedActivity || hasSuggestedStrategy;
+    const overlayVisualAlpha = hasOverlayActivity
+      ? clamp((cx - chartHeadX + cellW * 0.2) / (cellW * 0.8), 0, 1)
+      : 1;
+    const hasVisibleOverlayActivity = hasOverlayActivity && overlayVisualAlpha > 0;
     const hasTrackedState =
       (hasAnyBet && !shouldHideLosingBet) ||
       isHit ||
       (isLose && !shouldHideLosingBet) ||
-      hasOverlayActivity;
+      hasVisibleOverlayActivity;
 
     if (chartReachedColumn && !hasTrackedState) continue;
 
@@ -342,7 +346,9 @@ export function drawBetCells(
         betAmount: store.betAmount,
         isMobile,
       });
-    } else if (!hasAnyBet && hasOverlayActivity) {
+    } else if (!hasAnyBet && hasVisibleOverlayActivity) {
+      ctx.save();
+      ctx.globalAlpha *= overlayVisualAlpha;
       _drawCopyTradeCell(ctx, {
         x: cx,
         y: cellTop,
@@ -354,6 +360,7 @@ export function drawBetCells(
         cellRight: cx + cw,
         cellSize,
       });
+      ctx.restore();
     } else if (isHit) {
       const rewardRate =
         hasAnyBet
@@ -413,7 +420,7 @@ export function drawBetCells(
     if (
       !isPreviewed &&
       !(hasAnyBet && !isHit && !isLose) &&
-      !hasOverlayActivity
+      !hasVisibleOverlayActivity
     ) {
       ctx.strokeStyle =
         isNext && !hasAnyBet

@@ -1,9 +1,8 @@
-import ReferralCopyTradingPage from "@/src/features/referrals/components/ReferralCopyTradingPage";
+import { redirect } from "next/navigation";
 
 type RefPageProps = PageProps<"/ref/[refCode]">;
 
 export default async function RefPage({ params }: RefPageProps) {
   const { refCode } = await params;
-
-  return <ReferralCopyTradingPage refCode={refCode} />;
+  redirect(`/?followRef=${encodeURIComponent(refCode)}`);
 }

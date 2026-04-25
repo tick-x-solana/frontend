@@ -3,6 +3,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
+import {
+  buildWorldChatShareMessage,
+  type WorldChatShareMetrics,
+} from "@/src/features/referrals/worldChatShare";
 import { appToast } from "@/src/features/trade/toast";
 import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
 
@@ -10,6 +14,11 @@ type UseWinShareActionsParams = {
   username?: string | null;
   walletAddress?: string | null;
   resolvedUserAddress?: string | null;
+};
+
+type ShareToWorldChatOptions = {
+  introLine?: string;
+  metrics?: WorldChatShareMetrics;
 };
 
 function isWorldChatUserRejectedError(
@@ -74,7 +83,8 @@ function useWinShareActions({
     }
   }, [shareUrl]);
 
-  const shareToWorldChat = useCallback(async () => {
+  const shareToWorldChat = useCallback(
+    async (options?: ShareToWorldChatOptions) => {
     try {
       if (!MiniKit.isInWorldApp()) {
         appToast.error("WorldChat share is only available in World App", {
@@ -91,11 +101,12 @@ function useWinShareActions({
       }
 
       const referralLink = buildMiniAppReferralLink(resolvedMiniAppUsername);
-      const message = [
-        "Use my referral to follow trade on TickX.",
-        `Referral code: ${resolvedMiniAppUsername}`,
-        `Link: ${referralLink}`,
-      ].join("\n");
+      const message = buildWorldChatShareMessage({
+        referralCode: resolvedMiniAppUsername,
+        referralLink,
+        introLine: options?.introLine,
+        metrics: options?.metrics,
+      });
 
       await MiniKit.chat({ message });
     } catch (error) {
@@ -106,7 +117,9 @@ function useWinShareActions({
       console.error("Failed to share to WorldChat", error);
       appToast.error("Failed to share to WorldChat", { icon: "⚠️" });
     }
-  }, [refreshMiniAppUsername]);
+    },
+    [refreshMiniAppUsername],
+  );
 
   return {
     isSharing,

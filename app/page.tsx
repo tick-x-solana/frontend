@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import BetInfo from "@/src/features/trade/components/BetInfo";
 import { TradingGrid } from "@/src/features/trade/components/TradingGrid";
 
@@ -39,21 +38,29 @@ function extractRefCodeFromMiniAppPath(pathParam: string) {
   return draftRouteMatch?.[1]?.trim() || null;
 }
 
-export default async function Home({ searchParams }: HomePageProps) {
-  const params = await searchParams;
-  const rawPath =
-    typeof params.path === "string"
-      ? params.path
-      : Array.isArray(params.path)
-        ? params.path[0]
-        : undefined;
-
-  if (rawPath) {
-    const refCode = extractRefCodeFromMiniAppPath(rawPath);
-    if (refCode) {
-      redirect(`/ref/${encodeURIComponent(refCode)}`);
+function readSingleSearchParam(
+  value: string | string[] | undefined,
+): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (Array.isArray(value)) {
+    const first = value[0];
+    if (typeof first === "string") {
+      const trimmed = first.trim();
+      return trimmed.length > 0 ? trimmed : null;
     }
   }
+  return null;
+}
+
+export default async function Home({ searchParams }: HomePageProps) {
+  const params = await searchParams;
+  const rawPath = readSingleSearchParam(params.path);
+  const followRefCode = readSingleSearchParam(params.followRef);
+  const refCodeFromPath = rawPath ? extractRefCodeFromMiniAppPath(rawPath) : null;
+  const initialFollowRefCode = followRefCode ?? refCodeFromPath;
 
   return (
     <div className="bg-background-main flex h-full flex-1 flex-col">
@@ -62,7 +69,7 @@ export default async function Home({ searchParams }: HomePageProps) {
           <BetInfo />
         </div>
 
-        <TradingGrid />
+        <TradingGrid initialFollowRefCode={initialFollowRefCode} />
       </div>
     </div>
   );
