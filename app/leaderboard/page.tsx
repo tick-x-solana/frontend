@@ -147,6 +147,9 @@ function LeaderboardRow({
 
 export default function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<LeaderboardMode>("human");
+  const [loadedPodiumImages, setLoadedPodiumImages] = useState<
+    Record<string, boolean>
+  >({});
 
   const [listEntries, setListEntries] = useState<LeaderboardEntry[]>(
     humanLeaderboardEntries
@@ -172,8 +175,9 @@ export default function LeaderboardPage() {
 
   const podiumImage =
     activeTab === "human"
-      ? "/leaderboard-human7.png"
-      : "/leaderboard-agent-1.png";
+      ? "/leaderboard-human7.webp"
+      : "/leaderboard-agent-1.webp";
+  const isPodiumImageLoaded = Boolean(loadedPodiumImages[podiumImage]);
 
   return (
     <div className="bg-background-main h-full w-full">
@@ -184,7 +188,8 @@ export default function LeaderboardPage() {
             src="/line-background.png"
             alt=""
             fill
-            priority
+            loading="eager"
+            fetchPriority="low"
             className="object-cover opacity-95 mix-blend-color-dodge"
           />
           <div className="from-background-main/70 to-background-main absolute inset-0 bg-gradient-to-b to-[32.5%]" />
@@ -212,11 +217,28 @@ export default function LeaderboardPage() {
 
         <section className="relative mt-1 w-full overflow-hidden rounded-2xl">
           <div className="relative aspect-[1572/1860] w-full">
+            {!isPodiumImageLoaded ? (
+              <div
+                aria-hidden
+                className="bg-surface-overlay-subtle absolute inset-0 animate-pulse"
+              />
+            ) : null}
             <Image
               src={podiumImage}
               alt="Leaderboard podium"
               fill
-              priority
+              preload
+              sizes="100vw"
+              quality={70}
+              onLoad={() => {
+                setLoadedPodiumImages((prev) => {
+                  if (prev[podiumImage]) {
+                    return prev;
+                  }
+
+                  return { ...prev, [podiumImage]: true };
+                });
+              }}
               className="w-screen scale-[1.3] object-cover object-center pb-[80px]"
             />
           </div>

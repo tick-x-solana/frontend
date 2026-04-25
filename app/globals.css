@@ -228,11 +228,15 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
   body {
-    @apply bg-background text-foreground;
+    overscroll-behavior-y: none;
+  }
+  body {
+    @apply bg-background-main text-foreground;
   }
   html {
-    @apply font-sans;
+    @apply bg-background-main font-sans;
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   }

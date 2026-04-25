@@ -11,7 +11,7 @@ const DefaultLayout = ({ children }: { children: React.ReactNode }) => {
   const hideLayoutChrome = pathname === "/ref" || pathname.startsWith("/ref/");
 
   return (
-    <div className="bg-background-main flex min-h-screen flex-col">
+    <div className="bg-background-main flex min-h-[100dvh] flex-col">
       {!hideLayoutChrome && <Header />}
       <main
         className={[

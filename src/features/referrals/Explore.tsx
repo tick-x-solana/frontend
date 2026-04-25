@@ -348,14 +348,26 @@ function AgentStep({
   );
 }
 
+function ComingSoonBadge({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`border-border-main/70 bg-surface-overlay-subtle text-hint inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-semibold tracking-[0.08em] uppercase ${className}`}
+    >
+      Coming soon
+    </span>
+  );
+}
+
 function FeaturedCard({
   Icon,
   title,
   onClick,
+  comingSoon,
 }: {
   Icon: ComponentType<{ className?: string }>;
   title: string;
   onClick: () => void;
+  comingSoon?: boolean;
 }) {
   return (
     <button
@@ -366,9 +378,12 @@ function FeaturedCard({
       <span className="bg-background-surface border-border-main flex size-12 items-center justify-center rounded-[10px] border">
         <Icon className="size-9" />
       </span>
-      <span className="text-text-main text-[16px] font-semibold tracking-[-0.01em]">
-        {title}
-      </span>
+      <div className="flex flex-col items-start gap-1">
+        <span className="text-text-main text-[16px] font-semibold tracking-[-0.01em]">
+          {title}
+        </span>
+        {comingSoon ? <ComingSoonBadge /> : null}
+      </div>
       <ExploreFeatureOrbIcon
         aria-hidden
         className="pointer-events-none absolute top-[143px] left-[132px] size-[46px]"
@@ -387,11 +402,13 @@ function BrowseRow({
   title,
   subtitle,
   onClick,
+  comingSoon,
 }: {
   Icon: ComponentType<{ className?: string }>;
   title: string;
   subtitle: string;
   onClick: () => void;
+  comingSoon?: boolean;
 }) {
   return (
     <button
@@ -403,8 +420,11 @@ function BrowseRow({
         <Icon className="size-6" />
       </span>
       <span className="flex min-w-0 flex-col pt-0.5">
-        <span className="text-text-main text-[14px] font-semibold tracking-[-0.01em]">
-          {title}
+        <span className="flex items-center gap-2">
+          <span className="text-text-main text-[14px] font-semibold tracking-[-0.01em]">
+            {title}
+          </span>
+          {comingSoon ? <ComingSoonBadge /> : null}
         </span>
         <span className="text-text-sub text-[14px] font-normal tracking-[-0.01em]">
           {subtitle}
@@ -424,6 +444,7 @@ const Explore = () => {
     walletAddress,
     logPrefix: "[Explore]",
   });
+  console.log("miniAppUsername: ", miniAppUsername);
 
   const referralLink = useMemo(
     () => buildMiniAppReferralLink(miniAppUsername ?? username),
@@ -513,11 +534,13 @@ const Explore = () => {
                 <FeaturedCard
                   Icon={ExploreVaultIcon}
                   title="Vault"
+                  comingSoon
                   onClick={() => setActiveView("vault")}
                 />
                 <FeaturedCard
                   Icon={ExploreLiquidityIcon}
                   title="Provide Liquidity"
+                  comingSoon
                   onClick={() => setActiveView("liquidity")}
                 />
               </div>
@@ -555,6 +578,7 @@ const Explore = () => {
                   Icon={ExploreAiAgentIcon}
                   title="AI Agent Space"
                   subtitle="Deploy and manage your custom trading algorithms."
+                  comingSoon
                   onClick={() => setActiveView("ai-agent")}
                 />
               </div>
@@ -612,9 +636,12 @@ const Explore = () => {
             <BackButton onClick={() => setActiveView("home")} />
 
             <div className="flex items-center justify-between gap-3">
-              <h1 className="text-text-heading text-[36px] font-semibold tracking-[-0.01em]">
-                Vaults
-              </h1>
+              <div className="flex flex-col items-start gap-1">
+                <h1 className="text-text-heading text-[36px] font-semibold tracking-[-0.01em]">
+                  Vaults
+                </h1>
+                <ComingSoonBadge />
+              </div>
               <div className="bg-surface-overlay-subtle flex items-center gap-1 rounded-[12px] p-1">
                 <button
                   type="button"
@@ -662,9 +689,12 @@ const Explore = () => {
         {activeView === "liquidity" ? (
           <div className="flex flex-col gap-4">
             <BackButton onClick={() => setActiveView("home")} />
-            <h1 className="text-text-heading text-[24px] font-semibold tracking-[-0.01em]">
-              Provide Liquidity
-            </h1>
+            <div className="flex flex-col items-start gap-1">
+              <h1 className="text-text-heading text-[24px] font-semibold tracking-[-0.01em]">
+                Provide Liquidity
+              </h1>
+              <ComingSoonBadge />
+            </div>
 
             {liquidityPools.map((pool) => (
               <LiquidityCard key={pool.id} pool={pool} />
@@ -712,9 +742,12 @@ const Explore = () => {
                   <span className="bg-primary-light/15 text-primary-light flex size-7 items-center justify-center rounded-[8px]">
                     <Sparkles className="size-4" strokeWidth={1.9} />
                   </span>
-                  <h1 className="text-text-heading text-[22px] font-semibold tracking-[-0.01em]">
-                    Agent Connect
-                  </h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-text-heading text-[22px] font-semibold tracking-[-0.01em]">
+                      Agent Connect
+                    </h1>
+                    <ComingSoonBadge />
+                  </div>
                 </div>
                 <p className="text-text-sub text-[13px] tracking-[-0.01em]">
                   Set up your AI agent in minutes and connect it to TickX MCP.

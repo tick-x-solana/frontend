@@ -157,7 +157,6 @@ const FAKE_WIN_USERNAME_PREFIXES = [
   "rhino",
 ] as const;
 const MARKET_SYMBOL = "BTC/USD";
-const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
 const BINANCE_HISTORY_URL =
   "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1s&limit=600";
 type ShareOverlayTarget = {
@@ -331,7 +330,17 @@ function normalizeReferralCode(
   value: string | null | undefined,
 ): string | null {
   if (!value || typeof value !== "string") return null;
-  const trimmed = value.trim();
+  let decoded = value.trim();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+  const trimmed = decoded.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
@@ -1107,19 +1116,29 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   );
 
   const resolveFollowTargetWallet = useCallback(async (refCode: string) => {
-    const normalized = refCode.trim().replace(/^@/, "");
-    if (!normalized) {
+    const normalizedRefCode = normalizeReferralCode(refCode);
+    if (!normalizedRefCode) {
       throw new Error("Missing referral code");
     }
-    if (EVM_ADDRESS_REGEX.test(normalized)) {
-      return getAddress(normalized);
+
+    const directWalletAddress = parseAddress(normalizedRefCode);
+    if (directWalletAddress) {
+      return directWalletAddress;
     }
 
-    const user = await MiniKit.getUserByUsername(normalized);
-    if (!user.walletAddress || !EVM_ADDRESS_REGEX.test(user.walletAddress)) {
+    const normalizedUsername = normalizedRefCode.replace(/^@/, "").trim();
+    if (!normalizedUsername) {
+      throw new Error("Missing referral username");
+    }
+
+    const user = await MiniKit.getUserByUsername(normalizedUsername);
+    const walletAddressFromUsername = parseAddress(user.walletAddress);
+    if (!walletAddressFromUsername) {
       throw new Error("Cannot resolve target wallet from referral code");
     }
-    return getAddress(user.walletAddress);
+
+    const userByAddress = await MiniKit.getUserByAddress(walletAddressFromUsername);
+    return parseAddress(userByAddress.walletAddress) ?? walletAddressFromUsername;
   }, []);
 
   const handleCloseFollowReferralModal = useCallback(() => {
@@ -1147,12 +1166,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
 
     setIsSubmittingFollowReferral(true);
     try {
-      // TODO
-      const targetUserId = "0xD49f9f4A840F0a7cCb8173729Fa9d82dBAF427f4";
-
-      // const targetUserId =
-      //   resolvedFollowTargetWallet ??
-      //   (await resolveFollowTargetWallet("0xD49f9f4A840F0a7cCb8173729Fa9d82dBAF427f4"));
+      const targetUserId =
+        resolvedFollowTargetWallet ??
+        (await resolveFollowTargetWallet(followReferralCode));
 
       if (activeFollowingTargetIds.has(targetUserId)) {
         setFollowTradeEnabled(true);
@@ -1215,6 +1231,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     queryClient,
     refetchFollowing,
     registerOrderFollow,
+    resolveFollowTargetWallet,
+    resolvedFollowTargetWallet,
   ]);
 
   useEffect(() => {
@@ -2520,9 +2538,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, [handleWheel, handleTouchMove]);
 
   // ── Loading state ──────────────────────────────────────────────────────────
-  const hasLiveData =
-    cells.length > 0 || history.length > 0 || currentPrice > 0;
-  const showLoadingState = !hasLiveData;
+  const hasGridData = cells.length > 0;
+  const showLoadingState = !hasGridData;
   const loadingLabel = socket
     ? "Loading live market grid, please wait..."
     : isLoggingIn
@@ -2781,7 +2798,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
             <div className="border-grid-line-strong bg-background-grid text-grid-axis rounded-md border px-4 py-3 text-center text-xs shadow-[0_12px_32px_rgba(0,0,0,0.28)] sm:text-sm">
               <div className="font-semibold text-white">{loadingLabel}</div>
               <div className="mt-1 opacity-70">
-                Canvas stays mounted while the first price ticks arrive.
+                Canvas stays mounted while the first grid data arrives.
               </div>
               {serverTimeOffset !== 0 && (
                 <div className="mt-1 text-[11px] opacity-50">

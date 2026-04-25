@@ -50,6 +50,33 @@ type LoginResponse = {
   accessToken?: string;
 };
 
+const WORLD_USERNAME_KEY = "world-username";
+const WORLD_USERNAME_WALLET_KEY = "world-username-wallet-address";
+
+function normalizeWorldUsername(value?: string | null) {
+  const normalized = value?.trim().replace(/^@/, "");
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function normalizeWalletAddress(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+async function getUsernameByAddress(address?: string | null) {
+  const normalizedAddress = normalizeWalletAddress(address);
+  if (!normalizedAddress) {
+    return null;
+  }
+
+  try {
+    const user = await MiniKit.getUserByAddress(normalizedAddress);
+    return normalizeWorldUsername(user?.username);
+  } catch {
+    return null;
+  }
+}
+
 function getStoredToken() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem("token");
@@ -62,7 +89,29 @@ function getStoredWalletAddress() {
 
 function getStoredUsername() {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem("world-username");
+
+  const username = normalizeWorldUsername(
+    window.localStorage.getItem(WORLD_USERNAME_KEY),
+  );
+  if (!username) {
+    return null;
+  }
+
+  const storedWalletAddress = normalizeWalletAddress(
+    window.localStorage.getItem("wallet-address"),
+  );
+  const usernameWalletAddress = normalizeWalletAddress(
+    window.localStorage.getItem(WORLD_USERNAME_WALLET_KEY),
+  );
+  if (
+    storedWalletAddress &&
+    usernameWalletAddress &&
+    storedWalletAddress !== usernameWalletAddress
+  ) {
+    return null;
+  }
+
+  return username;
 }
 
 function getStoredWssKey() {
@@ -256,7 +305,8 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     window.localStorage.removeItem("token");
     window.localStorage.removeItem("wallet-address");
-    window.localStorage.removeItem("world-username");
+    window.localStorage.removeItem(WORLD_USERNAME_KEY);
+    window.localStorage.removeItem(WORLD_USERNAME_WALLET_KEY);
     window.localStorage.removeItem("wss-key");
     window.localStorage.removeItem("wss-key-expires-at");
     window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
@@ -272,7 +322,8 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     window.localStorage.removeItem("token");
     window.localStorage.removeItem("wallet-address");
-    window.localStorage.removeItem("world-username");
+    window.localStorage.removeItem(WORLD_USERNAME_KEY);
+    window.localStorage.removeItem(WORLD_USERNAME_WALLET_KEY);
     window.localStorage.removeItem("wss-key");
     window.localStorage.removeItem("wss-key-expires-at");
     window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
@@ -297,10 +348,20 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       window.localStorage.setItem("token", accessToken);
       window.localStorage.setItem("wallet-address", walletAddress);
-      if (session?.username) {
-        window.localStorage.setItem("world-username", session.username);
+      const normalizedSessionUsername = normalizeWorldUsername(session?.username);
+      const normalizedWalletAddress = normalizeWalletAddress(walletAddress);
+
+      if (normalizedSessionUsername) {
+        window.localStorage.setItem(WORLD_USERNAME_KEY, normalizedSessionUsername);
+        if (normalizedWalletAddress) {
+          window.localStorage.setItem(
+            WORLD_USERNAME_WALLET_KEY,
+            normalizedWalletAddress,
+          );
+        }
       } else {
-        window.localStorage.removeItem("world-username");
+        window.localStorage.removeItem(WORLD_USERNAME_KEY);
+        window.localStorage.removeItem(WORLD_USERNAME_WALLET_KEY);
       }
       if (session?.wssKey) {
         window.localStorage.setItem("wss-key", session.wssKey);
@@ -320,7 +381,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       setToken(accessToken);
       setAuthWalletAddress(walletAddress);
-      setAuthUsername(session?.username?.trim() || null);
+      setAuthUsername(normalizedSessionUsername);
       await syncBalance();
     },
     [syncBalance],
@@ -332,7 +393,9 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const storedToken = window.localStorage.getItem("token");
     const storedAddress = window.localStorage.getItem("wallet-address");
-    const storedUsername = window.localStorage.getItem("world-username");
+    const storedUsername = normalizeWorldUsername(
+      window.localStorage.getItem(WORLD_USERNAME_KEY),
+    );
     const miniKitAddress = MiniKit.user?.walletAddress;
 
     if (
@@ -341,9 +404,26 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       (!miniKitAddress ||
         miniKitAddress.toLowerCase() === storedAddress.toLowerCase())
     ) {
+      const usernameByAddress = await getUsernameByAddress(
+        miniKitAddress ?? storedAddress,
+      );
+
       setToken(storedToken);
       setAuthWalletAddress(storedAddress);
-      setAuthUsername(storedUsername ?? MiniKit.user?.username?.trim() ?? null);
+      setAuthUsername(
+        usernameByAddress ??
+          normalizeWorldUsername(MiniKit.user?.username) ??
+          storedUsername,
+      );
+
+      if (usernameByAddress) {
+        window.localStorage.setItem(WORLD_USERNAME_KEY, usernameByAddress);
+        window.localStorage.setItem(
+          WORLD_USERNAME_WALLET_KEY,
+          normalizeWalletAddress(storedAddress) ?? storedAddress.toLowerCase(),
+        );
+      }
+
       await syncBalance();
       return;
     }
@@ -366,13 +446,17 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error("Mini App wallet authentication is unavailable");
       }
 
+      const usernameByAddress = await getUsernameByAddress(result.data.address);
+      const resolvedUsername =
+        usernameByAddress ?? normalizeWorldUsername(MiniKit.user?.username);
+
       const miniAppLoginDto: MiniAppLoginDto = {
         nonce,
         miniAppUserId:
           MiniKit.user?.walletAddress ??
           MiniKit.user?.username ??
           result.data.address,
-        miniAppUsername: MiniKit.user?.username ?? undefined,
+        miniAppUsername: resolvedUsername ?? undefined,
         payload: {
           status: "success",
           message: result.data.message,
@@ -392,14 +476,15 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       await storeAuthSession(accessToken, result.data.address, {
-        username: MiniKit.user?.username?.trim() ?? null,
+        username: resolvedUsername,
         wssKey,
         wssKeyExpiresAt,
       });
     } catch (error) {
       console.error("Mini App login failed:", error);
       window.localStorage.removeItem("token");
-      window.localStorage.removeItem("world-username");
+      window.localStorage.removeItem(WORLD_USERNAME_KEY);
+      window.localStorage.removeItem(WORLD_USERNAME_WALLET_KEY);
       window.localStorage.removeItem("wss-key");
       window.localStorage.removeItem("wss-key-expires-at");
       useGameStore.setState({ wssKey: null });
@@ -467,7 +552,8 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Login failed:", error);
       window.localStorage.removeItem("token");
-      window.localStorage.removeItem("world-username");
+      window.localStorage.removeItem(WORLD_USERNAME_KEY);
+      window.localStorage.removeItem(WORLD_USERNAME_WALLET_KEY);
       window.localStorage.removeItem("wss-key");
       window.localStorage.removeItem("wss-key-expires-at");
       useGameStore.setState({ wssKey: null });
@@ -537,7 +623,8 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     const handleLogout = () => {
       window.localStorage.removeItem("token");
       window.localStorage.removeItem("wallet-address");
-      window.localStorage.removeItem("world-username");
+      window.localStorage.removeItem(WORLD_USERNAME_KEY);
+      window.localStorage.removeItem(WORLD_USERNAME_WALLET_KEY);
       window.localStorage.removeItem("wss-key");
       window.localStorage.removeItem("wss-key-expires-at");
       window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
@@ -559,7 +646,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     ? authWalletAddress
     : (address ?? null);
   const resolvedUsername = isMiniApp
-    ? (authUsername ?? MiniKit.user?.username?.trim() ?? null)
+    ? (authUsername ?? normalizeWorldUsername(MiniKit.user?.username) ?? null)
     : null;
 
   const value = useMemo<AuthContextValue>(

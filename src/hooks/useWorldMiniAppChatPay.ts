@@ -89,26 +89,12 @@ const useWorldMiniAppChatPay = (config?: UseWorldMiniAppChatPayConfig) => {
 
   const openWorldChatDraft = useCallback(
     (options: WorldChatDraftOptions) => {
-      console.log("[useWorldMiniAppChatPay] Step 1: build World Chat draft URL", {
-        options,
-      });
       const url = getWorldChatDeeplinkUrl(options);
-      console.log("[useWorldMiniAppChatPay] Step 2: draft URL created", { url });
-
       if (config?.onOpenUrl) {
-        console.log(
-          "[useWorldMiniAppChatPay] Step 3: open via custom onOpenUrl handler",
-        );
         config.onOpenUrl(url);
       } else if (typeof window !== "undefined") {
-        console.log(
-          "[useWorldMiniAppChatPay] Step 3: navigating browser to draft URL",
-        );
         window.location.assign(url);
       } else {
-        console.log(
-          "[useWorldMiniAppChatPay] Step 3: skipped navigation (window unavailable)",
-        );
       }
 
       return url;
@@ -148,16 +134,7 @@ const useWorldMiniAppChatPay = (config?: UseWorldMiniAppChatPayConfig) => {
       reference,
       fallback,
     }: SendWldPaymentOptions) => {
-      console.log("[useWorldMiniAppChatPay] payWld called", {
-        to,
-        amountWld,
-        description,
-      });
-
       if (!Number.isFinite(amountWld) || amountWld <= 0) {
-        console.log("[useWorldMiniAppChatPay] Step 0 failed: invalid amount", {
-          amountWld,
-        });
         throw new Error("amountWld must be a positive number");
       }
 
@@ -167,13 +144,7 @@ const useWorldMiniAppChatPay = (config?: UseWorldMiniAppChatPayConfig) => {
       });
       if (!EVM_ADDRESS_REGEX.test(recipient)) {
         const username = normalizeWorldUsername(recipient);
-        console.log(
-          "[useWorldMiniAppChatPay] Step 2: recipient is username, opening World Chat pay draft",
-          { username, amountWld },
-        );
-        console.log("[useWorldMiniAppChatPay] World App environment check", {
-          isInWorldApp: MiniKit.isInWorldApp(),
-        });
+
         if (!username) {
           throw new Error("Valid username or wallet address is required");
         }
@@ -196,7 +167,9 @@ const useWorldMiniAppChatPay = (config?: UseWorldMiniAppChatPayConfig) => {
       setIsPaying(true);
 
       try {
-        console.log("[useWorldMiniAppChatPay] Step 4: resolve payment reference");
+        console.log(
+          "[useWorldMiniAppChatPay] Step 4: resolve payment reference",
+        );
         const resolvedReference =
           reference ??
           (config?.createPaymentReference
@@ -207,9 +180,12 @@ const useWorldMiniAppChatPay = (config?: UseWorldMiniAppChatPayConfig) => {
         });
 
         const tokenAmount = tokenToDecimals(amountWld, Tokens.WLD).toString();
-        console.log("[useWorldMiniAppChatPay] Step 5: convert amount to token decimals", {
-          tokenAmount,
-        });
+        console.log(
+          "[useWorldMiniAppChatPay] Step 5: convert amount to token decimals",
+          {
+            tokenAmount,
+          },
+        );
 
         console.log("[useWorldMiniAppChatPay] Step 6: call MiniKit.pay");
         const result = await MiniKit.pay({

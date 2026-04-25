@@ -64,7 +64,7 @@ export default async function Home({ searchParams }: HomePageProps) {
 
   return (
     <div className="bg-background-main flex h-full flex-1 flex-col">
-      <div className="flex max-h-[calc(100vh-72px)] min-h-[calc(100vh-72px)] flex-1">
+      <div className="flex max-h-[calc(100dvh-72px)] min-h-[calc(100dvh-72px)] flex-1">
         <div className="hidden md:block">
           <BetInfo />
         </div>

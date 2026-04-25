@@ -12,6 +12,7 @@ type ReferralsHeaderProps = {
 
 const ReferralsHeader = ({ onShareToChat, worldId }: ReferralsHeaderProps) => {
   const resolvedWorldId = worldId?.trim() || "Not set";
+  console.log("resolvedWorldId: ", resolvedWorldId);
 
   const handleCopyWorldId = async () => {
     if (!worldId?.trim()) {

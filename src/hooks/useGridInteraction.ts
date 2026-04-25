@@ -316,7 +316,6 @@ export function useGridInteraction({
           appToast.warning("Invalid trade amount!", { icon: "⚠️" });
           return;
         }
-        console.log("balance: ", balance);
         if (betAmount > balance) {
           appToast.error("Insufficient balance!", { icon: "💸" });
           return;
@@ -365,9 +364,7 @@ export function useGridInteraction({
 
         placeBet(cell.id, betAmount);
         clearPreviewCell();
-      } catch (err) {
-        console.log("handleClick() error:", err);
-      }
+      } catch (err) {}
     },
     [
       canvasRef,

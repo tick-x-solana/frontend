@@ -19,6 +19,25 @@ const SPLASH_DURATION_MS = 1100;
 const VERIFY_LOADING_MS = 1400;
 const VERIFY_SUCCESS_MS = 900;
 const ONBOARDING_COMPLETE_KEY = "tickx-onboarding-complete";
+const REDIRECT_HOME_AFTER_LOGIN_KEY = "tickx-redirect-home-after-login";
+
+function setRedirectHomeAfterLoginFlag() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(REDIRECT_HOME_AFTER_LOGIN_KEY, "true");
+}
+
+function consumeRedirectHomeAfterLoginFlag() {
+  if (typeof window === "undefined") return false;
+
+  const shouldRedirect =
+    window.sessionStorage.getItem(REDIRECT_HOME_AFTER_LOGIN_KEY) === "true";
+
+  if (shouldRedirect) {
+    window.sessionStorage.removeItem(REDIRECT_HOME_AFTER_LOGIN_KEY);
+  }
+
+  return shouldRedirect;
+}
 
 type OnboardingStep = 1 | 2;
 
@@ -284,12 +303,16 @@ const AuthGate = ({ children }: { children: ReactNode }) => {
     const justAuthenticated = !wasAuthenticatedRef.current && isAuthenticated;
     wasAuthenticatedRef.current = isAuthenticated;
 
-    if (!justAuthenticated || pathname === "/") {
+    if (!justAuthenticated || pathname === "/" || !isMiniApp) {
+      return;
+    }
+
+    if (!consumeRedirectHomeAfterLoginFlag()) {
       return;
     }
 
     router.replace("/");
-  }, [isAuthenticated, pathname, router]);
+  }, [isAuthenticated, isMiniApp, pathname, router]);
 
   useEffect(() => {
     if (!isMiniApp) return;
@@ -328,6 +351,7 @@ const AuthGate = ({ children }: { children: ReactNode }) => {
       onLogin={() => {
         window.localStorage.removeItem(ONBOARDING_COMPLETE_KEY);
         setHasCompletedOnboarding(false);
+        setRedirectHomeAfterLoginFlag();
         void login();
       }}
     />

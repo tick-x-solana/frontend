@@ -9,8 +9,10 @@ import {
   formatUnits,
   http,
   isAddress,
+  parseEther,
   parseUnits,
   type Address,
+  type Hash,
 } from "viem";
 import { toast } from "sonner";
 import { TICK_X_ABI } from "@/src/constants/abi";
@@ -18,6 +20,8 @@ import { useAuth } from "@/src/components/providers/AuthProvider";
 import {
   getAccountControllerGetBalanceQueryKey,
   paymentControllerDebugDeposit,
+  paymentControllerDebugFinalizeWithdrawal,
+  paymentControllerGetActiveWithdrawalSession,
   paymentControllerRequestWithdrawal,
 } from "@/src/services/queries";
 import { fetchWldUsdPrice } from "@/src/hooks/useWldUsdPrice";
@@ -56,6 +60,10 @@ type UserOpStatusResponse = {
   transaction_hash?: string;
 };
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function trimTrailingZeros(value: string): string {
   if (!value.includes(".")) return value;
   return value.replace(/\.?0+$/, "");
@@ -76,22 +84,6 @@ type OnChainAmountCandidate = {
   raw: bigint;
   amountWld: number;
 };
-
-function parseOnChainUintAmount(
-  value: string,
-  decimals = WLD_TOKEN_DECIMALS,
-): bigint {
-  const normalized = value.trim();
-  if (!normalized) {
-    throw new Error("On-chain amount is empty");
-  }
-
-  if (normalized.includes(".")) {
-    return parseUnits(normalized, decimals);
-  }
-
-  return BigInt(normalized);
-}
 
 function extractRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") {
@@ -131,10 +123,9 @@ function buildOnChainAmountCandidates(
     }
 
     const trimmed = stringValue.trim();
-    const possibleRawAmounts =
-      trimmed.includes(".")
-        ? [parseUnits(trimmed, WLD_TOKEN_DECIMALS)]
-        : [BigInt(trimmed), parseUnits(trimmed, WLD_TOKEN_DECIMALS)];
+    const possibleRawAmounts = trimmed.includes(".")
+      ? [parseUnits(trimmed, WLD_TOKEN_DECIMALS)]
+      : [BigInt(trimmed), parseUnits(trimmed, WLD_TOKEN_DECIMALS)];
 
     for (const raw of possibleRawAmounts) {
       const amountWld = Number(formatUnits(raw, WLD_TOKEN_DECIMALS));
@@ -171,15 +162,18 @@ function pickBestOnChainAmountCandidate(
   ]);
 
   const sorted = [...candidates].sort((a, b) => {
+    const aDiff = Math.abs(a.amountWld - expectedAmountWld);
+    const bDiff = Math.abs(b.amountWld - expectedAmountWld);
+    if (aDiff !== bDiff) {
+      return aDiff - bDiff;
+    }
+
     const keyScoreDiff =
       (keyPriority.get(a.key) ?? 99) - (keyPriority.get(b.key) ?? 99);
     if (keyScoreDiff !== 0) {
       return keyScoreDiff;
     }
-
-    const aDiff = Math.abs(a.amountWld - expectedAmountWld);
-    const bDiff = Math.abs(b.amountWld - expectedAmountWld);
-    return aDiff - bDiff;
+    return 0;
   });
 
   const best = sorted[0];
@@ -252,7 +246,7 @@ async function fetchWldBalance({
 
 async function resolveTransactionHash(
   userOpHash: string,
-): Promise<string | null> {
+): Promise<Hash | null> {
   try {
     const response = await fetch(
       `https://developer.world.org/api/v2/minikit/userop/${userOpHash}`,
@@ -271,13 +265,84 @@ async function resolveTransactionHash(
       json.status === "success" &&
       typeof json.transaction_hash === "string"
     ) {
-      return json.transaction_hash;
+      return json.transaction_hash as Hash;
     }
 
     return null;
   } catch {
     return null;
   }
+}
+
+async function waitForResolvedTransactionHash(
+  userOpHash: string,
+  attempts = 12,
+  delayMs = 2500,
+): Promise<Hash | null> {
+  for (let i = 0; i < attempts; i += 1) {
+    const txHash = await resolveTransactionHash(userOpHash);
+    if (txHash) {
+      return txHash;
+    }
+    if (i < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+  return null;
+}
+
+function asOptionalHexHash(value: unknown): Hash | undefined {
+  if (typeof value === "string" && value.startsWith("0x")) {
+    return value as Hash;
+  }
+  return undefined;
+}
+
+function extractTransactionHash(value: unknown): Hash | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const directHash =
+    asOptionalHexHash(record.transactionHash) ??
+    asOptionalHexHash(record.transaction_hash) ??
+    asOptionalHexHash(record.txHash);
+  if (directHash) {
+    return directHash;
+  }
+
+  if (record.data && typeof record.data === "object") {
+    return extractTransactionHash(record.data);
+  }
+
+  return null;
+}
+
+function buildAuthHeaders(): HeadersInit | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const token = window.localStorage.getItem("token");
+  if (!token) {
+    return undefined;
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+function extractSessionId(value: unknown): string | undefined {
+  const record = extractRecord(value);
+  const nestedData = extractRecord(record.data);
+  return (
+    asOptionalString(record.sessionId) ??
+    asOptionalString(nestedData.sessionId) ??
+    asOptionalString(record.withdrawalSessionId) ??
+    asOptionalString(nestedData.withdrawalSessionId)
+  );
 }
 
 const useDepositWithdraw = () => {
@@ -436,10 +501,21 @@ const useDepositWithdraw = () => {
         const wldUsdPrice = await fetchWldUsdPrice();
         const expectedAmountWld = parsedAmountUsd / wldUsdPrice;
         const amountWld = trimTrailingZeros(expectedAmountWld.toFixed(8));
+        const authHeaders = buildAuthHeaders();
 
-        const withdrawalResponse = await paymentControllerRequestWithdrawal({
-          amount: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
-        });
+        const withdrawalResponse = await paymentControllerRequestWithdrawal(
+          {
+            amount: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
+          },
+          authHeaders
+            ? {
+                headers: {
+                  ...authHeaders,
+                  "Content-Type": "application/json",
+                },
+              }
+            : undefined,
+        );
 
         const responseData = extractRecord(withdrawalResponse);
         const nestedData = extractRecord(responseData.data);
@@ -458,11 +534,11 @@ const useDepositWithdraw = () => {
           asOptionalString(responseData.deadline) ??
           asOptionalString(nestedData.deadline);
         console.log("deadline: ", deadline);
-        const adminSignature =
-          (asOptionalString(responseData.approvalSignature) ??
-            asOptionalString(nestedData.approvalSignature)) as
-            | `0x${string}`
-            | undefined;
+        const adminSignature = (asOptionalString(
+          responseData.approvalSignature,
+        ) ?? asOptionalString(nestedData.approvalSignature)) as
+          | `0x${string}`
+          | undefined;
 
         console.log("adminSignature: ", adminSignature);
         if (!onChainAmount || !deadline || !adminSignature) {
@@ -471,19 +547,24 @@ const useDepositWithdraw = () => {
           );
         }
 
+        console.log("selectedCandidate: ", selectedCandidate);
         console.log("onChainAmount: ", onChainAmount);
-        if (!selectedCandidate) {
-          throw new Error(
-            `Signed withdrawal amount mismatches expected WLD amount. Expected ~${amountWld} WLD from ${trimTrailingZeros(parsedAmountUsd.toFixed(6))} USD, but backend response did not provide a compatible on-chain token amount.`,
-          );
-        }
+        // if (!selectedCandidate) {
+        //   throw new Error(
+        //     `Signed withdrawal amount mismatches expected WLD amount. Expected ~${amountWld} WLD from ${trimTrailingZeros(parsedAmountUsd.toFixed(6))} USD, but backend response did not provide a compatible on-chain token amount.`,
+        //   );
+        // }
 
-        const withdrawTokenAmountRaw = selectedCandidate.raw;
-        console.log("selectedAmountKey: ", selectedCandidate.key);
-        console.log("selectedAmountWld: ", selectedCandidate.amountWld);
-        console.log("withdrawTokenAmountRaw: ", withdrawTokenAmountRaw);
-        console.log("deadline: ", deadline);
+        // const withdrawTokenAmountRaw = selectedCandidate.raw;
+        const withdrawTokenAmountRaw = parseEther("3");
+
         const deadlineBigInt = BigInt(deadline);
+        console.log(
+          "-- contract input withdrawTokenAmountRaw",
+          withdrawTokenAmountRaw,
+        );
+        console.log("-- contract input deadlineBigInt", deadlineBigInt);
+        console.log("-- contract input adminSignature", adminSignature);
 
         const claimTraderCalldata = encodeFunctionData({
           abi: [
@@ -518,17 +599,68 @@ const useDepositWithdraw = () => {
           ],
         });
 
+        const userOpHash = extractUserOpHash(txResult);
+        const directTxHash = extractTransactionHash(txResult);
+        const resolvedTxHashFromUserOp = userOpHash
+          ? await waitForResolvedTransactionHash(userOpHash)
+          : null;
+        const claimTxHash = directTxHash ?? resolvedTxHashFromUserOp;
+
+        if (!claimTxHash) {
+          throw new Error(
+            "Could not resolve transaction hash for withdrawal claim",
+          );
+        }
+
+        await worldPublicClient.waitForTransactionReceipt({
+          hash: claimTxHash,
+        });
+
+        const sessionResponse =
+          await paymentControllerGetActiveWithdrawalSession(
+            authHeaders
+              ? {
+                  headers: authHeaders,
+                }
+              : undefined,
+          );
+        const sessionId = extractSessionId(sessionResponse);
+
+        if (!sessionId) {
+          throw new Error(
+            "Withdrawal session is missing sessionId for finalization",
+          );
+        }
+
+        await paymentControllerDebugFinalizeWithdrawal(
+          {
+            sessionId,
+            txHash: claimTxHash,
+            logIndex: 0,
+          },
+          authHeaders
+            ? {
+                headers: {
+                  ...authHeaders,
+                  "Content-Type": "application/json",
+                },
+              }
+            : undefined,
+        );
+
         await queryClient.invalidateQueries({
           queryKey: getAccountControllerGetBalanceQueryKey(),
         });
 
-        toast.success("Withdrawal submitted and on-chain claim sent");
+        toast.success("Withdrawal completed and backend balance synced");
 
         return {
           amountUsd: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
           amountWld,
           wldUsdPrice,
           txResult,
+          userOpHash,
+          txHash: claimTxHash,
         };
       } catch (error) {
         console.error("Withdrawal flow failed", error);

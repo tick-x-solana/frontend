@@ -17,6 +17,16 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: [
     "160b-2401-d800-fe70-6810-b42d-c20e-44a1-7931.ngrok-free.app",
   ],
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "nysm.work",
+        port: "",
+        pathname: "/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

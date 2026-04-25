@@ -41,7 +41,7 @@ export default function RootLayout({
       <head>
         <link rel="preload" href="/bet-win.svg" as="image" type="image/svg+xml" />
       </head>
-      <body className="flex min-h-full flex-col">
+      <body className="flex min-h-full flex-col overscroll-y-none">
         <Providers>{children}</Providers>
       </body>
     </html>

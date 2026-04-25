@@ -10,33 +10,105 @@ type UseMiniAppUsernameParams = {
   logPrefix?: string;
 };
 
+function normalizeUsername(value?: string | null) {
+  const normalized = value?.trim().replace(/^@/, "");
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function normalizeAddress(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+async function getUsernameByAddress(address?: string | null) {
+  const normalizedAddress = normalizeAddress(address);
+  if (!normalizedAddress) {
+    return null;
+  }
+
+  try {
+    const user = await MiniKit.getUserByAddress(normalizedAddress);
+    return normalizeUsername(user?.username);
+  } catch {
+    return null;
+  }
+}
+
 function useMiniAppUsername(params: UseMiniAppUsernameParams = {}) {
-  const { username } = params;
+  const { username, walletAddress, resolvedUserAddress } = params;
   const [miniAppUsername, setMiniAppUsername] = useState<string | null>(
-    () => MiniKit.user?.username?.trim() ?? username?.trim() ?? null,
+    () =>
+      normalizeUsername(MiniKit.user?.username) ?? normalizeUsername(username),
   );
 
   const resolveMiniAppUsername = useCallback(async () => {
-    const miniKitUsername = MiniKit.user?.username?.trim();
+    const activeAddress =
+      normalizeAddress(resolvedUserAddress) ??
+      normalizeAddress(walletAddress) ??
+      normalizeAddress(MiniKit.user?.walletAddress);
+
+    const usernameByAddress = await getUsernameByAddress(activeAddress);
+    if (usernameByAddress) {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("world-username", usernameByAddress);
+        if (activeAddress) {
+          window.localStorage.setItem(
+            "world-username-wallet-address",
+            activeAddress,
+          );
+        }
+      }
+
+      return usernameByAddress;
+    }
+
+    const miniKitUsername = normalizeUsername(MiniKit.user?.username);
     if (miniKitUsername) {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("world-username", miniKitUsername);
+        if (activeAddress) {
+          window.localStorage.setItem(
+            "world-username-wallet-address",
+            activeAddress,
+          );
+        }
+      }
       return miniKitUsername;
     }
 
-    const authUsername = username?.trim();
+    const authUsername = normalizeUsername(username);
     if (authUsername) {
       return authUsername;
     }
 
     if (typeof window !== "undefined") {
-      const storedUsername = window.localStorage.getItem("world-username");
-      const normalizedStoredUsername = storedUsername?.trim();
-      if (normalizedStoredUsername) {
-        return normalizedStoredUsername;
+      const storedUsername = normalizeUsername(
+        window.localStorage.getItem("world-username"),
+      );
+      const storedWalletAddress = normalizeAddress(
+        window.localStorage.getItem("wallet-address"),
+      );
+      const storedUsernameWalletAddress = normalizeAddress(
+        window.localStorage.getItem("world-username-wallet-address"),
+      );
+
+      if (storedUsername) {
+        if (!activeAddress) {
+          return storedUsername;
+        }
+
+        const isWalletMatched =
+          activeAddress === storedWalletAddress ||
+          activeAddress === storedUsernameWalletAddress;
+
+        if (isWalletMatched) {
+          return storedUsername;
+        }
       }
     }
 
     return null;
-  }, [username]);
+  }, [resolvedUserAddress, username, walletAddress]);
 
   const refreshMiniAppUsername = useCallback(async () => {
     const resolvedUsername = await resolveMiniAppUsername();
@@ -56,8 +128,18 @@ function useMiniAppUsername(params: UseMiniAppUsernameParams = {}) {
 
     void syncMiniAppUsername();
 
+    const timers = [
+      window.setTimeout(() => {
+        void syncMiniAppUsername();
+      }, 300),
+      window.setTimeout(() => {
+        void syncMiniAppUsername();
+      }, 1500),
+    ];
+
     return () => {
       cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [resolveMiniAppUsername]);
 
