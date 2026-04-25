@@ -68,7 +68,7 @@ type VaultDataset = {
 };
 
 const humanVaultDataset: VaultDataset = {
-  totalValueLocked: "$73,640",
+  totalValueLocked: "$22,200",
   protocolVaults: [
     [
       { label: "Vault", value: "Hyperliquidity Provider (HLP)" },
@@ -91,19 +91,28 @@ const humanVaultDataset: VaultDataset = {
   ],
   userVaults: [
     [
-      { label: "Vault", value: "Primary Vault" },
+      { label: "Vault", value: "BlackRock Fund 101" },
       { label: "Leader", value: "0x2b80...6f6b" },
-      { label: "APR", value: "-0.19%", valueClassName: "text-red-400" },
+      { label: "APR", value: "2.18%" },
       { label: "TVL", value: "$12,340.00" },
-      { label: "Your Deposit", value: "$0.00" },
+      { label: "Your Deposit", value: "$4,200.00" },
       { label: "Age (days)", value: "238" },
+      { label: "Snapshot", value: "-" },
+    ],
+    [
+      { label: "Vault", value: "BlackRock Fund 102" },
+      { label: "Leader", value: "0x677d...84e7" },
+      { label: "APR", value: "1.76%" },
+      { label: "TVL", value: "$9,860.00" },
+      { label: "Your Deposit", value: "$2,150.00" },
+      { label: "Age (days)", value: "124" },
       { label: "Snapshot", value: "-" },
     ],
   ],
 };
 
 const agentVaultDataset: VaultDataset = {
-  totalValueLocked: "$67,920",
+  totalValueLocked: "$28,600",
   protocolVaults: [
     [
       { label: "Vault", value: "Agent Morpho Delta Neutral" },
@@ -126,12 +135,21 @@ const agentVaultDataset: VaultDataset = {
   ],
   userVaults: [
     [
-      { label: "Vault", value: "Agent Auto-Rollover" },
-      { label: "Leader", value: "agent-03" },
-      { label: "APR", value: "4.95%" },
-      { label: "TVL", value: "$18,900" },
-      { label: "Your Deposit", value: "$0.00" },
-      { label: "Age (days)", value: "29" },
+      { label: "Vault", value: "Agent Quant Pulse 01" },
+      { label: "Leader", value: "agent-quant-01" },
+      { label: "APR", value: "6.42%" },
+      { label: "TVL", value: "$15,480.00" },
+      { label: "Your Deposit", value: "$1,980.00" },
+      { label: "Age (days)", value: "36" },
+      { label: "Snapshot", value: "2026-04-24" },
+    ],
+    [
+      { label: "Vault", value: "Agent Momentum Grid 02" },
+      { label: "Leader", value: "agent-grid-02" },
+      { label: "APR", value: "5.87%" },
+      { label: "TVL", value: "$13,120.00" },
+      { label: "Your Deposit", value: "$1,240.00" },
+      { label: "Age (days)", value: "27" },
       { label: "Snapshot", value: "2026-04-24" },
     ],
   ],
