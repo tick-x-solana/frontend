@@ -1,1 +1,1 @@
-export const BACKEND_URL = "https://api-tap-fun-chainlink.nysm.work";
+export const BACKEND_URL = "https://api-tick-x.nysm.work";
