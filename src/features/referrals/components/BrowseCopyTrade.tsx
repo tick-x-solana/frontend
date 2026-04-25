@@ -7,7 +7,7 @@ import CopyTradeProfileCard, {
 const COPY_TRADE_PROFILES: CopyTradeProfile[] = [
   {
     initials: "AS",
-    name: "Paul Laverick",
+    username: "paul_laverick",
     slots: "12/24",
     winRate: "68%",
     roi: "+24.5%",
@@ -15,7 +15,7 @@ const COPY_TRADE_PROFILES: CopyTradeProfile[] = [
   },
   {
     initials: "AS",
-    name: "Paul Laverick",
+    username: "paul_laverick",
     slots: "12/24",
     winRate: "68%",
     roi: "+24.5%",
@@ -43,7 +43,7 @@ const BrowseCopyTrade = () => {
 
       {COPY_TRADE_PROFILES.map((profile, index) => (
         <CopyTradeProfileCard
-          key={`${profile.name}-${index}`}
+          key={`${profile.username}-${index}`}
           profile={profile}
         />
       ))}

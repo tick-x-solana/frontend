@@ -18,7 +18,7 @@ const DefaultLayout = ({ children }: { children: React.ReactNode }) => {
           "bg-background-main flex-1",
           hideLayoutChrome
             ? "pb-0"
-            : "pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0",
+            : "pb-[calc(80px+env(safe-area-inset-bottom))] md:pb-0",
         ].join(" ")}
       >
         {children}

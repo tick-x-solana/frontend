@@ -1,10 +1,10 @@
 type WorldChatShareMetrics = {
   winRate?: string | number | null;
+  pnl?: string | number | null;
   roi?: string | number | null;
 };
 
 type BuildWorldChatShareMessageParams = {
-  referralCode: string;
   referralLink: string;
   introLine?: string;
   metrics?: WorldChatShareMetrics;
@@ -22,19 +22,19 @@ function normalizeMetricValue(value: string | number | null | undefined) {
 }
 
 export function buildWorldChatShareMessage({
-  referralCode,
   referralLink,
-  introLine = "Use my referral to follow trade on TickX.",
+  introLine = "Hey! I just won big! Follow my trades on TickX",
   metrics,
 }: BuildWorldChatShareMessageParams) {
   const normalizedWinRate = normalizeMetricValue(metrics?.winRate);
+  const normalizedPnl = normalizeMetricValue(metrics?.pnl);
   const normalizedRoi = normalizeMetricValue(metrics?.roi);
 
   const lines = [
     introLine,
-    normalizedWinRate ? `Win Rate: ${normalizedWinRate}` : null,
+    normalizedWinRate ? `Win rate: ${normalizedWinRate}` : null,
+    normalizedPnl ? `PnL: ${normalizedPnl}` : null,
     normalizedRoi ? `ROI: ${normalizedRoi}` : null,
-    `Referral code: ${referralCode}`,
     `Link: ${referralLink}`,
   ].filter((line): line is string => Boolean(line));
 

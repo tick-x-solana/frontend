@@ -69,8 +69,8 @@ function useWinShareActions({
         typeof navigator.share === "function"
       ) {
         await navigator.share({
-          title: "Join TickX",
-          text: "Use my referral link to join TickX on World App.",
+          title: "Hey! I just won big! Follow my trades on TickX",
+          text: "Hey! I just won big! Follow my trades on TickX",
           url: shareUrl,
         });
       } else {
@@ -106,7 +106,6 @@ function useWinShareActions({
 
         const referralLink = buildMiniAppReferralLink(resolvedMiniAppUsername);
         const message = buildWorldChatShareMessage({
-          referralCode: resolvedMiniAppUsername,
           referralLink,
           introLine: options?.introLine,
           metrics: options?.metrics,

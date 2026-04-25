@@ -1,24 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ComponentType } from "react";
 import { MiniKit } from "@worldcoin/minikit-js";
 import type { MiniKitChatOptions } from "@worldcoin/minikit-js/commands";
 import Image from "next/image";
+import ExploreAiAgentIcon from "@/src/assets/icons/explore-ai-agent.svg";
+import ExploreFeatureDividerIcon from "@/src/assets/icons/explore-feature-divider.svg";
+import ExploreFeatureEllipseBottomIcon from "@/src/assets/icons/explore-feature-ellipse-bottom.svg";
+import ExploreFeatureEllipseLeftIcon from "@/src/assets/icons/explore-feature-ellipse-left.svg";
+import ExploreFeatureOrbIcon from "@/src/assets/icons/explore-feature-orb.svg";
+import ExploreFollowTradingIcon from "@/src/assets/icons/explore-follow-trading.svg";
+import ExploreIntegrityIcon from "@/src/assets/icons/explore-integrity.svg";
+import ExploreLiquidityIcon from "@/src/assets/icons/explore-liquidity.svg";
+import ExploreReferralIcon from "@/src/assets/icons/explore-referral.svg";
+import ExploreVaultIcon from "@/src/assets/icons/explore-vault.svg";
+import SocialDiscordFigmaIcon from "@/src/assets/icons/social-discord-figma.svg";
+import SocialXFigmaIcon from "@/src/assets/icons/social-x-figma.svg";
 import TetherIcon from "@/src/assets/icons/tether.svg";
 import WldMarketIcon from "@/src/assets/icons/wld-market.svg";
 import {
   ArrowLeft,
-  BatteryFull,
+  BadgeCheck,
   Bot,
-  CandlestickChart,
-  Coins,
+  CircleDashed,
   Copy,
-  Gift,
-  ShieldCheck,
+  Sparkles,
   Star,
-  Vault,
-  Wifi,
-  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import BrowseCopyTrade from "@/src/features/referrals/components/BrowseCopyTrade";
@@ -30,12 +37,6 @@ import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
 import { buildWorldChatShareMessage } from "@/src/features/referrals/worldChatShare";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
-
-type ExploreFeature = {
-  id: string;
-  title: string;
-  Icon: LucideIcon;
-};
 
 type ExploreView =
   | "home"
@@ -66,88 +67,49 @@ type VaultDataset = {
   userVaults: VaultRow[][];
 };
 
-const exploreFeatures: ExploreFeature[] = [
-  { id: "vault", title: "Vault", Icon: Vault },
-  { id: "liquidity", title: "Provide Liquidity", Icon: Coins },
-  { id: "follow-trade", title: "Follow Trading", Icon: CandlestickChart },
-  { id: "referrals", title: "Referral & Earnings", Icon: Gift },
-  { id: "integrity", title: "Proof of Integrity", Icon: ShieldCheck },
-  { id: "ai-agent", title: "AI Agent Space", Icon: Bot },
-];
-
-const socialButtons = [
-  {
-    id: "x",
-    label: "Open X",
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden className="size-5">
-        <path
-          d="M5 4.5h3.1l3.8 5 4.3-5H19l-5.8 6.7L19.5 19h-3.1l-4.3-5.6-4.8 5.6H4.5l6.3-7.3L5 4.5Z"
-          fill="currentColor"
-        />
-      </svg>
-    ),
-  },
-
-  {
-    id: "world-app",
-    label: "Open World App",
-    icon: (
-      <Image
-        src="/world-app.avif"
-        alt=""
-        width={20}
-        height={20}
-        aria-hidden="true"
-        className="size-5 rounded-[4px] object-cover"
-      />
-    ),
-  },
-];
-
 const humanVaultDataset: VaultDataset = {
-  totalValueLocked: "$3,645,650",
+  totalValueLocked: "$73,640",
   protocolVaults: [
     [
-      { label: "Vault", value: "Morpho USDC Prime (World Chain)" },
-      { label: "Leader", value: "0x9ac4...29bf" },
-      { label: "APR", value: "6.42%" },
-      { label: "TVL", value: "$2,184,300" },
-      { label: "Your Deposit", value: "$420.00" },
-      { label: "Age (days)", value: "91" },
-      { label: "Snapshot", value: "2026-04-24" },
+      { label: "Vault", value: "Hyperliquidity Provider (HLP)" },
+      { label: "Leader", value: "0x677d...84e7" },
+      { label: "APR", value: "-0.19%", valueClassName: "text-red-400" },
+      { label: "TVL", value: "$29,480.00" },
+      { label: "Your Deposit", value: "$0.00" },
+      { label: "Age (days)", value: "238" },
+      { label: "Snapshot", value: "-" },
     ],
     [
-      { label: "Vault", value: "Uniswap v3 WLD/USDC LP" },
-      { label: "Leader", value: "0x4e7f...62d1" },
-      { label: "APR", value: "4.88%" },
-      { label: "TVL", value: "$1,362,900" },
+      { label: "Vault", value: "[ Systemic Strategies] HyperGrowth" },
+      { label: "Leader", value: "0x2b80...6f6b" },
+      { label: "APR", value: "-0.19%", valueClassName: "text-red-400" },
+      { label: "TVL", value: "$22,760.00" },
       { label: "Your Deposit", value: "$0.00" },
-      { label: "Age (days)", value: "74" },
-      { label: "Snapshot", value: "2026-04-24" },
+      { label: "Age (days)", value: "238" },
+      { label: "Snapshot", value: "-" },
     ],
   ],
   userVaults: [
     [
-      { label: "Vault", value: "BTC Long Momentum" },
-      { label: "Leader", value: "0x88d1...4f0e" },
-      { label: "APR", value: "5.17%" },
-      { label: "TVL", value: "$98,450" },
-      { label: "Your Deposit", value: "$125.00" },
-      { label: "Age (days)", value: "33" },
-      { label: "Snapshot", value: "2026-04-24" },
+      { label: "Vault", value: "[ Systemic Strategies] HyperGrowth" },
+      { label: "Leader", value: "0x2b80...6f6b" },
+      { label: "APR", value: "-0.19%", valueClassName: "text-red-400" },
+      { label: "TVL", value: "$12,340.00" },
+      { label: "Your Deposit", value: "$0.00" },
+      { label: "Age (days)", value: "238" },
+      { label: "Snapshot", value: "-" },
     ],
   ],
 };
 
 const agentVaultDataset: VaultDataset = {
-  totalValueLocked: "$3,258,700",
+  totalValueLocked: "$67,920",
   protocolVaults: [
     [
       { label: "Vault", value: "Agent Morpho Delta Neutral" },
       { label: "Leader", value: "agent-morpho-01" },
       { label: "APR", value: "7.03%" },
-      { label: "TVL", value: "$1,975,600" },
+      { label: "TVL", value: "$37,600" },
       { label: "Your Deposit", value: "$0.00" },
       { label: "Age (days)", value: "58" },
       { label: "Snapshot", value: "2026-04-24" },
@@ -156,7 +118,7 @@ const agentVaultDataset: VaultDataset = {
       { label: "Vault", value: "Agent Uni v3 Rebalancer WLD/USDC" },
       { label: "Leader", value: "agent-univ3-07" },
       { label: "APR", value: "5.64%" },
-      { label: "TVL", value: "$1,244,200" },
+      { label: "TVL", value: "$24,700" },
       { label: "Your Deposit", value: "$0.00" },
       { label: "Age (days)", value: "46" },
       { label: "Snapshot", value: "2026-04-24" },
@@ -167,7 +129,7 @@ const agentVaultDataset: VaultDataset = {
       { label: "Vault", value: "Agent Aave Auto-Rollover" },
       { label: "Leader", value: "agent-aave-03" },
       { label: "APR", value: "4.95%" },
-      { label: "TVL", value: "$38,900" },
+      { label: "TVL", value: "$18,900" },
       { label: "Your Deposit", value: "$0.00" },
       { label: "Age (days)", value: "29" },
       { label: "Snapshot", value: "2026-04-24" },
@@ -213,36 +175,9 @@ const liquidityPools: LiquidityPool[] = [
   },
 ];
 
-const jumpToViewMap: Record<string, ExploreView> = {
-  vault: "vault",
-  liquidity: "liquidity",
-  "follow-trade": "follow-trade",
-  referrals: "referrals",
-  integrity: "integrity",
-  "ai-agent": "ai-agent",
-};
 const FOLLOW_TRADE_SHARE_WIN_RATE = "68%";
+const FOLLOW_TRADE_SHARE_PNL = "+$343.5";
 const FOLLOW_TRADE_SHARE_ROI = "+24.5%";
-
-function StatusBar() {
-  return (
-    <header className="text-text-heading mb-4 flex items-center justify-between">
-      <p className="text-[15px] font-semibold tracking-[-0.01em]">09:41</p>
-      <div className="flex items-center gap-1">
-        <Wifi className="size-[14px]" strokeWidth={2.1} />
-        <BatteryFull className="size-[16px]" strokeWidth={1.9} />
-      </div>
-    </header>
-  );
-}
-
-function FeatureIcon({ Icon }: { Icon: LucideIcon }) {
-  return (
-    <span className="bg-surface-overlay-subtle border-border-main flex size-12 items-center justify-center rounded-[12px] border">
-      <Icon className="text-primary-light size-6" strokeWidth={1.9} />
-    </span>
-  );
-}
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
@@ -349,19 +284,116 @@ function CopyRow({
   onCopy: (value: string) => Promise<void>;
 }) {
   return (
-    <div className="bg-surface-overlay flex w-full items-center gap-1.5 rounded-[8px] px-3 py-2">
-      <p className="text-text-heading flex-1 truncate font-mono text-[14px] font-medium tracking-[-0.01em]">
+    <div className="border-border-main/70 from-surface-overlay via-surface-overlay-subtle to-surface-overlay relative flex w-full items-center gap-2 rounded-[12px] border bg-gradient-to-r px-3 py-2.5 shadow-[inset_0px_1px_0px_rgba(255,255,255,0.06)]">
+      <p className="text-text-heading flex-1 truncate font-mono text-[13px] font-medium tracking-[-0.01em]">
         {text}
       </p>
       <button
         type="button"
         aria-label="Copy text"
-        className="text-text-sub"
+        className="bg-background-surface text-text-sub hover:text-primary-light flex size-8 shrink-0 items-center justify-center rounded-[8px] transition-colors"
         onClick={() => void onCopy(text)}
       >
-        <Copy className="size-[18px]" strokeWidth={1.8} />
+        <Copy className="size-[19px]" strokeWidth={1.8} />
       </button>
     </div>
+  );
+}
+
+function AgentStep({
+  index,
+  title,
+  command,
+  onCopy,
+}: {
+  index: number;
+  title: string;
+  command: string;
+  onCopy: (value: string) => Promise<void>;
+}) {
+  return (
+    <section className="border-border-main/60 bg-surface-overlay-subtle relative overflow-hidden rounded-[14px] border p-3.5">
+      <span
+        aria-hidden
+        className="bg-primary-light/10 absolute -top-8 -right-8 size-20 rounded-full blur-2xl"
+      />
+      <div className="relative mb-2.5 flex items-start gap-2.5">
+        <span className="bg-background-surface text-primary-light flex size-6 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold tracking-[-0.01em]">
+          {index}
+        </span>
+        <p className="text-text-heading pt-0.5 text-[13px] font-semibold tracking-[-0.01em]">
+          {title}
+        </p>
+      </div>
+      <CopyRow text={command} onCopy={onCopy} />
+    </section>
+  );
+}
+
+function FeaturedCard({
+  Icon,
+  title,
+  onClick,
+}: {
+  Icon: ComponentType<{ className?: string }>;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative flex h-[150px] flex-1 cursor-pointer flex-col justify-between overflow-hidden rounded-[8px] border border-transparent bg-[rgba(13,30,48,0.5)] p-4 text-left"
+    >
+      <span className="bg-background-surface border-border-main flex size-12 items-center justify-center rounded-[10px] border">
+        <Icon className="size-9" />
+      </span>
+      <span className="text-text-main text-[16px] font-semibold tracking-[-0.01em]">
+        {title}
+      </span>
+      <ExploreFeatureOrbIcon
+        aria-hidden
+        className="pointer-events-none absolute top-[143px] left-[132px] size-[46px]"
+      />
+      <span
+        aria-hidden
+        className="bg-success-light/25 absolute -right-11 -bottom-11 size-28 rounded-full blur-2xl"
+      />
+      <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_-8px_-8px_24px_0px_rgba(255,255,255,0.05)]" />
+    </button>
+  );
+}
+
+function BrowseRow({
+  Icon,
+  title,
+  subtitle,
+  onClick,
+}: {
+  Icon: ComponentType<{ className?: string }>;
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative flex w-full items-start gap-3 rounded-[8px] text-left"
+    >
+      <span className="bg-background-surface flex size-11 shrink-0 items-center justify-center rounded-[8px]">
+        <Icon className="size-6" />
+      </span>
+      <span className="flex min-w-0 flex-col pt-0.5">
+        <span className="text-text-main text-[14px] font-semibold tracking-[-0.01em]">
+          {title}
+        </span>
+        <span className="text-text-sub text-[14px] font-normal tracking-[-0.01em]">
+          {subtitle}
+        </span>
+      </span>
+      <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0px_-4px_16px_0px_rgba(255,255,255,0.05)]" />
+    </button>
   );
 }
 
@@ -408,10 +440,10 @@ const Explore = () => {
         resolvedMiniAppUsername,
       );
       const message = buildWorldChatShareMessage({
-        referralCode: resolvedMiniAppUsername,
         referralLink: miniAppReferralLink,
         metrics: {
           winRate: FOLLOW_TRADE_SHARE_WIN_RATE,
+          pnl: FOLLOW_TRADE_SHARE_PNL,
           roi: FOLLOW_TRADE_SHARE_ROI,
         },
       });
@@ -432,37 +464,127 @@ const Explore = () => {
       <div className="mx-auto flex w-full max-w-[393px] flex-col px-4 pt-5 pb-6">
         {activeView === "home" ? (
           <>
-            <h1 className="text-text-heading mb-4 text-[24px] font-semibold tracking-[-0.01em]">
-              Explore
-            </h1>
-
-            <section className="grid grid-cols-2 gap-4">
-              {exploreFeatures.map((feature) => (
-                <button
-                  key={feature.id}
-                  type="button"
-                  onClick={() => setActiveView(jumpToViewMap[feature.id])}
-                  className="bg-background-surface active:bg-background-subtle flex h-[180px] cursor-pointer flex-col items-center justify-center gap-[10px] px-6 py-8 text-center transition-colors"
-                >
-                  <FeatureIcon Icon={feature.Icon} />
-                  <span className="text-text-heading text-[16px] font-semibold tracking-[-0.01em]">
-                    {feature.title}
-                  </span>
-                </button>
-              ))}
+            <section className="relative -mx-4 -mt-5 overflow-hidden px-4 pt-5">
+              <span
+                aria-hidden
+                className="bg-accent-blue/15 absolute -top-28 right-[-70px] h-72 w-56 rotate-[-8deg] blur-3xl"
+              />
+              <span
+                aria-hidden
+                className="bg-success-light/10 absolute -top-20 right-10 h-64 w-32 rotate-[12deg] blur-3xl"
+              />
+              <h1 className="text-text-heading mb-8 text-[24px] font-semibold tracking-[-0.01em]">
+                Explore
+              </h1>
             </section>
 
-            <section className="mt-6 flex items-center justify-center gap-3">
-              {socialButtons.map((item) => (
+            <section className="relative -mx-4 mb-7 overflow-hidden px-4 pt-4 pb-8">
+              <ExploreFeatureEllipseBottomIcon
+                aria-hidden
+                className="pointer-events-none absolute bottom-[-52px] left-1/2 h-[100px] w-32 -translate-x-1/2"
+              />
+              <ExploreFeatureEllipseLeftIcon
+                aria-hidden
+                className="pointer-events-none absolute bottom-[238px] left-[48px] h-[148px] w-[190px]"
+              />
+
+              <p className="text-text-heading mb-4 text-[16px] font-semibold tracking-[-0.01em]">
+                Featured
+              </p>
+              <div className="relative flex gap-2">
+                <FeaturedCard
+                  Icon={ExploreVaultIcon}
+                  title="Vault"
+                  onClick={() => setActiveView("vault")}
+                />
+                <FeaturedCard
+                  Icon={ExploreLiquidityIcon}
+                  title="Provide Liquidity"
+                  onClick={() => setActiveView("liquidity")}
+                />
+              </div>
+
+              <ExploreFeatureDividerIcon
+                aria-hidden
+                className="pointer-events-none absolute bottom-[-21px] left-[-16px] h-[42px] w-[393px]"
+              />
+            </section>
+
+            <section className="mb-7">
+              <p className="text-text-heading mb-4 text-[16px] font-semibold tracking-[-0.01em]">
+                Browse
+              </p>
+              <div className="flex flex-col gap-5">
+                <BrowseRow
+                  Icon={ExploreFollowTradingIcon}
+                  title="Follow Trading"
+                  subtitle="Copy top-performing strategies in real-time."
+                  onClick={() => setActiveView("follow-trade")}
+                />
+                <BrowseRow
+                  Icon={ExploreReferralIcon}
+                  title="Referral & Earnings"
+                  subtitle="Invite friends and grow your passive income."
+                  onClick={() => setActiveView("referrals")}
+                />
+                <BrowseRow
+                  Icon={ExploreIntegrityIcon}
+                  title="Proof of Integrity"
+                  subtitle="Verify transparency and secure transaction data."
+                  onClick={() => setActiveView("integrity")}
+                />
+                <BrowseRow
+                  Icon={ExploreAiAgentIcon}
+                  title="AI Agent Space"
+                  subtitle="Deploy and manage your custom trading algorithms."
+                  onClick={() => setActiveView("ai-agent")}
+                />
+              </div>
+            </section>
+
+            <section>
+              <p className="text-text-heading mb-4 text-[16px] font-semibold tracking-[-0.01em]">
+                Social
+              </p>
+              <div className="flex items-center gap-1">
                 <button
-                  key={item.id}
                   type="button"
-                  aria-label={item.label}
-                  className="border-border-main text-primary-light flex size-10 items-center justify-center rounded-[4px] border bg-transparent"
+                  aria-label="Open World App"
+                  className="flex size-10 items-center justify-center rounded-[4px]"
                 >
-                  {item.icon}
+                  <span className="flex size-6 items-center justify-center">
+                    <Image
+                      src="/world-app.avif"
+                      alt=""
+                      width={22}
+                      height={22}
+                      aria-hidden="true"
+                      className="size-[22px] rounded-[4px] object-cover"
+                    />
+                  </span>
                 </button>
-              ))}
+                <button
+                  type="button"
+                  aria-label="Open X"
+                  className="flex size-10 items-center justify-center rounded-[4px]"
+                >
+                  <span className="flex size-6 items-center justify-center">
+                    <SocialXFigmaIcon aria-hidden className="size-[12]" />
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Open Discord"
+                  className="flex size-10 items-center justify-center rounded-[4px]"
+                >
+                  <span className="flex size-6 items-center justify-center">
+                    <SocialDiscordFigmaIcon
+                      aria-hidden
+                      className="size-[20px]"
+                    />
+                  </span>
+                </button>
+              </div>
             </section>
           </>
         ) : null}
@@ -505,9 +627,16 @@ const Explore = () => {
               <p className="text-hint text-[12px] font-medium tracking-[-0.01em]">
                 Total Value Locked
               </p>
-              <p className="text-text-main text-[44px] font-semibold tracking-[-0.01em]">
+              <p className="text-text-main text-[32px] font-semibold tracking-[-0.01em]">
                 {activeVaultDataset.totalValueLocked}
               </p>
+            </section>
+
+            <section className="flex flex-col gap-2">
+              <SectionTitle>Protocol Vaults</SectionTitle>
+              {activeVaultDataset.protocolVaults.map((rows, index) => (
+                <KVCard key={`protocol-${index}`} rows={rows} />
+              ))}
             </section>
 
             <section className="flex flex-col gap-2">
@@ -562,42 +691,101 @@ const Explore = () => {
           <div className="flex flex-col gap-4">
             <BackButton onClick={() => setActiveView("home")} />
 
-            <h1 className="text-text-heading text-[24px] font-semibold tracking-[-0.01em]">
-              AI Agent Space
-            </h1>
-
-            <section className="border-border-main w-full rounded-[12px] border px-3 py-3">
-              <p className="text-hint text-[12px] font-medium tracking-[-0.01em]">
-                AI API docs:
-              </p>
-              <a
-                href="http://tickx.finance/api"
-                target="_blank"
-                rel="noreferrer"
-                className="text-text-main mt-1 block truncate text-[16px] font-medium tracking-[-0.01em] underline"
-              >
-                http://tickx.finance/api
-              </a>
+            <section className="border-border-main/70 from-background-surface to-surface-card relative overflow-hidden rounded-[14px] border bg-gradient-to-br p-4">
+              <span
+                aria-hidden
+                className="bg-primary-light/15 absolute -top-10 -right-8 size-28 rounded-full blur-3xl"
+              />
+              <div className="relative">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="bg-primary-light/15 text-primary-light flex size-7 items-center justify-center rounded-[8px]">
+                    <Sparkles className="size-4" strokeWidth={1.9} />
+                  </span>
+                  <h1 className="text-text-heading text-[22px] font-semibold tracking-[-0.01em]">
+                    Agent Connect
+                  </h1>
+                </div>
+                <p className="text-text-sub text-[13px] tracking-[-0.01em]">
+                  Set up your AI agent in minutes and connect it to TickX MCP.
+                </p>
+              </div>
             </section>
 
-            <section className="flex flex-col gap-1">
-              <p className="text-hint text-[14px] font-medium tracking-[-0.01em]">
-                Connect your MCP at:
-              </p>
-              <CopyRow
-                text="http://tickx.finance/mcp"
+            <div className="flex flex-col gap-3">
+              <AgentStep
+                index={1}
+                title="Register your agent using Worldchain Agent Kit"
+                command="npx @worldcoin/agentkit-cli register <agent-address>"
                 onCopy={handleCopyText}
               />
-            </section>
+              <AgentStep
+                index={2}
+                title="Teach your agent to use Worldchain AgentKit"
+                command="npx skills add worldcoin/agentkit"
+                onCopy={handleCopyText}
+              />
+              <AgentStep
+                index={3}
+                title="Tell your agent to add TickX mcp"
+                command="https://mcp.tickx.finance"
+                onCopy={handleCopyText}
+              />
+              <AgentStep
+                index={4}
+                title="Teach your agent to join & use TickX.finance"
+                command="Hey bro! Read https://tickx.finance/skill.md and follow the instructions to join TickX"
+                onCopy={handleCopyText}
+              />
+            </div>
 
-            <section className="flex flex-col gap-1">
-              <p className="text-hint text-[14px] font-medium tracking-[-0.01em]">
-                Sample Agent skills
+            <section className="flex flex-col gap-3">
+              <p className="text-hint text-[13px] font-semibold tracking-[-0.01em] uppercase">
+                Running Agents
               </p>
-              <CopyRow
-                text="npm install tickx-skills"
-                onCopy={handleCopyText}
-              />
+
+              {/* Agent 1 — verified */}
+              <div className="border-border-main/60 bg-background-surface flex items-center gap-3 rounded-[12px] border px-3 py-3">
+                <span className="bg-surface-overlay-subtle border-border-main flex size-10 shrink-0 items-center justify-center rounded-full border">
+                  <Bot
+                    className="text-primary-light size-5"
+                    strokeWidth={1.8}
+                  />
+                </span>
+                <div className="flex flex-1 flex-col">
+                  <span className="text-text-heading text-[13px] font-semibold tracking-[-0.01em]">
+                    @QuantAgent.3475
+                  </span>
+                  <span className="text-hint font-mono text-[12px] font-medium tracking-[-0.01em]">
+                    ID: 0xa3f2...7c91
+                  </span>
+                </div>
+                <span className="flex items-center gap-1 text-[12px] font-semibold text-emerald-400">
+                  <BadgeCheck className="size-4" strokeWidth={2} />
+                  Verified
+                </span>
+              </div>
+
+              {/* Agent 2 — not yet verified */}
+              <div className="border-border-main/60 bg-background-surface flex items-center gap-3 rounded-[12px] border px-3 py-3">
+                <span className="bg-surface-overlay-subtle border-border-main flex size-10 shrink-0 items-center justify-center rounded-full border">
+                  <Bot
+                    className="text-primary-light size-5"
+                    strokeWidth={1.8}
+                  />
+                </span>
+                <div className="flex flex-1 flex-col">
+                  <span className="text-text-heading text-[13px] font-semibold tracking-[-0.01em]">
+                    @DeltaBot.8812
+                  </span>
+                  <span className="text-hint font-mono text-[12px] font-medium tracking-[-0.01em]">
+                    ID: 0xb91e...4d03
+                  </span>
+                </div>
+                <span className="text-hint flex items-center gap-1 text-[12px] font-semibold">
+                  <CircleDashed className="size-4" strokeWidth={2} />
+                  Pending
+                </span>
+              </div>
             </section>
           </div>
         ) : null}

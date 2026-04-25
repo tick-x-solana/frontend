@@ -32,6 +32,10 @@ const COPY_TRADE_PAYMENT_AMOUNT_WLD = 0.001;
 const COPY_TRADE_PAYMENT_DESCRIPTION = "Hello";
 const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
 
+function normalizeWorldUsername(value: string): string {
+  return value.trim().replace(/^@/, "");
+}
+
 type ReferralCopyTradingPageProps = {
   refCode: string;
 };
@@ -64,7 +68,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
 
   const resolveKolWalletAddress = useCallback(
     async (usernameOrWallet: string) => {
-      const normalized = usernameOrWallet.trim().replace(/^@/, "");
+      const normalized = normalizeWorldUsername(usernameOrWallet);
       if (!normalized) {
         throw new Error("Missing referral username");
       }
@@ -127,8 +131,8 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
     () => [
       {
         targetUserId: resolvedTargetWallet ?? undefined,
-        initials: refCode.slice(0, 2).toUpperCase(),
-        name: refCode,
+        initials: normalizeWorldUsername(refCode).slice(0, 2).toUpperCase(),
+        username: normalizeWorldUsername(refCode),
         slots: "12/24",
         winRate: "68%",
         roi: "+24.5%",
@@ -173,7 +177,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
     try {
       const targetUserId =
         selectedProfile.targetUserId ??
-        (await resolveKolWalletAddress(selectedProfile.name));
+        (await resolveKolWalletAddress(selectedProfile.username));
 
       const payPromise = payWld({
         to: COPY_TRADE_PAYMENT_TO,
@@ -244,7 +248,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
         <div className="flex flex-col gap-4">
           {copyTradeProfiles.map((profile, index) => (
             <CopyTradeProfileCard
-              key={`${profile.name}-${index}`}
+              key={`${profile.username}-${index}`}
               profile={profile}
               isFavorite={index === 0}
               isFollowing={
@@ -253,7 +257,8 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
                   : false
               }
               isSubmitting={
-                isSubmittingFollow && selectedProfile?.name === profile.name
+                isSubmittingFollow &&
+                selectedProfile?.username === profile.username
               }
               onCopyTrade={handleOpenCopyTradeModal}
             />
@@ -266,7 +271,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
           <div className="border-border-main pointer-events-auto w-full max-w-[393px] rounded-[20px] border bg-[linear-gradient(112deg,var(--background-main)_0%,var(--surface-card-strong)_62%,var(--background-main)_100%)] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
             <DialogTitle className="sr-only">Start Follow Trade</DialogTitle>
             <DialogDescription className="sr-only">
-              Confirm follow trade for {selectedProfile?.name}
+              Confirm follow trade for @{selectedProfile?.username}
             </DialogDescription>
 
             {selectedProfile ? (
@@ -281,7 +286,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
 
                   <div className="min-w-0 flex-1">
                     <p className="text-text-heading truncate text-base font-semibold tracking-[-0.01em]">
-                      {selectedProfile.name}
+                      @{selectedProfile.username}
                     </p>
                     <div className="bg-surface-overlay-subtle mt-1 flex w-max items-center gap-1 rounded-[4px] px-1.5 py-0.5">
                       <UsersRound className="text-hint size-3.5" aria-hidden="true" />

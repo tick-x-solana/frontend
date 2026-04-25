@@ -3014,6 +3014,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                         void shareToWorldChat({
                           metrics: {
                             winRate: shareWinRate,
+                            pnl:
+                              selectedShareProfit > 0
+                                ? `+$${winAmountFormatter.format(selectedShareProfit)}`
+                                : `$${winAmountFormatter.format(selectedShareProfit)}`,
                             roi: selectedShareRoi,
                           },
                         })

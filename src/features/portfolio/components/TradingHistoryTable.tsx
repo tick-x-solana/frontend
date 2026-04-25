@@ -478,6 +478,10 @@ const TradingHistoryTable = () => {
                         void shareToWorldChat({
                           metrics: {
                             winRate: shareWinRate,
+                            pnl:
+                              selectedShareProfit > 0
+                                ? `+${formatMoney(selectedShareProfit)}`
+                                : formatMoney(selectedShareProfit),
                             roi: selectedShareRoi,
                           },
                         })

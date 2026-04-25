@@ -24,6 +24,7 @@ import { fetchWldUsdPrice } from "@/src/hooks/useWldUsdPrice";
 
 const WORLD_CHAIN_ID = 480;
 const WORLDCHAIN_RPC_URL = "https://worldchain-mainnet.g.alchemy.com/public";
+const WLD_TOKEN_DECIMALS = 18;
 
 const worldPublicClient = createPublicClient({
   transport: http(WORLDCHAIN_RPC_URL),
@@ -67,6 +68,131 @@ function parsePositiveNumber(value: string, label: string): number {
   }
 
   return parsed;
+}
+
+type OnChainAmountCandidate = {
+  key: string;
+  value: string;
+  raw: bigint;
+  amountWld: number;
+};
+
+function parseOnChainUintAmount(
+  value: string,
+  decimals = WLD_TOKEN_DECIMALS,
+): bigint {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new Error("On-chain amount is empty");
+  }
+
+  if (normalized.includes(".")) {
+    return parseUnits(normalized, decimals);
+  }
+
+  return BigInt(normalized);
+}
+
+function extractRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return undefined;
+}
+
+function buildOnChainAmountCandidates(
+  payload: Record<string, unknown>,
+): OnChainAmountCandidate[] {
+  const amountKeys = [
+    "onChainAmount",
+    "tokenAmount",
+    "amountWld",
+    "claimAmount",
+    "withdrawAmount",
+    "amount",
+  ];
+
+  const candidates: OnChainAmountCandidate[] = [];
+
+  for (const key of amountKeys) {
+    const stringValue = asOptionalString(payload[key]);
+    if (!stringValue) {
+      continue;
+    }
+
+    const trimmed = stringValue.trim();
+    const possibleRawAmounts =
+      trimmed.includes(".")
+        ? [parseUnits(trimmed, WLD_TOKEN_DECIMALS)]
+        : [BigInt(trimmed), parseUnits(trimmed, WLD_TOKEN_DECIMALS)];
+
+    for (const raw of possibleRawAmounts) {
+      const amountWld = Number(formatUnits(raw, WLD_TOKEN_DECIMALS));
+      if (!Number.isFinite(amountWld)) {
+        continue;
+      }
+      candidates.push({
+        key,
+        value: trimmed,
+        raw,
+        amountWld,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+function pickBestOnChainAmountCandidate(
+  candidates: OnChainAmountCandidate[],
+  expectedAmountWld: number,
+): OnChainAmountCandidate | null {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const keyPriority = new Map<string, number>([
+    ["onChainAmount", 0],
+    ["tokenAmount", 1],
+    ["amountWld", 2],
+    ["claimAmount", 3],
+    ["withdrawAmount", 4],
+    ["amount", 5],
+  ]);
+
+  const sorted = [...candidates].sort((a, b) => {
+    const keyScoreDiff =
+      (keyPriority.get(a.key) ?? 99) - (keyPriority.get(b.key) ?? 99);
+    if (keyScoreDiff !== 0) {
+      return keyScoreDiff;
+    }
+
+    const aDiff = Math.abs(a.amountWld - expectedAmountWld);
+    const bDiff = Math.abs(b.amountWld - expectedAmountWld);
+    return aDiff - bDiff;
+  });
+
+  const best = sorted[0];
+  const mismatchRatio =
+    expectedAmountWld > 0
+      ? Math.abs(best.amountWld - expectedAmountWld) / expectedAmountWld
+      : 0;
+
+  if (mismatchRatio > 0.2) {
+    return null;
+  }
+
+  return best;
 }
 
 function extractUserOpHash(value: unknown): string | null {
@@ -308,14 +434,56 @@ const useDepositWithdraw = () => {
 
       try {
         const wldUsdPrice = await fetchWldUsdPrice();
-        const amountWld = trimTrailingZeros(
-          (parsedAmountUsd / wldUsdPrice).toFixed(8),
-        );
-        const withdrawTokenAmountRaw = parseUnits(amountWld, 18);
+        const expectedAmountWld = parsedAmountUsd / wldUsdPrice;
+        const amountWld = trimTrailingZeros(expectedAmountWld.toFixed(8));
 
-        await paymentControllerRequestWithdrawal({
+        const withdrawalResponse = await paymentControllerRequestWithdrawal({
           amount: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
         });
+
+        const responseData = extractRecord(withdrawalResponse);
+        const nestedData = extractRecord(responseData.data);
+        console.log("withdrawalResponse: ", withdrawalResponse);
+        const candidates = buildOnChainAmountCandidates({
+          ...responseData,
+          ...nestedData,
+        });
+        const selectedCandidate = pickBestOnChainAmountCandidate(
+          candidates,
+          expectedAmountWld,
+        );
+        const onChainAmount =
+          selectedCandidate?.value ?? candidates[0]?.value ?? undefined;
+        const deadline =
+          asOptionalString(responseData.deadline) ??
+          asOptionalString(nestedData.deadline);
+        console.log("deadline: ", deadline);
+        const adminSignature =
+          (asOptionalString(responseData.approvalSignature) ??
+            asOptionalString(nestedData.approvalSignature)) as
+            | `0x${string}`
+            | undefined;
+
+        console.log("adminSignature: ", adminSignature);
+        if (!onChainAmount || !deadline || !adminSignature) {
+          throw new Error(
+            "Withdrawal response missing required on-chain parameters (amount, deadline, adminSignature)",
+          );
+        }
+
+        console.log("onChainAmount: ", onChainAmount);
+        if (!selectedCandidate) {
+          throw new Error(
+            `Signed withdrawal amount mismatches expected WLD amount. Expected ~${amountWld} WLD from ${trimTrailingZeros(parsedAmountUsd.toFixed(6))} USD, but backend response did not provide a compatible on-chain token amount.`,
+          );
+        }
+
+        const withdrawTokenAmountRaw = selectedCandidate.raw;
+        console.log("selectedAmountKey: ", selectedCandidate.key);
+        console.log("selectedAmountWld: ", selectedCandidate.amountWld);
+        console.log("withdrawTokenAmountRaw: ", withdrawTokenAmountRaw);
+        console.log("deadline: ", deadline);
+        const deadlineBigInt = BigInt(deadline);
 
         const claimTraderCalldata = encodeFunctionData({
           abi: [
@@ -323,12 +491,20 @@ const useDepositWithdraw = () => {
               type: "function",
               name: "claimTrader",
               stateMutability: "nonpayable",
-              inputs: [{ name: "", type: "uint256" }],
+              inputs: [
+                { name: "amount", type: "uint256", internalType: "uint256" },
+                { name: "deadline", type: "uint256", internalType: "uint256" },
+                {
+                  name: "adminSignature",
+                  type: "bytes",
+                  internalType: "bytes",
+                },
+              ],
               outputs: [],
             },
           ],
           functionName: "claimTrader",
-          args: [withdrawTokenAmountRaw],
+          args: [withdrawTokenAmountRaw, deadlineBigInt, adminSignature],
         });
 
         const txResult = await MiniKit.sendTransaction({

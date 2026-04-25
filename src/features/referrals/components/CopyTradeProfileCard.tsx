@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 export type CopyTradeProfile = {
   targetUserId?: string;
   initials: string;
-  name: string;
+  username: string;
   slots: string;
   winRate: string;
   roi: string;
@@ -30,6 +30,10 @@ const CopyTradeProfileCard = ({
   isSubmitting = false,
   onCopyTrade,
 }: CopyTradeProfileCardProps) => {
+  const displayUsername = profile.username.startsWith("@")
+    ? profile.username
+    : `@${profile.username}`;
+
   return (
     <article className="border-border-main bg-background-main flex flex-col gap-3 rounded-[8px] border p-4">
       <div className="flex items-start gap-3">
@@ -48,7 +52,7 @@ const CopyTradeProfileCard = ({
 
         <div className="min-w-0 flex-1">
           <p className="text-text-heading truncate text-base font-semibold tracking-[-0.01em]">
-            {profile.name}
+            {displayUsername}
           </p>
           <div className="bg-surface-overlay-subtle mt-1 flex w-max items-center gap-1 rounded-[4px] px-1 py-0.5">
             <UsersRound className="text-hint size-3.5" aria-hidden="true" />
@@ -68,7 +72,7 @@ const CopyTradeProfileCard = ({
               ? "text-reward-gold hover:bg-surface-overlay-subtle hover:text-reward-gold"
               : "text-hint hover:bg-surface-overlay-subtle hover:text-primary-light",
           )}
-          aria-label={`Favorite ${profile.name}`}
+          aria-label={`Favorite ${displayUsername}`}
         >
           <Star
             className="size-4"
