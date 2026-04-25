@@ -47,9 +47,8 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-const compactFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 4,
+const integerFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 0,
 });
 const percentageFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 1,
@@ -107,7 +106,7 @@ function formatMoney(value: number | null): string {
 
 function formatWld(value: number | null): string {
   if (value === null) return "-- WLD";
-  return `${compactFormatter.format(value)} WLD`;
+  return `${integerFormatter.format(Math.round(value))} WLD`;
 }
 
 function formatMultiplier(value: number | null): string {
@@ -318,12 +317,7 @@ const TradingHistoryTable = () => {
       .map(toHistoryItem)
       .filter((item): item is TradingHistoryItem => item !== null)
       .map((item) => {
-        if (
-          item.amountWld !== null ||
-          item.amountUsd === null ||
-          !wldUsdPrice ||
-          wldUsdPrice <= 0
-        ) {
+        if (item.amountUsd === null || !wldUsdPrice || wldUsdPrice <= 0) {
           return item;
         }
 

@@ -9,11 +9,16 @@ import WldMarketIcon from "@/src/assets/icons/wld-market.svg";
 import {
   ArrowLeft,
   BatteryFull,
-  Cloud,
+  Bot,
+  CandlestickChart,
+  Coins,
   Copy,
-  Smartphone,
+  Gift,
+  ShieldCheck,
   Star,
+  Vault,
   Wifi,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import BrowseCopyTrade from "@/src/features/referrals/components/BrowseCopyTrade";
@@ -29,6 +34,7 @@ import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
 type ExploreFeature = {
   id: string;
   title: string;
+  Icon: LucideIcon;
 };
 
 type ExploreView =
@@ -61,12 +67,12 @@ type VaultDataset = {
 };
 
 const exploreFeatures: ExploreFeature[] = [
-  { id: "vault", title: "Vault" },
-  { id: "liquidity", title: "Provide Liquidity" },
-  { id: "follow-trade", title: "Follow Trading" },
-  { id: "referrals", title: "Referral & Earnings" },
-  { id: "integrity", title: "Proof of Integrity" },
-  { id: "ai-agent", title: "AI Agent Space" },
+  { id: "vault", title: "Vault", Icon: Vault },
+  { id: "liquidity", title: "Provide Liquidity", Icon: Coins },
+  { id: "follow-trade", title: "Follow Trading", Icon: CandlestickChart },
+  { id: "referrals", title: "Referral & Earnings", Icon: Gift },
+  { id: "integrity", title: "Proof of Integrity", Icon: ShieldCheck },
+  { id: "ai-agent", title: "AI Agent Space", Icon: Bot },
 ];
 
 const socialButtons = [
@@ -230,16 +236,10 @@ function StatusBar() {
   );
 }
 
-function FeatureIcon() {
+function FeatureIcon({ Icon }: { Icon: LucideIcon }) {
   return (
-    <span className="relative flex size-12 items-center justify-center">
-      <Cloud className="text-primary-light size-11" strokeWidth={1.75} />
-      <span className="bg-background-surface border-primary-light absolute right-[11px] bottom-[8px] flex size-4 items-center justify-center rounded-[4px] border">
-        <Smartphone
-          className="text-primary-light size-[9px]"
-          strokeWidth={2.4}
-        />
-      </span>
+    <span className="bg-surface-overlay-subtle border-border-main flex size-12 items-center justify-center rounded-[12px] border">
+      <Icon className="text-primary-light size-6" strokeWidth={1.9} />
     </span>
   );
 }
@@ -444,7 +444,7 @@ const Explore = () => {
                   onClick={() => setActiveView(jumpToViewMap[feature.id])}
                   className="bg-background-surface active:bg-background-subtle flex h-[180px] cursor-pointer flex-col items-center justify-center gap-[10px] px-6 py-8 text-center transition-colors"
                 >
-                  <FeatureIcon />
+                  <FeatureIcon Icon={feature.Icon} />
                   <span className="text-text-heading text-[16px] font-semibold tracking-[-0.01em]">
                     {feature.title}
                   </span>

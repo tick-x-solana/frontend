@@ -291,6 +291,12 @@ export function drawBetCells(
     const hasOverlayActivity = hasFollowedActivity || hasSuggestedStrategy;
     const chartPassedCell = chartTime >= cell.timeWindowEnd;
     const hasVisibleOverlayActivity = hasOverlayActivity && !chartPassedCell;
+    const proximityVisualAlpha = !hasAnyBet
+      ? clamp((cx - chartHeadX + cellW * 0.2) / (cellW * 0.8), 0, 1)
+      : 1;
+    const overlayVisualAlpha = hasVisibleOverlayActivity
+      ? proximityVisualAlpha
+      : 1;
     const hasTrackedState =
       (hasAnyBet && !shouldHideLosingBet) ||
       isHit ||
@@ -304,6 +310,10 @@ export function drawBetCells(
     const nextCellVisualAlpha =
       isNext && !hasAnyBet
         ? getClosingPulseAlpha(cell.timeWindowStart, now, CLOSING_MS)
+        : 1;
+    const plainCellVisualAlpha =
+      !hasAnyBet && !hasVisibleOverlayActivity
+        ? Math.min(nextCellVisualAlpha, proximityVisualAlpha)
         : 1;
     const isSelectedColumn =
       selectedColumnStart !== null &&
@@ -345,6 +355,8 @@ export function drawBetCells(
         isMobile,
       });
     } else if (!hasAnyBet && hasVisibleOverlayActivity) {
+      ctx.save();
+      ctx.globalAlpha *= overlayVisualAlpha;
       _drawCopyTradeCell(ctx, {
         x: cx,
         y: cellTop,
@@ -356,6 +368,7 @@ export function drawBetCells(
         cellRight: cx + cw,
         cellSize,
       });
+      ctx.restore();
     } else if (isHit) {
       const rewardRate =
         hasAnyBet
@@ -431,7 +444,7 @@ export function drawBetCells(
     ) {
       ctx.strokeStyle =
         isNext && !hasAnyBet
-          ? `rgba(22,46,71,${0.2 + nextCellVisualAlpha * 0.4})`
+          ? `rgba(22,46,71,${0.2 + plainCellVisualAlpha * 0.4})`
           : COLOR_GRID;
       ctx.lineWidth = 0.5;
       ctx.strokeRect(rx, ry, rw, rh);
@@ -513,7 +526,11 @@ export function drawBetCells(
     } else {
       // Plain multiplier
       if (isNext && !hasAnyBet) {
-        ctx.globalAlpha = nextCellVisualAlpha;
+        ctx.globalAlpha = plainCellVisualAlpha;
+      } else if (!hasAnyBet && !hasVisibleOverlayActivity) {
+        ctx.globalAlpha = plainCellVisualAlpha;
+      } else if (!hasAnyBet && hasVisibleOverlayActivity) {
+        ctx.globalAlpha = overlayVisualAlpha;
       }
       ctx.font = `${fontSize}px monospace`;
       ctx.fillStyle = multColor;
