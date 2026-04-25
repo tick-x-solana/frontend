@@ -44,10 +44,8 @@ function useWinShareActions({
     logPrefix: "[useWinShareActions]",
   });
 
-  // TODO
   const shareUrl = useMemo(
-    () =>
-      "https://worldcoin.org/mini-app?app_id=app_fe8a4559be4f53707ad19a676492a4d6&path=/ref/0xD49f9f4A840F0a7cCb8173729Fa9d82dBAF427f4",
+    () => buildMiniAppReferralLink(miniAppUsername ?? username),
     [miniAppUsername, username],
   );
 

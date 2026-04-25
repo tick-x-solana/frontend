@@ -89,19 +89,17 @@ export function computeLayout(
 ): GridLayout {
   const BASE_DATA_COLS = 11;
   const BASE_DATA_ROWS = 9;
-  const MOBILE_BREAKPOINT_PX = 640;
   const DESKTOP_VIEWPORT_PADDING_COLS = 2;
-  const MOBILE_VIEWPORT_PADDING_COLS = 2;
   const DESKTOP_LEADING_PADDING_COLS = 1;
-  const MOBILE_LEADING_PADDING_COLS = 6;
+  const MOBILE_VIEWPORT_PADDING_COLS = DESKTOP_VIEWPORT_PADDING_COLS;
+  const MOBILE_LEADING_PADDING_COLS = DESKTOP_LEADING_PADDING_COLS;
 
   const { w, h } = size;
   const { modeIntervalSeconds, modePriceStep, cells: rawCells, basePrice } = store;
-  const isMobileViewport = w < MOBILE_BREAKPOINT_PX;
-  const viewportPaddingCols = isMobileViewport
+  const viewportPaddingCols = w < 640
     ? MOBILE_VIEWPORT_PADDING_COLS
     : DESKTOP_VIEWPORT_PADDING_COLS;
-  const leadingPaddingCols = isMobileViewport
+  const leadingPaddingCols = w < 640
     ? MOBILE_LEADING_PADDING_COLS
     : DESKTOP_LEADING_PADDING_COLS;
 

@@ -218,10 +218,8 @@ export default function OverlayModePanel({
                       className="bg-background-main/40 border-border-main flex items-center justify-between gap-2 rounded-[6px] border px-2 py-1.5"
                     >
                       <div className="min-w-0">
-                        {/* TODO */}
                         <p className="text-text-heading truncate text-xs font-semibold tracking-[-0.01em]">
-                          {/* {"kyan13" || target.label} */}
-                          kyan13
+                          {target.label}
                         </p>
                       </div>
 

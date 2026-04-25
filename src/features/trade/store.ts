@@ -226,6 +226,27 @@ function mapRemoteCells(remoteCells: RemoteCell[], now: number): CellData[] {
     .filter((cell): cell is CellData => cell !== null);
 }
 
+/**
+ * Some backend bursts may include cells from multiple grid snapshots in one payload.
+ * Keep only the newest snapshot to avoid mixing old/new windows and distorting
+ * the visible grid shape after fast price moves.
+ */
+function keepLatestGridSnapshot(remoteCells: RemoteCell[]): RemoteCell[] {
+  if (remoteCells.length <= 1) return remoteCells;
+
+  let latestGridTs: number | null = null;
+  for (const cell of remoteCells) {
+    const gridTsMs = toMsIfFinite(cell.gridTs);
+    if (gridTsMs === null) continue;
+    if (latestGridTs === null || gridTsMs > latestGridTs) {
+      latestGridTs = gridTsMs;
+    }
+  }
+
+  if (latestGridTs === null) return remoteCells;
+  return remoteCells.filter((cell) => toMsIfFinite(cell.gridTs) === latestGridTs);
+}
+
 function sortGridCells(a: CellData, b: CellData): number {
   if (a.timeWindowStart !== b.timeWindowStart) {
     return a.timeWindowStart - b.timeWindowStart;
@@ -364,8 +385,9 @@ export const useGameStore = create<GameState>((set) => ({
       const now = getServerNow(state.serverTimeOffset);
       const chartTime = getLatestChartTime(state.history, now);
       const hideThresholdTime = getCellHideThresholdTime(chartTime);
+      const latestSnapshotCells = keepLatestGridSnapshot(remoteCells);
       const existingCellById = new Map(state.cells.map((cell) => [cell.id, cell]));
-      const incomingCells = mapRemoteCells(remoteCells, now).map((incomingCell) => {
+      const incomingCells = mapRemoteCells(latestSnapshotCells, now).map((incomingCell) => {
         const existingCell = existingCellById.get(incomingCell.id);
         if (!existingCell) return incomingCell;
 
@@ -401,10 +423,10 @@ export const useGameStore = create<GameState>((set) => ({
             state.pendingWins[cell.id] !== undefined ||
             state.settledOutcomes[cell.id] !== undefined;
 
-          // Keep cells the server has already rolled off until the chart has
-          // passed the full cell window (right edge), so overlays do not
-          // disappear when the chart only enters the column.
-          return cell.timeWindowEnd > hideThresholdTime || hasTrackedState;
+          // For plain cells, trust the newest server snapshot immediately.
+          // Only preserve cells that have local tracked state (bet/outcome),
+          // so user feedback remains visible while avoiding mixed-grid artifacts.
+          return hasTrackedState && cell.timeWindowEnd > hideThresholdTime;
         })
         .map((cell) => ({
           ...cell,

@@ -10,20 +10,33 @@ type UseMiniAppUsernameParams = {
   logPrefix?: string;
 };
 
-function useMiniAppUsername({
-  username,
-  walletAddress,
-  resolvedUserAddress,
-  logPrefix = "[useMiniAppUsername]",
-}: UseMiniAppUsernameParams = {}) {
+function useMiniAppUsername(params: UseMiniAppUsernameParams = {}) {
+  const { username } = params;
   const [miniAppUsername, setMiniAppUsername] = useState<string | null>(
     () => MiniKit.user?.username?.trim() ?? username?.trim() ?? null,
   );
 
   const resolveMiniAppUsername = useCallback(async () => {
-    // TODO: remove mock — hardcoded for demo
-    return "kyan13";
-  }, []);
+    const miniKitUsername = MiniKit.user?.username?.trim();
+    if (miniKitUsername) {
+      return miniKitUsername;
+    }
+
+    const authUsername = username?.trim();
+    if (authUsername) {
+      return authUsername;
+    }
+
+    if (typeof window !== "undefined") {
+      const storedUsername = window.localStorage.getItem("world-username");
+      const normalizedStoredUsername = storedUsername?.trim();
+      if (normalizedStoredUsername) {
+        return normalizedStoredUsername;
+      }
+    }
+
+    return null;
+  }, [username]);
 
   const refreshMiniAppUsername = useCallback(async () => {
     const resolvedUsername = await resolveMiniAppUsername();

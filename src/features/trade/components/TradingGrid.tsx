@@ -90,7 +90,7 @@ import { BetWinEffect } from "./BetWinEffect";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DESKTOP_ZOOM_MIN = 0.5;
-const MOBILE_ZOOM_MIN = 1.3;
+const MOBILE_ZOOM_MIN = 1;
 const MIN_PRICE_MOTION_MS = 250;
 const MAX_PRICE_MOTION_MS = 5000;
 const TICK_CADENCE_SMOOTHING = 0.2;
