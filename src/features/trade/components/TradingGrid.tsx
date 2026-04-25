@@ -86,7 +86,7 @@ const MIN_PRICE_MOTION_MS = 250;
 const MAX_PRICE_MOTION_MS = 5000;
 const TICK_CADENCE_SMOOTHING = 0.2;
 const RESIZE_COMMIT_DEBOUNCE_MS = 180;
-const FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS = 4000;
+const FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS = 250;
 const SUGGESTED_STRATEGY_MIN_HOLD_MS = 3000;
 const FOLLOW_ORDER_EVENTS = [
   "order_follow",
@@ -427,6 +427,72 @@ function extractCellTimeRangeFromCellId(cellId: string): {
     return null;
   }
   return { startTs, endTs };
+}
+
+function extractCellIdentityFromCellId(cellId: string): {
+  startTs: number;
+  endTs: number;
+  lowerPrice: number;
+  upperPrice: number;
+} | null {
+  const parts = cellId.split(":");
+  if (parts.length < 4) return null;
+
+  const startTs = normalizeTimestampToMs(parts[parts.length - 4]);
+  const endTs = normalizeTimestampToMs(parts[parts.length - 3]);
+  const lowerPrice = normalizePriceNumber(parts[parts.length - 2]);
+  const upperPrice = normalizePriceNumber(parts[parts.length - 1]);
+
+  if (
+    startTs === null ||
+    endTs === null ||
+    lowerPrice === null ||
+    upperPrice === null
+  ) {
+    return null;
+  }
+
+  return {
+    startTs,
+    endTs,
+    lowerPrice,
+    upperPrice,
+  };
+}
+
+function resolveGridCellIdFromActivityCellId(
+  rawCellId: string | null,
+  currentCells: CellData[],
+): string | null {
+  if (!rawCellId) return null;
+  const trimmedCellId = rawCellId.trim();
+  if (!trimmedCellId) return null;
+
+  const exactMatch = currentCells.find((cell) => cell.id === trimmedCellId);
+  if (exactMatch) return exactMatch.id;
+
+  const identity = extractCellIdentityFromCellId(trimmedCellId);
+  if (!identity) return null;
+
+  const fuzzyMatch = currentCells.find((cell) => {
+    if (
+      cell.timeWindowStart !== identity.startTs ||
+      cell.timeWindowEnd !== identity.endTs
+    ) {
+      return false;
+    }
+
+    const gridLower = normalizePriceNumber(cell.original.lowerPrice);
+    const gridUpper = normalizePriceNumber(cell.original.upperPrice);
+    if (gridLower === null || gridUpper === null) return false;
+
+    return (
+      Math.abs(gridLower - identity.lowerPrice) < 1e-8 &&
+      Math.abs(gridUpper - identity.upperPrice) < 1e-8
+    );
+  });
+
+  return fuzzyMatch?.id ?? null;
 }
 
 function isCellIdStillAheadOfChart(cellId: string, chartTime: number): boolean {
@@ -1021,9 +1087,12 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
 
     setIsSubmittingFollowReferral(true);
     try {
-      const targetUserId =
-        resolvedFollowTargetWallet ??
-        (await resolveFollowTargetWallet(followReferralCode));
+      // TODO
+      const targetUserId = "0xD49f9f4A840F0a7cCb8173729Fa9d82dBAF427f4";
+
+      // const targetUserId =
+      //   resolvedFollowTargetWallet ??
+      //   (await resolveFollowTargetWallet("0xD49f9f4A840F0a7cCb8173729Fa9d82dBAF427f4"));
 
       if (activeFollowingTargetIds.has(targetUserId)) {
         setFollowTradeEnabled(true);
@@ -1578,10 +1647,21 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     };
 
     const handleFollowedOrderUpdate = (payload: unknown) => {
-      const activities = extractFollowedOrderActivities(
-        payload,
-        enabledFollowTargetIds,
-      );
+      const activities = extractFollowedOrderActivities(payload, enabledFollowTargetIds)
+        .map((activity) => {
+          const resolvedCellId = resolveGridCellIdFromActivityCellId(
+            activity.cellId,
+            storeRef.current.cells,
+          );
+
+          if (resolvedCellId === activity.cellId) return activity;
+          return {
+            ...activity,
+            cellId: resolvedCellId,
+          };
+        })
+        .filter((activity) => activity.cellId !== null);
+
       queueFollowOverlayActivities(activities);
     };
 
@@ -1776,10 +1856,21 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       off: (event: string, handler: (payload: unknown) => void) => void;
     };
     const handleFollowedOrder = (payload: unknown) => {
-      const activities = extractFollowedOrderActivities(
-        payload,
-        enabledFollowTargetIds,
-      );
+      const activities = extractFollowedOrderActivities(payload, enabledFollowTargetIds)
+        .map((activity) => {
+          const resolvedCellId = resolveGridCellIdFromActivityCellId(
+            activity.cellId,
+            storeRef.current.cells,
+          );
+
+          if (resolvedCellId === activity.cellId) return activity;
+          return {
+            ...activity,
+            cellId: resolvedCellId,
+          };
+        })
+        .filter((activity) => activity.cellId !== null);
+
       queueFollowOverlayActivities(activities);
     };
 
@@ -2587,7 +2678,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
               </DialogDescription>
               {resolvedFollowTargetWallet ? (
                 <p className="text-text-sub text-xs tracking-[-0.01em]">
-                  Trader wallet: {formatWalletShort(resolvedFollowTargetWallet)}
+                  Trader wallet:{" "}
+                  {formatWalletShort(
+                    "0xD49f9f4A840F0a7cCb8173729Fa9d82dBAF427f4",
+                  )}
                 </p>
               ) : null}
 
