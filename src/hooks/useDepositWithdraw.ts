@@ -392,10 +392,14 @@ const useDepositWithdraw = () => {
 
       try {
         const authHeaders = buildAuthHeaders();
+        const wldUsdPrice = await fetchWldUsdPrice();
+        const requestedAmountWld = trimTrailingZeros(
+          (parsedAmountUsd / wldUsdPrice).toFixed(6),
+        );
 
         const withdrawalResponse = await paymentControllerRequestWithdrawal(
           {
-            amount: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
+            amount: requestedAmountWld,
           },
           authHeaders
             ? {
@@ -409,6 +413,9 @@ const useDepositWithdraw = () => {
 
         const responseData = extractRecord(withdrawalResponse);
         const nestedData = extractRecord(responseData.data);
+        const sessionId =
+          asOptionalString(responseData.sessionId) ??
+          asOptionalString(nestedData.sessionId);
 
         const claimAmount =
           asOptionalString(responseData.claimAmount) ??
@@ -422,9 +429,9 @@ const useDepositWithdraw = () => {
           | `0x${string}`
           | undefined;
 
-        if (!claimAmount || !deadline || !approvalSignature) {
+        if (!sessionId || !claimAmount || !deadline || !approvalSignature) {
           throw new Error(
-            "Withdrawal response missing required on-chain parameters (claimAmount, deadline, approvalSignature)",
+            "Withdrawal response missing required parameters (sessionId, claimAmount, deadline, approvalSignature)",
           );
         }
 
@@ -489,12 +496,10 @@ const useDepositWithdraw = () => {
           hash: claimTxHash,
         });
 
-        const now = Date.now();
-
         await paymentControllerDebugFinalizeWithdrawal(
           {
-            sessionId: `debug-session-${now}`,
-            txHash: `debug-tx-${now}`,
+            sessionId,
+            txHash: `0x${Date.now()}`,
             logIndex: 0,
           },
           authHeaders
@@ -515,9 +520,11 @@ const useDepositWithdraw = () => {
 
         return {
           amountUsd: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
+          requestedAmountWld,
           amountWld: trimTrailingZeros(
             formatUnits(withdrawTokenAmountRaw, WLD_TOKEN_DECIMALS),
           ),
+          wldUsdPrice,
           txResult,
           userOpHash,
           txHash: claimTxHash,
