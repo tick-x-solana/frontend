@@ -23,7 +23,7 @@ const setHeader = (
 };
 
 export const AXIOS_INSTANCE = Axios.create({
-  baseURL: "https://api-tap-fun-chainlink.nysm.work",
+  baseURL: "https://api-tick-x.nysm.work",
 });
 
 AXIOS_INSTANCE.interceptors.request.use(
