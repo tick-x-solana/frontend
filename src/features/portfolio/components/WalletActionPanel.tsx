@@ -375,16 +375,15 @@ const WalletActionPanel = () => {
 
               <div className="mt-5 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4">
                 <div className="flex flex-col items-center gap-2">
-                  <div className="bg-background-subtle border-border-main flex size-10 items-center justify-center rounded-full border">
-                    <WldMarketIcon aria-hidden className="size-4" />
-                  </div>
-
                   <div className="bg-background-subtle flex items-center gap-2 rounded-[8px] px-2 py-1">
                     <p className="text-hint text-xs font-semibold tracking-[-0.01em]">
                       App Balance:
                     </p>
-                    <p className="text-primary-light font-mono text-xs font-bold tracking-[-0.01em]">
+                    <p className="text-primary-light flex items-center gap-1 font-mono text-xs font-bold tracking-[-0.01em]">
                       {visibleBalance}
+                      {isBalanceVisible && (
+                        <WldMarketIcon aria-hidden className="size-3" />
+                      )}
                     </p>
                     <button
                       type="button"
@@ -412,8 +411,7 @@ const WalletActionPanel = () => {
                         Amount
                       </p>
                       {!isWithdraw && (
-                        <p className="text-hint flex items-center gap-1 text-xs font-medium tracking-[-0.01em]">
-                          <WldMarketIcon aria-hidden className="size-3.5" />{" "}
+                        <p className="text-hint text-xs font-medium tracking-[-0.01em]">
                           Wallet: {displayWldBalance}
                         </p>
                       )}
