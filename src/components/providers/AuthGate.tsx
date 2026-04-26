@@ -31,7 +31,7 @@ const VERIFY_SUCCESS_MS = 900;
 const ONBOARDING_COMPLETE_KEY = "tickx-onboarding-complete";
 const REDIRECT_HOME_AFTER_LOGIN_KEY = "tickx-redirect-home-after-login";
 const VERIFY_HUMAN_ACTION = "verify-human";
-const VERIFY_HUMAN_LEVEL = "device";
+const VERIFY_HUMAN_LEVEL = "orb";
 
 function setRedirectHomeAfterLoginFlag() {
   if (typeof window === "undefined") return;
