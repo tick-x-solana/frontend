@@ -1,5 +1,5 @@
 import BetInfo from "@/src/features/trade/components/BetInfo";
-import { TradingGrid } from "@/src/features/trade/components/TradingGrid";
+import TradingGridMount from "@/src/features/trade/components/TradingGridMount";
 
 type HomePageProps = PageProps<"/">;
 
@@ -69,7 +69,7 @@ export default async function Home({ searchParams }: HomePageProps) {
           <BetInfo />
         </div>
 
-        <TradingGrid initialFollowRefCode={initialFollowRefCode} />
+        <TradingGridMount initialFollowRefCode={initialFollowRefCode} />
       </div>
     </div>
   );

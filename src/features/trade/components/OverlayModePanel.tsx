@@ -202,8 +202,8 @@ export default function OverlayModePanel({
           {isFollowTradeConfigExpanded && (
             <div className="mt-2 space-y-2 pl-6">
               <p className="text-text-sub text-xs tracking-[-0.01em]">
-                KOLs you follow. Toggle each one to include or exclude their
-                follow trades on grid.
+                KOLs you follow. You can only enable one KOL at a time for
+                follow trade overlay on grid.
               </p>
 
               {isFollowTradeLoading ? (

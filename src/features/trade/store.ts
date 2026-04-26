@@ -69,6 +69,7 @@ interface GameState {
   updatePrice: (price: number, ts?: number) => void;
   updateGrid: (remoteCells: RemoteCell[]) => void;
   updateOrder: (payload: unknown) => void;
+  resetGridData: () => void;
 }
 
 const MODE_INTERVAL_SECONDS = 5;
@@ -272,6 +273,8 @@ export const useGameStore = create<GameState>((set) => ({
   followedOrderActivities: [],
   betAmount: DEFAULT_BET_AMOUNT_WLD,
   serverTimeOffset: 0,
+
+  resetGridData: () => set({ cells: [], history: [], currentPrice: 0, basePrice: 0 }),
 
   setBetAmount: (amount) => set({ betAmount: amount }),
 

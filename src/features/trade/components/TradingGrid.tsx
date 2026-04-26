@@ -660,6 +660,16 @@ function formatApproxUsd(amountWld: number, wldUsdPrice: number | null) {
   return `$${approxUsdFormatter.format(amountWld * wldUsdPrice)}`;
 }
 
+function areBooleanMapsEqual(
+  left: Record<string, boolean>,
+  right: Record<string, boolean>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) => left[key] === right[key]);
+}
+
 function WinBetBanner({ data }: { data: FakeWinToastData }) {
   return (
     <div className="pumpfun-jitter bg-background-main/95 border-success-border flex max-w-[min(88vw,360px)] items-center gap-2 rounded-[12px] border px-2 py-1.5 shadow-[0_0_0_1px_rgb(17_211_68_/_0.12)_inset,0_8px_20px_rgb(3_9_16_/_0.42)]">
@@ -728,6 +738,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const hydrateHistory = useGameStore((s) => s.hydrateHistory);
   const updateGrid = useGameStore((s) => s.updateGrid);
   const updateOrder = useGameStore((s) => s.updateOrder);
+  const resetGridData = useGameStore((s) => s.resetGridData);
   const betAmount = useGameStore((s) => s.betAmount);
   const balance = useGameStore((s) => s.balance);
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
@@ -874,14 +885,12 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
   }, []);
+
   const handleCanvasRef = useCallback(
     (node: HTMLCanvasElement | null) => {
       canvasRef.current = node;
       syncCanvasSize(node);
-
-      if (node) {
-        drawRef.current();
-      }
+      if (node) drawRef.current();
     },
     [syncCanvasSize],
   );
@@ -948,6 +957,14 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     };
   });
 
+  const [isReady, setIsReady] = useState(false);
+
+  // Clear stale store data from the previous mount so the loading gate
+  // waits for a fresh grid_update from the socket, not leftover cells.
+  useEffect(() => {
+    resetGridData();
+  }, [resetGridData]);
+
   const [suggestedStrategyEnabled, setSuggestedStrategyEnabled] =
     useState(false);
   const [suggestedStrategyEnabledDraft, setSuggestedStrategyEnabledDraft] =
@@ -1011,6 +1028,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     new Map<string, HTMLButtonElement | null>(),
   );
   const winEffectIconRefs = useRef(new Map<string, HTMLDivElement | null>());
+  const isReadyRef = useRef(false);
+  const dataReadyAtRef = useRef<number | null>(null);
 
   const isFollowTradeVisible = followTradeEnabled;
   const isSuggestedStrategyVisible = suggestedStrategyEnabled;
@@ -1058,7 +1077,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const enabledFollowTargetIds = useMemo(
     () =>
       availableFollowTargetIds.filter(
-        (targetUserId) => followTradeTargetEnabled[targetUserId] ?? true,
+        (targetUserId) => followTradeTargetEnabled[targetUserId] === true,
       ),
     [availableFollowTargetIds, followTradeTargetEnabled],
   );
@@ -1074,23 +1093,49 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     () => new Set(Object.keys(activeWinEffectByCellId)),
     [activeWinEffectByCellId],
   );
-  const ensureFollowTargetConfig = useCallback(
+  const ensureSingleFollowTargetConfig = useCallback(
     (source: Record<string, boolean>) => {
       const nextConfig: Record<string, boolean> = {};
+      const hasAnyExplicitValue = availableFollowTargetIds.some(
+        (targetUserId) => source[targetUserId] !== undefined,
+      );
+      let selectedTargetUserId =
+        availableFollowTargetIds.find(
+          (targetUserId) => source[targetUserId] === true,
+        ) ?? null;
+
+      if (!selectedTargetUserId && !hasAnyExplicitValue) {
+        selectedTargetUserId = availableFollowTargetIds[0] ?? null;
+      }
+
       availableFollowTargetIds.forEach((targetUserId) => {
-        nextConfig[targetUserId] = source[targetUserId] ?? true;
+        nextConfig[targetUserId] = selectedTargetUserId === targetUserId;
       });
       return nextConfig;
     },
     [availableFollowTargetIds],
   );
+  useEffect(() => {
+    setFollowTradeTargetEnabled((currentValue) => {
+      const nextValue = ensureSingleFollowTargetConfig(currentValue);
+      return areBooleanMapsEqual(currentValue, nextValue)
+        ? currentValue
+        : nextValue;
+    });
+    setFollowTradeTargetEnabledDraft((currentValue) => {
+      const nextValue = ensureSingleFollowTargetConfig(currentValue);
+      return areBooleanMapsEqual(currentValue, nextValue)
+        ? currentValue
+        : nextValue;
+    });
+  }, [ensureSingleFollowTargetConfig]);
   const followTradeTargetsDraft = useMemo(
     () =>
       availableFollowTargets.map((target) => ({
         id: target.targetUserId,
         label: target.targetUsername ?? formatWalletShort(target.targetUserId),
         subtitle: formatWalletShort(target.targetUserId),
-        enabled: followTradeTargetEnabledDraft[target.targetUserId] ?? true,
+        enabled: followTradeTargetEnabledDraft[target.targetUserId] === true,
       })),
     [availableFollowTargets, followTradeTargetEnabledDraft],
   );
@@ -1204,16 +1249,22 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         (await resolveFollowTargetWallet(followReferralCode));
 
       if (activeFollowingTargetIds.has(targetUserId)) {
+        setSuggestedStrategyEnabled(false);
+        setSuggestedStrategyEnabledDraft(false);
         setFollowTradeEnabled(true);
         setFollowTradeEnabledDraft(true);
-        setFollowTradeTargetEnabled((prev) => ({
-          ...prev,
-          [targetUserId]: true,
-        }));
-        setFollowTradeTargetEnabledDraft((prev) => ({
-          ...prev,
-          [targetUserId]: true,
-        }));
+        setFollowTradeTargetEnabled((prev) =>
+          ensureSingleFollowTargetConfig({
+            ...prev,
+            [targetUserId]: true,
+          }),
+        );
+        setFollowTradeTargetEnabledDraft((prev) =>
+          ensureSingleFollowTargetConfig({
+            ...prev,
+            [targetUserId]: true,
+          }),
+        );
         appToast.info("You are already following this trader.", {
           icon: "ℹ️",
         });
@@ -1230,16 +1281,22 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       });
       await refetchFollowing();
 
+      setSuggestedStrategyEnabled(false);
+      setSuggestedStrategyEnabledDraft(false);
       setFollowTradeEnabled(true);
       setFollowTradeEnabledDraft(true);
-      setFollowTradeTargetEnabled((prev) => ({
-        ...prev,
-        [targetUserId]: true,
-      }));
-      setFollowTradeTargetEnabledDraft((prev) => ({
-        ...prev,
-        [targetUserId]: true,
-      }));
+      setFollowTradeTargetEnabled((prev) =>
+        ensureSingleFollowTargetConfig({
+          ...prev,
+          [targetUserId]: true,
+        }),
+      );
+      setFollowTradeTargetEnabledDraft((prev) =>
+        ensureSingleFollowTargetConfig({
+          ...prev,
+          [targetUserId]: true,
+        }),
+      );
       appToast.success("Follow trade started successfully.", {
         icon: "✅",
       });
@@ -1257,6 +1314,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     }
   }, [
     activeFollowingTargetIds,
+    ensureSingleFollowTargetConfig,
     followReferralCode,
     handleCloseFollowReferralModal,
     isAuthenticated,
@@ -2165,48 +2223,51 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     const el = wrapRef.current;
     if (!el) return;
 
-    const commitResize = (resetCanvas = false) => {
-      const w = el.clientWidth;
-      const h = el.clientHeight;
+    const applySize = (w: number, h: number) => {
       sizeRef.current = { w, h };
       isMobileRef.current = window.innerWidth < 640;
       const minZoom = getMinZoom();
-
       if (transformRef.current.zoom < minZoom) {
         transformRef.current = { ...transformRef.current, zoom: minZoom };
       }
-
       const cv = canvasRef.current;
-      if (cv) {
-        syncCanvasSize(cv);
-      }
+      if (cv) syncCanvasSize(cv);
+    };
 
-      if (resetCanvas) {
-        setCanvasInstanceKey((currentKey) => currentKey + 1);
+    let initialised = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      const rect = entry.contentRect;
+      const w = rect.width;
+      const h = rect.height;
+      if (w === 0 && h === 0) return;
+
+      if (!initialised) {
+        // First fire: real dimensions available — apply and mount canvas.
+        // isReady starts false; handleCanvasRef will set it true after first draw.
+        initialised = true;
+        applySize(w, h);
+        setCanvasInstanceKey((k) => k + 1);
         return;
       }
 
-      drawRef.current();
-    };
-
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const scheduleResizeCommit = () => {
+      // Subsequent fires (user resizes window): debounce then reset canvas.
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
-        commitResize(true);
+        applySize(w, h);
+        isReadyRef.current = false;
+        setIsReady(false);
+        setCanvasInstanceKey((k) => k + 1);
       }, RESIZE_COMMIT_DEBOUNCE_MS);
-    };
+    });
 
-    const ro = new ResizeObserver(scheduleResizeCommit);
     ro.observe(el);
-    commitResize();
-
-    window.addEventListener("resize", scheduleResizeCommit);
 
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", scheduleResizeCommit);
       if (debounceTimer) clearTimeout(debounceTimer);
     };
   }, [getMinZoom, syncCanvasSize]);
@@ -2478,6 +2539,26 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     nowRef.current = Date.now() + serverTimeOffset;
   }, [serverTimeOffset]);
 
+  // On visibility resume: snap animation state to present so the line never
+  // replays the hidden-tab gap. Store data (cells, history) is kept as-is —
+  // no reload needed, the rAF loop will continue rendering from current state.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      const { serverTimeOffset: offset, currentPrice: target } =
+        useGameStore.getState();
+      nowRef.current = Date.now() + offset;
+      if (target !== 0) cameraPriceRef.current = target;
+      priceMotionRef.current = null;
+      lastHistoryPointRef.current = null;
+      dataReadyAtRef.current = null;
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   useEffect(() => {
     // Keep bet-status transitions visually immediate when the chart head crosses
     // a cell boundary. 1s cadence causes noticeable lag; run at sub-frame cadence.
@@ -2492,6 +2573,15 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
 
       const nextNow = wallClockNow + state.serverTimeOffset;
       nowRef.current = nextNow;
+
+      // Page hidden: skip draw and animation to avoid accumulating a gap that
+      // would replay as a sudden jump when the user returns.
+      if (document.visibilityState !== "visible") {
+        if (target !== 0) cameraPriceRef.current = target;
+        priceMotionRef.current = null;
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
 
       // Animate each real tick across most of the gap to the next tick so the
       // line keeps moving instead of snapping and then idling.
@@ -2529,6 +2619,30 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       }
 
       draw();
+
+      // Reveal the grid once canvas has size, grid cells and price history have
+      // both arrived from the socket, and 300 ms have passed since that moment.
+      // The delay lets the canvas paint 2-3 complete frames so there is no
+      // flash of partial data when the overlay lifts.
+      if (!isReadyRef.current) {
+        const hasData =
+          sizeRef.current.w > 0 &&
+          state.cells.length > 0 &&
+          state.history.length > 0 &&
+          target !== 0;
+
+        if (hasData) {
+          if (dataReadyAtRef.current === null) {
+            dataReadyAtRef.current = loopNow;
+          } else if (loopNow - dataReadyAtRef.current >= 300) {
+            isReadyRef.current = true;
+            setIsReady(true);
+          }
+        } else {
+          dataReadyAtRef.current = null;
+        }
+      }
+
       const nextTargets = shareTargetsRef.current;
       syncShareOverlayPositions(nextTargets);
       const nextIdsHash = nextTargets
@@ -2587,9 +2701,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, [handleWheel, handleTouchMove]);
 
   // ── Loading state ──────────────────────────────────────────────────────────
-  const hasGridData = cells.length > 0;
-  const showLoadingState = !hasGridData;
-  const loadingLabel = "Preparing market grid...";
+
   const displayPrice =
     currentPrice > 0 ? livePriceFormatter.format(currentPrice) : "--";
   const displayMarketPrice =
@@ -2599,39 +2711,54 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     resetTransform();
   }, [clearPreviewCell, resetTransform]);
   const handleOpenOverlaySheet = useCallback(() => {
-    setSuggestedStrategyEnabledDraft(suggestedStrategyEnabled);
-    setFollowTradeEnabledDraft(followTradeEnabled);
+    const nextSuggestedStrategyEnabled = suggestedStrategyEnabled;
+    const nextFollowTradeEnabled =
+      followTradeEnabled && !nextSuggestedStrategyEnabled;
+    setSuggestedStrategyEnabledDraft(nextSuggestedStrategyEnabled);
+    setFollowTradeEnabledDraft(nextFollowTradeEnabled);
     setFollowTradeTargetEnabledDraft(followTradeTargetEnabled);
     setIsOverlaySheetOpen(true);
   }, [followTradeEnabled, followTradeTargetEnabled, suggestedStrategyEnabled]);
   const handleCloseOverlaySheet = useCallback(() => {
-    setSuggestedStrategyEnabledDraft(suggestedStrategyEnabled);
-    setFollowTradeEnabledDraft(followTradeEnabled);
+    const nextSuggestedStrategyEnabled = suggestedStrategyEnabled;
+    const nextFollowTradeEnabled =
+      followTradeEnabled && !nextSuggestedStrategyEnabled;
+    setSuggestedStrategyEnabledDraft(nextSuggestedStrategyEnabled);
+    setFollowTradeEnabledDraft(nextFollowTradeEnabled);
     setFollowTradeTargetEnabledDraft(followTradeTargetEnabled);
     setIsOverlaySheetOpen(false);
   }, [followTradeEnabled, followTradeTargetEnabled, suggestedStrategyEnabled]);
   const handleSuggestedStrategyDraftChange = useCallback(
     (nextValue: boolean) => {
       setSuggestedStrategyEnabledDraft(nextValue);
+      if (nextValue) {
+        setFollowTradeEnabledDraft(false);
+      }
     },
     [],
   );
   const handleFollowTradeDraftChange = useCallback((nextValue: boolean) => {
     setFollowTradeEnabledDraft(nextValue);
+    if (nextValue) {
+      setSuggestedStrategyEnabledDraft(false);
+    }
   }, []);
   const handleFollowTradeTargetDraftChange = useCallback(
     (targetUserId: string, nextValue: boolean) => {
-      setFollowTradeTargetEnabledDraft((currentValue) => ({
-        ...currentValue,
-        [targetUserId]: nextValue,
-      }));
+      setFollowTradeTargetEnabledDraft((currentValue) =>
+        ensureSingleFollowTargetConfig({
+          ...currentValue,
+          [targetUserId]: nextValue,
+        }),
+      );
     },
-    [],
+    [ensureSingleFollowTargetConfig],
   );
   const handleApplyOverlayMode = useCallback(() => {
     const nextSuggestedStrategyEnabled = suggestedStrategyEnabledDraft;
-    const nextFollowTradeEnabled = followTradeEnabledDraft;
-    const nextFollowTradeTargetEnabled = ensureFollowTargetConfig(
+    const nextFollowTradeEnabled =
+      followTradeEnabledDraft && !nextSuggestedStrategyEnabled;
+    const nextFollowTradeTargetEnabled = ensureSingleFollowTargetConfig(
       followTradeTargetEnabledDraft,
     );
 
@@ -2643,7 +2770,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     }
     setIsOverlaySheetOpen(false);
   }, [
-    ensureFollowTargetConfig,
+    ensureSingleFollowTargetConfig,
     followTradeEnabledDraft,
     followTradeTargetEnabledDraft,
     suggestedStrategyEnabledDraft,
@@ -2712,11 +2839,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         className="relative flex-1 overflow-hidden"
         style={{
           background: COLOR_BG,
-          cursor: showLoadingState
-            ? "wait"
-            : isDragging
-              ? "grabbing"
-              : "crosshair",
+          cursor: isDragging ? "grabbing" : "crosshair",
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -2848,10 +2971,13 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
           </div>
         ) : null}
 
-        {showLoadingState && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-            <div className="border-grid-line-strong bg-background-grid text-grid-axis rounded-md border px-4 py-3 text-center text-xs shadow-[0_12px_32px_rgba(0,0,0,0.28)] sm:text-sm">
-              <div className="font-semibold text-white">{loadingLabel}</div>
+        {!isReady && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+            <div className="border-grid-line-strong bg-background-grid/80 flex items-center gap-2.5 rounded-sm border px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+              <div className="border-grid-accent/40 border-t-grid-accent h-4 w-4 shrink-0 animate-spin rounded-full border-2" />
+              <span className="text-text-sub font-mono text-xs font-medium tracking-wide">
+                Preparing market grid...
+              </span>
             </div>
           </div>
         )}
