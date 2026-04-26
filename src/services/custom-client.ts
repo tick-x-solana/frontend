@@ -8,6 +8,9 @@ import Axios, {
 type CancelablePromise<T> = Promise<T> & { cancel: () => void };
 
 const isBrowser = typeof window !== "undefined";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (!isBrowser ? process.env.BACKEND_URL : undefined);
 
 const setHeader = (
   config: InternalAxiosRequestConfig,
@@ -23,7 +26,7 @@ const setHeader = (
 };
 
 export const AXIOS_INSTANCE = Axios.create({
-  baseURL: "https://api-tick-x.nysm.work",
+  baseURL: BACKEND_URL,
 });
 
 AXIOS_INSTANCE.interceptors.request.use(
