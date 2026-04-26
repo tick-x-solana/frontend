@@ -3,10 +3,12 @@
 import Image from "next/image";
 import { Star, UsersRound } from "lucide-react";
 import { Button } from "@/src/components/shadcn/button";
+import { useAuthControllerGetPublicProfile } from "@/src/services/queries";
 import { cn } from "@/lib/utils";
 
 export type CopyTradeProfile = {
   targetUserId?: string;
+  isHumanVerified?: boolean;
   initials: string;
   username: string;
   slots: string;
@@ -33,6 +35,29 @@ const CopyTradeProfileCard = ({
   const displayUsername = profile.username.startsWith("@")
     ? profile.username
     : `@${profile.username}`;
+  const normalizedTargetUserId = profile.targetUserId?.trim().toLowerCase() ?? "";
+  const { data: publicProfileResponse } = useAuthControllerGetPublicProfile(
+    { address: normalizedTargetUserId },
+    {
+      query: {
+        enabled: Boolean(normalizedTargetUserId),
+      },
+    },
+  );
+  const publicProfile = (() => {
+    if (!publicProfileResponse || typeof publicProfileResponse !== "object") {
+      return undefined;
+    }
+
+    const response = publicProfileResponse as {
+      data?: { humanVerified?: boolean };
+      humanVerified?: boolean;
+    };
+
+    return response.data ?? response;
+  })();
+  const hasVerifiedBadge =
+    profile.isHumanVerified ?? (publicProfile?.humanVerified === true);
 
   return (
     <article className="border-border-main bg-background-main flex flex-col gap-3 rounded-[8px] border p-4">
@@ -41,13 +66,15 @@ const CopyTradeProfileCard = ({
           <div className="bg-primary-light text-text-inverse flex size-8 items-center justify-center rounded-full text-sm font-medium tracking-[-0.01em]">
             {profile.initials}
           </div>
-          <Image
-            src="/onboarding/verified-badge.svg"
-            alt="Verified badge"
-            width={16}
-            height={16}
-            className="absolute -right-1 -bottom-1 size-4"
-          />
+          {hasVerifiedBadge ? (
+            <Image
+              src="/onboarding/verified-badge.svg"
+              alt="Verified badge"
+              width={16}
+              height={16}
+              className="absolute -right-1 -bottom-1 size-4"
+            />
+          ) : null}
         </div>
 
         <div className="min-w-0 flex-1">

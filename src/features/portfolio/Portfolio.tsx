@@ -25,7 +25,7 @@ const overviewCards = [
   },
 ];
 
-const FAUCET_AMOUNT_USD = "200";
+const FAUCET_AMOUNT_WLD = "200";
 const FAUCET_COOLDOWN_MS = 30 * 60 * 1000;
 
 function getFaucetStorageKey(walletAddress: string | null): string | null {
@@ -129,7 +129,7 @@ const Portfolio = () => {
         .padStart(5, "0");
 
       await paymentControllerDebugDeposit({
-        amount: FAUCET_AMOUNT_USD,
+        amount: FAUCET_AMOUNT_WLD,
         txHash: `0x${timestamp.toString(16)}${randomSuffix}`,
         logIndex: 0,
       });

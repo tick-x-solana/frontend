@@ -7,8 +7,11 @@ import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
 import useDepositWithdraw from "@/src/hooks/useDepositWithdraw";
 import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
-import { useAccountControllerGetBalance } from "@/src/services/queries";
-import { ArrowLeft, ArrowUpDown, Eye, EyeOff } from "lucide-react";
+import {
+  useAccountControllerGetBalance,
+  useAuthControllerGetPublicProfile,
+} from "@/src/services/queries";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import {
   type ChangeEvent,
@@ -67,6 +70,7 @@ const WalletActionPanel = () => {
     null,
   );
   const { walletAddress, username } = useAuth();
+  const normalizedWalletAddress = walletAddress?.trim().toLowerCase() ?? "";
   const storeBalance = useGameStore((state) => state.balance);
   const { data: balanceResponse, refetch: refetchBalance } =
     useAccountControllerGetBalance({
@@ -74,14 +78,20 @@ const WalletActionPanel = () => {
         enabled: Boolean(walletAddress),
       },
     });
-  const [wldUsdPrice, setWldUsdPrice] = useState<number | null>(null);
+  const { data: publicProfileResponse } = useAuthControllerGetPublicProfile(
+    { address: normalizedWalletAddress },
+    {
+      query: {
+        enabled: Boolean(normalizedWalletAddress),
+      },
+    },
+  );
   const {
     isDepositing,
     isWithdrawing,
-    getWldUsdPrice,
     getAvailableWldBalance,
-    depositWldToUsd,
-    withdrawUsdToWld,
+    depositWld,
+    withdrawWld,
   } = useDepositWithdraw();
 
   const activeLabel = useMemo(() => {
@@ -90,39 +100,13 @@ const WalletActionPanel = () => {
     }
     return activeAction === "withdraw" ? "Withdraw" : "Deposit";
   }, [activeAction]);
-
   const isWithdraw = activeAction === "withdraw";
-
-  const primaryUnit = isWithdraw ? "USD" : "WLD";
-  const secondaryUnit = isWithdraw ? "WLD" : "USD";
-  const pairLabel = Number.isFinite(wldUsdPrice)
-    ? `1 WLD ~ $${(wldUsdPrice as number).toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 6,
-      })}`
-    : "Fetching WLD price...";
 
   const normalizedAmountInput = useMemo(
     () => normalizeDecimalInput(amountInput),
     [amountInput],
   );
   const numericAmount = Number(normalizedAmountInput || "0");
-  const receivedValue =
-    Number.isFinite(numericAmount) && Number.isFinite(wldUsdPrice)
-      ? isWithdraw
-        ? numericAmount / (wldUsdPrice as number)
-        : numericAmount * (wldUsdPrice as number)
-      : 0;
-
-  const receivedDisplay = isWithdraw
-    ? receivedValue.toLocaleString(undefined, {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 8,
-      })
-    : receivedValue.toLocaleString(undefined, {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      });
 
   const { miniAppUsername: worldUsername } = useMiniAppUsername({
     username,
@@ -138,20 +122,32 @@ const WalletActionPanel = () => {
 
     return `@${identity}`;
   }, [worldUsername, username]);
-  const hasVerifiedUsername = Boolean(worldUsername ?? username?.trim());
+  const publicProfile = useMemo(() => {
+    if (!publicProfileResponse || typeof publicProfileResponse !== "object") {
+      return undefined;
+    }
+
+    const response = publicProfileResponse as {
+      data?: { humanVerified?: boolean };
+      humanVerified?: boolean;
+    };
+
+    return response.data ?? response;
+  }, [publicProfileResponse]);
+  const hasVerifiedBadge = publicProfile?.humanVerified === true;
 
   const displayBalance = useMemo(() => {
     const apiBalance = extractBalance(balanceResponse);
     const resolvedBalance = apiBalance ?? storeBalance;
 
     if (!Number.isFinite(resolvedBalance)) {
-      return "$0";
+      return "0 WLD";
     }
 
-    return `$${resolvedBalance.toLocaleString(undefined, {
+    return `${resolvedBalance.toLocaleString(undefined, {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    })}`;
+      maximumFractionDigits: 6,
+    })} WLD`;
   }, [balanceResponse, storeBalance]);
 
   const visibleBalance = isBalanceVisible ? displayBalance : "******";
@@ -190,28 +186,15 @@ const WalletActionPanel = () => {
     (action: PortfolioAction) => {
       setActiveAction(action);
       setAmountInput("");
-      void getWldUsdPrice()
-        .then((price) => setWldUsdPrice(price))
-        .catch(() => setWldUsdPrice(null));
-      if (action === "deposit") {
-        void getAvailableWldBalance()
-          .then((balance) => setAvailableWldBalance(balance.formatted))
-          .catch(() => setAvailableWldBalance(null));
-      }
+      void getAvailableWldBalance()
+        .then((balance) => setAvailableWldBalance(balance.formatted))
+        .catch(() => setAvailableWldBalance(null));
     },
-    [getAvailableWldBalance, getWldUsdPrice],
+    [getAvailableWldBalance],
   );
 
   const closeActionSheet = useCallback(() => {
     setActiveAction(null);
-  }, []);
-
-  const toggleActionMode = useCallback(() => {
-    setActiveAction((current) => {
-      if (current === "deposit") return "withdraw";
-      if (current === "withdraw") return "deposit";
-      return current;
-    });
   }, []);
 
   const handleAmountInputChange = useCallback(
@@ -228,8 +211,10 @@ const WalletActionPanel = () => {
 
     if (activeAction === "withdraw") {
       try {
-        await withdrawUsdToWld({ amountUsd: normalizedAmountInput.trim() });
+        await withdrawWld({ amountWld: normalizedAmountInput.trim() });
         await refetchBalance();
+        const wldBalance = await getAvailableWldBalance();
+        setAvailableWldBalance(wldBalance.formatted);
         setAmountInput("");
         closeActionSheet();
       } catch (error) {
@@ -244,7 +229,7 @@ const WalletActionPanel = () => {
     }
 
     try {
-      await depositWldToUsd({ amountWld: normalizedAmountInput.trim() });
+      await depositWld({ amountWld: normalizedAmountInput.trim() });
       await refetchBalance();
       const wldBalance = await getAvailableWldBalance();
       setAvailableWldBalance(wldBalance.formatted);
@@ -256,12 +241,12 @@ const WalletActionPanel = () => {
   }, [
     activeAction,
     closeActionSheet,
-    depositWldToUsd,
+    depositWld,
     getAvailableWldBalance,
     numericAmount,
     normalizedAmountInput,
     refetchBalance,
-    withdrawUsdToWld,
+    withdrawWld,
   ]);
 
   return (
@@ -277,7 +262,7 @@ const WalletActionPanel = () => {
               <p className="text-text-main text-sm font-medium tracking-[-0.01em]">
                 {displayIdentity}
               </p>
-              {hasVerifiedUsername ? (
+              {hasVerifiedBadge ? (
                 <Image
                   src="/onboarding/verified-badge.svg"
                   alt="Verified badge"
@@ -298,7 +283,9 @@ const WalletActionPanel = () => {
               <button
                 type="button"
                 aria-label={
-                  isBalanceVisible ? "Hide wallet balance" : "Show wallet balance"
+                  isBalanceVisible
+                    ? "Hide wallet balance"
+                    : "Show wallet balance"
                 }
                 onClick={toggleBalanceVisibility}
                 className="text-hint hover:text-text-sub transition-colors"
@@ -372,10 +359,6 @@ const WalletActionPanel = () => {
                     <WldMarketIcon aria-hidden className="size-4" />
                   </div>
 
-                  <p className="text-text-sub text-sm font-medium tracking-[-0.01em]">
-                    {pairLabel}
-                  </p>
-
                   <div className="bg-background-subtle flex items-center gap-2 rounded-[8px] px-2 py-1">
                     <p className="text-hint text-xs font-semibold tracking-[-0.01em]">
                       Balance:
@@ -424,33 +407,10 @@ const WalletActionPanel = () => {
                         aria-label="Amount"
                       />
                       <p className="text-text-sub text-lg font-normal tracking-[-0.01em]">
-                        {primaryUnit}
+                        WLD
                       </p>
                     </div>
                   </div>
-
-                  <div className="border-border-main mt-3 flex flex-col gap-2 rounded-[12px] border px-4 py-3">
-                    <p className="text-hint text-xs font-medium tracking-[-0.01em]">
-                      Received
-                    </p>
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-text-sub text-3xl font-bold tracking-[-0.01em]">
-                        {receivedDisplay}
-                      </p>
-                      <p className="text-text-sub text-lg font-normal tracking-[-0.01em]">
-                        {secondaryUnit}
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={toggleActionMode}
-                    className="bg-background-subtle absolute top-1/2 left-1/2 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
-                    aria-label="Swap deposit and withdraw mode"
-                  >
-                    <ArrowUpDown className="text-primary-light size-4" />
-                  </button>
                 </div>
               </div>
 

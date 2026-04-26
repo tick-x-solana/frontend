@@ -5,25 +5,24 @@ import WldMarketIcon from "@/src/assets/icons/wld-market.svg";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
+import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
 import { cn } from "@/lib/utils";
 
-const USD_PER_WLD = 0.26;
 const BID_OPTIONS_WLD = [1, 2, 5, 10];
-const BID_OPTIONS_USD = BID_OPTIONS_WLD.map((amount) => amount * USD_PER_WLD);
-
-const formatMoney = (amount: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
 
 const formatCompactNumber = (amount: number) =>
   new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 6,
   }).format(amount);
+const formatApproxUsd = (amountWld: number, priceUsd: number | null) => {
+  if (priceUsd === null) return null;
+  const approxUsd = amountWld * priceUsd;
+  return `~$${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(approxUsd)}`;
+};
 
 const formatWalletAddress = (address: string | null) => {
   if (!address) return "Not connected";
@@ -60,15 +59,20 @@ export default function TradeControlsPanel({
   const balance = useGameStore((s) => s.balance);
   const betAmount = useGameStore((s) => s.betAmount);
   const setBetAmount = useGameStore((s) => s.setBetAmount);
+  const { data: wldUsdPrice } = useWldUsdPrice();
 
   const selectedBid =
-    BID_OPTIONS_USD.find((amount) => Math.abs(amount - betAmount) < 1e-9) ??
-    BID_OPTIONS_USD[0];
+    BID_OPTIONS_WLD.find((amount) => Math.abs(amount - betAmount) < 1e-9) ??
+    BID_OPTIONS_WLD[0];
   const walletAddress = formatWalletAddress(rawAddress);
-  const balanceInWld = balance / USD_PER_WLD;
-  const bidSizeInWld = selectedBid / USD_PER_WLD;
   const marketPriceLabel =
     displayPrice === "--" ? displayPrice : `~ ${displayPrice}`;
+  const selectedBidApproxUsd = formatApproxUsd(
+    selectedBid,
+    typeof wldUsdPrice === "number" && Number.isFinite(wldUsdPrice)
+      ? wldUsdPrice
+      : null,
+  );
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
@@ -125,7 +129,7 @@ export default function TradeControlsPanel({
                 Balance:
               </p>
               <p className="text-primary-light font-mono text-sm font-bold tracking-[-0.01em]">
-                {formatMoney(balance)} ({formatCompactNumber(balanceInWld)} WLD)
+                {formatCompactNumber(balance)} WLD
               </p>
             </div>
           </div>
@@ -137,16 +141,22 @@ export default function TradeControlsPanel({
           </p>
           <div className="flex items-center gap-2">
             <WldMarketIcon aria-hidden className="size-4" />
-            <p className="text-text-main text-sm font-medium tracking-[-0.01em]">
-              {bidSizeInWld.toFixed(0)} WLD ~ {formatMoney(selectedBid)}
-            </p>
+            <div className="flex items-center gap-1">
+              <p className="text-text-main text-sm font-medium tracking-[-0.01em]">
+                {selectedBid.toFixed(0)} WLD
+              </p>
+              {selectedBidApproxUsd ? (
+                <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
+                  ({selectedBidApproxUsd})
+                </p>
+              ) : null}
+            </div>
           </div>
         </section>
 
         <section className="flex items-center gap-2">
           {BID_OPTIONS_WLD.map((amountWld) => {
-            const amountUsd = amountWld * USD_PER_WLD;
-            const isSelected = selectedBid === amountUsd;
+            const isSelected = selectedBid === amountWld;
             return (
               <Button
                 key={amountWld}
@@ -158,7 +168,7 @@ export default function TradeControlsPanel({
                     ? "border-border-primary bg-surface-selected text-text-link-main hover:bg-surface-control-active hover:text-primary-light"
                     : "border-border-main bg-background-main text-text-main hover:bg-surface-overlay-medium hover:text-text-heading",
                 )}
-                onClick={() => setBetAmount(amountUsd)}
+                onClick={() => setBetAmount(amountWld)}
               >
                 {amountWld} WLD
               </Button>

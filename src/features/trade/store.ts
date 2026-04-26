@@ -73,7 +73,7 @@ interface GameState {
 
 const MODE_INTERVAL_SECONDS = 5;
 const MODE_PRICE_STEP = 25;
-const DEFAULT_BET_AMOUNT_USD = 0.26; // 1 WLD
+const DEFAULT_BET_AMOUNT_WLD = 1;
 const MAX_FOLLOWED_ORDER_ACTIVITIES = 200;
 // Very slow smoothing (2%) so each price tick moves serverTimeOffset by at most
 // ~120ms — shift of ~0.8px at typical zoom. Faster convergence would cause
@@ -270,7 +270,7 @@ export const useGameStore = create<GameState>((set) => ({
   socket: null,
   wssKey: null,
   followedOrderActivities: [],
-  betAmount: DEFAULT_BET_AMOUNT_USD,
+  betAmount: DEFAULT_BET_AMOUNT_WLD,
   serverTimeOffset: 0,
 
   setBetAmount: (amount) => set({ betAmount: amount }),

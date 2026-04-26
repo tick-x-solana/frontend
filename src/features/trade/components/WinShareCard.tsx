@@ -6,9 +6,10 @@ import Image from "next/image";
 type WinShareCardProps = {
   marketSymbol: string;
   multiplier: number;
-  amount: number;
+  amountWld: number;
   openedAt: string;
-  profit: number;
+  profitWld: number;
+  approxUsdPerWld?: number | null;
 };
 
 const amountFormatter = new Intl.NumberFormat("en-US", {
@@ -25,14 +26,32 @@ const percentFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 1,
 });
+const approxUsdFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatApproxUsd(amountWld: number, approxUsdPerWld?: number | null) {
+  if (
+    typeof approxUsdPerWld !== "number" ||
+    !Number.isFinite(approxUsdPerWld) ||
+    approxUsdPerWld <= 0
+  ) {
+    return null;
+  }
+  return `~$${approxUsdFormatter.format(amountWld * approxUsdPerWld)}`;
+}
 
 export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
   function WinShareCard(
-    { marketSymbol, multiplier, amount, openedAt, profit },
+    { marketSymbol, multiplier, amountWld, openedAt, profitWld, approxUsdPerWld },
     ref,
   ) {
     const pnlPercent = Math.max((multiplier - 1) * 100, 0);
-    const receivedAmount = amount * Math.max(multiplier, 0);
+    const receivedAmountWld = amountWld * Math.max(multiplier, 0);
+    const approxProfitUsd = formatApproxUsd(profitWld, approxUsdPerWld);
+    const approxAmountUsd = formatApproxUsd(amountWld, approxUsdPerWld);
+    const approxReceivedUsd = formatApproxUsd(receivedAmountWld, approxUsdPerWld);
     const fadedRates = [
       { value: "1.1x", col: 2, row: 0 },
       { value: "2.42x", col: 3, row: 0 },
@@ -66,16 +85,26 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
                 Profit
               </p>
               <p className="text-success-medium text-[24px] font-semibold tracking-[-0.01em]">
-                +${amountFormatter.format(profit)}
+                +{amountFormatter.format(profitWld)} WLD
               </p>
+              {approxProfitUsd ? (
+                <p className="text-text-sub text-xs tracking-[-0.01em]">
+                  {approxProfitUsd}
+                </p>
+              ) : null}
             </div>
           </div>
 
           <div className="flex items-center">
             <div className="min-w-0 flex-1 text-center">
               <p className="text-primary-light text-[20px] font-semibold tracking-[-0.01em]">
-                ${amountFormatter.format(amount)}
+                {amountFormatter.format(amountWld)} WLD
               </p>
+              {approxAmountUsd ? (
+                <p className="text-text-sub text-xs tracking-[-0.01em]">
+                  {approxAmountUsd}
+                </p>
+              ) : null}
               <p className="text-text-sub text-sm tracking-[-0.01em]">Amount</p>
             </div>
 
@@ -123,8 +152,13 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
 
             <div className="border-success-medium absolute top-[70px] left-[140px] flex h-[68px] w-[71px] flex-col items-center justify-center rounded-[8px] border bg-[#0a151a] shadow-[0_0_16.5px_rgb(0_229_255_/_0.25),0_0_24.8px_rgb(0_229_255_/_0.25),inset_0_0_16.8px_rgb(0_229_255_/_0.25)]">
               <p className="text-success-medium text-[16px] font-extrabold tracking-[-0.01em]">
-                +${receivedAmountFormatter.format(receivedAmount)}
+                +{receivedAmountFormatter.format(receivedAmountWld)} WLD
               </p>
+              {approxReceivedUsd ? (
+                <p className="text-text-disabled text-[10px] tracking-[-0.01em]">
+                  {approxReceivedUsd}
+                </p>
+              ) : null}
               <p className="text-text-disabled text-[11px] tracking-[-0.01em]">
                 {multiplier.toFixed(2)}x
               </p>

@@ -13,8 +13,10 @@ import { Sparkles } from "lucide-react";
 import {
   IDKitRequestWidget,
   deviceLegacy,
+  orbLegacy,
   type IDKitErrorCodes,
   type IDKitResult,
+  type ResponseItemV3,
   type RpContext,
 } from "@worldcoin/idkit";
 import { Button } from "@/src/components/shadcn/button";
@@ -22,12 +24,14 @@ import { useAuth } from "@/src/components/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { TICKX_MINI_APP_ID } from "@/src/features/referrals/constants";
+import { authControllerVerifyMiniAppHuman } from "@/src/services/queries";
 
 const SPLASH_DURATION_MS = 1100;
 const VERIFY_SUCCESS_MS = 900;
 const ONBOARDING_COMPLETE_KEY = "tickx-onboarding-complete";
 const REDIRECT_HOME_AFTER_LOGIN_KEY = "tickx-redirect-home-after-login";
 const VERIFY_HUMAN_ACTION = "verify-human";
+const VERIFY_HUMAN_LEVEL = "device";
 
 function setRedirectHomeAfterLoginFlag() {
   if (typeof window === "undefined") return;
@@ -145,6 +149,21 @@ type RpSignatureResponse = {
   rp_id: string;
 };
 
+function getLegacyProofResponse(result: IDKitResult) {
+  const response = result.responses[0];
+  if (
+    !response ||
+    typeof response !== "object" ||
+    !("merkle_root" in response) ||
+    !("nullifier" in response) ||
+    typeof response.proof !== "string"
+  ) {
+    throw new Error("Unsupported verification payload");
+  }
+
+  return response as ResponseItemV3;
+}
+
 const BenefitRow = ({
   description,
   title,
@@ -245,15 +264,41 @@ const StepTwo = ({ onEnterApp, walletAddress }: StepTwoProps) => {
     [rpContext],
   );
 
-  const handleVerifySuccess = useCallback(() => {
-    setIsVerifyWidgetOpen(false);
-    setVerifyStatus("success");
-    toast.success("Verification successful. Welcome to TickX.");
+  const handleVerifySuccess = useCallback(
+    async (result: IDKitResult) => {
+      setIsVerifyWidgetOpen(false);
 
-    successTimerRef.current = window.setTimeout(() => {
-      onEnterApp();
-    }, VERIFY_SUCCESS_MS);
-  }, [onEnterApp]);
+      try {
+        if (!walletAddress) {
+          throw new Error("Missing wallet address");
+        }
+
+        const verifyResponse = getLegacyProofResponse(result);
+
+        await authControllerVerifyMiniAppHuman({
+          action: VERIFY_HUMAN_ACTION,
+          signal: walletAddress.toLowerCase(),
+          payload: {
+            proof: verifyResponse.proof,
+            merkle_root: verifyResponse.merkle_root,
+            nullifier_hash: verifyResponse.nullifier,
+            verification_level: VERIFY_HUMAN_LEVEL,
+          },
+        });
+
+        setVerifyStatus("success");
+        toast.success("Verification successful. Welcome to TickX.");
+
+        successTimerRef.current = window.setTimeout(() => {
+          onEnterApp();
+        }, VERIFY_SUCCESS_MS);
+      } catch {
+        setVerifyStatus("idle");
+        toast.error("World ID verification failed. Please try again.");
+      }
+    },
+    [onEnterApp, walletAddress],
+  );
 
   const handleVerifyError = useCallback((errorCode: IDKitErrorCodes) => {
     setIsVerifyWidgetOpen(false);
@@ -388,8 +433,8 @@ const StepTwo = ({ onEnterApp, walletAddress }: StepTwoProps) => {
           // Verify level: Orb | Device
           preset={
             walletAddress
-              ? deviceLegacy({ signal: walletAddress.toLowerCase() })
-              : deviceLegacy()
+              ? orbLegacy({ signal: walletAddress.toLowerCase() })
+              : orbLegacy()
           }
           handleVerify={handleVerify}
           onSuccess={handleVerifySuccess}

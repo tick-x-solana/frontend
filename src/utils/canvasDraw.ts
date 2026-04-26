@@ -24,12 +24,8 @@ const priceLabelFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
-const betAmountFormatter = new Intl.NumberFormat("en-US", {
+const approxUsdFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-const receivedAmountFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 });
 
@@ -78,6 +74,17 @@ function roundRect(
 function formatMultiplier(value: number): string {
   const rounded = Number(value.toFixed(2));
   return `${rounded.toString()}x`;
+}
+
+function formatApproxUsd(amountWld: number, wldUsdPrice: number | null) {
+  if (
+    typeof wldUsdPrice !== "number" ||
+    !Number.isFinite(wldUsdPrice) ||
+    wldUsdPrice <= 0
+  ) {
+    return null;
+  }
+  return `$${approxUsdFormatter.format(amountWld * wldUsdPrice)}`;
 }
 
 function hasChartPassedColumn(chartX: number, columnStartX: number, columnWidth: number) {
@@ -240,6 +247,10 @@ export function drawBetCells(
     effectivePriceStep,
   } = layout;
   const { cells, bets, history, pendingBets, settledOutcomes } = store;
+  const wldUsdPrice =
+    typeof store.wldUsdPrice === "number" && Number.isFinite(store.wldUsdPrice)
+      ? store.wldUsdPrice
+      : null;
   const followedActivitiesByCellId = store.followedOrderActivities.reduce<
     Record<string, (typeof store.followedOrderActivities)[number]>
   >((acc, activity) => {
@@ -352,8 +363,6 @@ export function drawBetCells(
         cellRight: cx + cw,
         cellSize,
         multiplier: Number(cell.original.rewardRate),
-        betAmount: store.betAmount,
-        isMobile,
       });
     } else if (!hasAnyBet && hasVisibleOverlayActivity) {
       ctx.save();
@@ -389,6 +398,7 @@ export function drawBetCells(
           ? settledTotalPayout
           : Math.max(0, displayBetAmount * rewardRate);
       const shouldHideReceivedAmount = activeWinEffectCellIds.has(cell.id);
+      const receivedApproxUsd = formatApproxUsd(receivedAmount, wldUsdPrice);
       _drawWinCell(ctx, {
         x: cx,
         y: cellTop,
@@ -403,11 +413,14 @@ export function drawBetCells(
         detailTxt: hasAnyBet
           ? shouldHideReceivedAmount
             ? ""
-            : `+$${receivedAmountFormatter.format(receivedAmount)}`
+            : receivedApproxUsd
+              ? `+${receivedApproxUsd}`
+              : "$--"
           : "",
         isMobile,
       });
     } else if (isLose && !shouldHideLosingBet) {
+      const betApproxUsd = formatApproxUsd(displayBetAmount, wldUsdPrice);
       _drawLoseCell(ctx, {
         x: cx,
         y: cellTop,
@@ -420,11 +433,12 @@ export function drawBetCells(
         cellSize,
         multiplier: cell.multiplier,
         detailTxt: hasAnyBet
-          ? `$${betAmountFormatter.format(displayBetAmount)}`
+          ? betApproxUsd ?? "$--"
           : "Settled",
         isMobile,
       });
     } else if (!isPast && hasAnyBet && !shouldHideLosingBet) {
+      const betApproxUsd = formatApproxUsd(displayBetAmount, wldUsdPrice);
       _drawBetBadge(ctx, {
         x: cx,
         y: cellTop,
@@ -436,7 +450,7 @@ export function drawBetCells(
         cellRight: cx + cw,
         cellSize,
         multTxt: formatMultiplier(cell.multiplier),
-        displayBetAmount,
+        betAmountUsdText: betApproxUsd ?? "$--",
       });
     }
 
@@ -577,7 +591,7 @@ interface BetBadgeParams {
   cellRight: number;
   cellSize: number;
   multTxt: string;
-  displayBetAmount: number;
+  betAmountUsdText: string;
 }
 
 interface PreviewCellParams {
@@ -591,8 +605,6 @@ interface PreviewCellParams {
   cellRight: number;
   cellSize: number;
   multiplier: number;
-  betAmount: number;
-  isMobile: boolean;
 }
 
 interface CopyTradeCellParams {
@@ -619,28 +631,16 @@ function _drawPreviewCell(ctx: CanvasRenderingContext2D, p: PreviewCellParams) {
     cellRight,
     cellSize,
     multiplier,
-    betAmount,
-    isMobile,
   } = p;
   const radius = clamp(cellSize * 0.16, 6, 8);
   const innerInset = 0.75;
   const titleSize = clamp(Math.round(cellSize * 0.25), 10, 12);
-  const detailSize = clamp(Math.round(cellSize * 0.17), 7, 8);
   const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
   const titleY = y + height * 0.44;
-  const detailY = y + height * 0.68;
   const safeMultiplier =
     typeof multiplier === "number" && Number.isFinite(multiplier)
       ? multiplier
       : 0;
-  const previewPayout = Math.max(0, betAmount * safeMultiplier);
-  const previewDetail =
-    previewPayout > 0
-      ? new Intl.NumberFormat("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        }).format(previewPayout)
-      : formatMultiplier(safeMultiplier);
 
   ctx.save();
   ctx.shadowColor = "rgba(0,229,255,0.15)";
@@ -686,10 +686,6 @@ function _drawPreviewCell(ctx: CanvasRenderingContext2D, p: PreviewCellParams) {
   ctx.fillStyle = "#00E5FF";
   ctx.font = `700 ${titleSize}px sans-serif`;
   ctx.fillText(formatMultiplier(safeMultiplier), x + width / 2, titleY);
-
-  ctx.fillStyle = "#7A9BB5";
-  ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
-  ctx.fillText(previewDetail, x + width / 2, detailY);
 
   ctx.fillStyle = "#00E5FF";
   const corners = [
@@ -973,7 +969,7 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
     cellRight,
     cellSize,
     multTxt,
-    displayBetAmount,
+    betAmountUsdText,
   } = p;
   const inset = 0.75;
   const radius = clamp(cellSize * 0.18, 8, 12);
@@ -986,7 +982,7 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
   const multiplierY = y + height * 0.33;
   const badgeX = centerX - badgeWidth / 2;
   const badgeY = y + height * 0.56;
-  const badgeText = `$${betAmountFormatter.format(displayBetAmount)}`;
+  const badgeText = betAmountUsdText;
   const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
 
   ctx.save();

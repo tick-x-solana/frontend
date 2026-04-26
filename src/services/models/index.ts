@@ -6,6 +6,7 @@
  */
 
 export * from './authControllerGetChallengeParams';
+export * from './authControllerGetPublicProfileParams';
 export * from './cell';
 export * from './commitBatchDto';
 export * from './depositDto';
@@ -15,6 +16,7 @@ export * from './distributionControllerGetPendingBatches200BatchesItemDestinatio
 export * from './distributionControllerGetPendingBatches200BatchesItemLpSharesItem';
 export * from './expireTimeoutDto';
 export * from './finalizeWithdrawalDto';
+export * from './loginDto';
 export * from './miniAppLoginDto';
 export * from './miniAppVerifyHumanDto';
 export * from './miniAppVerifyHumanPayloadDto';
@@ -28,6 +30,8 @@ export * from './ohlcControllerGetOhlcSource';
 export * from './orderControllerGetUserOrdersParams';
 export * from './orderControllerGetUserOrdersStatus';
 export * from './placeOrderDto';
+export * from './publicUserAuthProfileDto';
+export * from './publicUserAuthProfileDtoAuthType';
 export * from './registerOrderFollowDto';
 export * from './riskControllerGetLiability200';
 export * from './riskControllerGetLiability200Breakdown';

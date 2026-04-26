@@ -84,6 +84,7 @@ import {
 } from "@/src/utils/canvasDraw";
 import { useGridInteraction } from "@/src/hooks/useGridInteraction";
 import useWinShareActions from "@/src/hooks/useWinShareActions";
+import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
 import { getAddress } from "viem";
 import { BetWinEffect } from "./BetWinEffect";
 
@@ -120,10 +121,8 @@ const livePriceFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 const balanceFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 6,
 });
 const shareTimeFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
@@ -132,6 +131,10 @@ const shareTimeFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: true,
 });
 const winAmountFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const approxUsdFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
@@ -247,7 +250,7 @@ function BalanceChip({ balance }: BalanceChipProps) {
         <WalletIcon className="size-3.5" aria-hidden="true" />
       </span>
       <p className="text-primary-light text-center text-xs font-bold tracking-[-0.01em] whitespace-nowrap">
-        {balanceFormatter.format(safeBalance)}
+        {balanceFormatter.format(safeBalance)} WLD
       </p>
     </div>
   );
@@ -640,6 +643,17 @@ function buildFakeWinToastData(): FakeWinToastData {
   };
 }
 
+function formatApproxUsd(amountWld: number, wldUsdPrice: number | null) {
+  if (
+    typeof wldUsdPrice !== "number" ||
+    !Number.isFinite(wldUsdPrice) ||
+    wldUsdPrice <= 0
+  ) {
+    return null;
+  }
+  return `$${approxUsdFormatter.format(amountWld * wldUsdPrice)}`;
+}
+
 function WinBetBanner({ data }: { data: FakeWinToastData }) {
   return (
     <div className="pumpfun-jitter bg-background-main/95 border-success-border flex max-w-[min(88vw,360px)] items-center gap-2 rounded-[12px] border px-2 py-1.5 shadow-[0_0_0_1px_rgb(17_211_68_/_0.12)_inset,0_8px_20px_rgb(3_9_16_/_0.42)]">
@@ -681,6 +695,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   initialFollowRefCode = null,
 }) => {
   const queryClient = useQueryClient();
+  const { data: wldUsdPrice } = useWldUsdPrice();
   // ── Store selectors ────────────────────────────────────────────────────────
   const cells = useGameStore((s) => s.cells);
   const history = useGameStore((s) => s.history);
@@ -881,6 +896,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     socket,
     wssKey,
     address: resolvedUserAddress,
+    wldUsdPrice:
+      typeof wldUsdPrice === "number" && Number.isFinite(wldUsdPrice)
+        ? wldUsdPrice
+        : null,
     followedOrderActivities,
     suggestedStrategyCellIds: [],
     dims: null,
@@ -913,6 +932,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       socket,
       wssKey,
       address: resolvedUserAddress,
+      wldUsdPrice:
+        typeof wldUsdPrice === "number" && Number.isFinite(wldUsdPrice)
+          ? wldUsdPrice
+          : null,
       followedOrderActivities,
       suggestedStrategyCellIds: storeRef.current.suggestedStrategyCellIds,
       dims: nextDims,
@@ -2240,6 +2263,11 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       new Date(selectedShareCell.timeWindowStart),
     );
   }, [selectedShareCell]);
+  const selectedShareProfitApproxUsd = useMemo(() => {
+    if (typeof wldUsdPrice !== "number" || !Number.isFinite(wldUsdPrice))
+      return null;
+    return selectedShareProfit * wldUsdPrice;
+  }, [selectedShareProfit, wldUsdPrice]);
 
   const handleOpenShareSheet = useCallback((cellId: string) => {
     setShareCellId(cellId);
@@ -2544,13 +2572,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   // ── Loading state ──────────────────────────────────────────────────────────
   const hasGridData = cells.length > 0;
   const showLoadingState = !hasGridData;
-  const loadingLabel = socket
-    ? "Loading live market grid, please wait..."
-    : isLoggingIn
-      ? "Authenticating wallet, please wait..."
-      : address
-        ? "Reconnecting to market feed, please wait..."
-        : "Connect wallet to load the market feed";
+  const loadingLabel = "Preparing market grid...";
   const displayPrice =
     currentPrice > 0 ? livePriceFormatter.format(currentPrice) : "--";
   const displayMarketPrice =
@@ -2721,7 +2743,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                         fontSize: `${Math.max(11, Math.min(20, Math.round(target.cellEdge * 0.24)))}px`,
                       }}
                     >
-                      +${winAmountFormatter.format(target.totalPayout)}
+                      +{formatApproxUsd(target.totalPayout, wldUsdPrice) ?? "$--"}
                     </span>
                   </div>
                 ) : (
@@ -2736,7 +2758,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                         fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
                       }}
                     >
-                      +${winAmountFormatter.format(target.basePayout)}
+                      +{formatApproxUsd(target.basePayout, wldUsdPrice) ?? "$--"}
                     </span>
                     {target.isHumanVerified ? (
                       <Image
@@ -2760,7 +2782,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                           fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
                         }}
                       >
-                        +${winAmountFormatter.format(target.bonusPayout)}
+                        +{formatApproxUsd(target.bonusPayout, wldUsdPrice) ?? "$--"}
                       </span>
                     ) : null}
                   </div>
@@ -2801,14 +2823,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
             <div className="border-grid-line-strong bg-background-grid text-grid-axis rounded-md border px-4 py-3 text-center text-xs shadow-[0_12px_32px_rgba(0,0,0,0.28)] sm:text-sm">
               <div className="font-semibold text-white">{loadingLabel}</div>
-              <div className="mt-1 opacity-70">
-                Canvas stays mounted while the first grid data arrives.
-              </div>
-              {serverTimeOffset !== 0 && (
-                <div className="mt-1 text-[11px] opacity-50">
-                  Syncing with server time...
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -2994,9 +3008,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                 <WinShareCard
                   marketSymbol={MARKET_SYMBOL}
                   multiplier={selectedShareCell.multiplier}
-                  amount={selectedShareAmount}
+                  amountWld={selectedShareAmount}
                   openedAt={selectedShareTime}
-                  profit={selectedShareProfit}
+                  profitWld={selectedShareProfit}
+                  approxUsdPerWld={wldUsdPrice}
                 />
                 <div className="px-5 pb-5">
                   <div className="flex flex-col gap-4">
@@ -3037,8 +3052,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                             winRate: shareWinRate,
                             pnl:
                               selectedShareProfit > 0
-                                ? `+$${winAmountFormatter.format(selectedShareProfit)}`
-                                : `$${winAmountFormatter.format(selectedShareProfit)}`,
+                                ? `+${winAmountFormatter.format(selectedShareProfit)} WLD${selectedShareProfitApproxUsd !== null ? ` (~$${winAmountFormatter.format(selectedShareProfitApproxUsd)})` : ""}`
+                                : `${winAmountFormatter.format(selectedShareProfit)} WLD${selectedShareProfitApproxUsd !== null ? ` (~$${winAmountFormatter.format(selectedShareProfitApproxUsd)})` : ""}`,
                             roi: selectedShareRoi,
                           },
                         })

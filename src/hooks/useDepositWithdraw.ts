@@ -22,7 +22,6 @@ import {
   paymentControllerDebugFinalizeWithdrawal,
   paymentControllerRequestWithdrawal,
 } from "@/src/services/queries";
-import { fetchWldUsdPrice } from "@/src/hooks/useWldUsdPrice";
 
 const WORLD_CHAIN_ID = 480;
 const WORLDCHAIN_RPC_URL = "https://worldchain-mainnet.g.alchemy.com/public";
@@ -37,15 +36,15 @@ export const TICK_X_POOL_ADDRESS =
 export const WLD_TOKEN_ADDRESS =
   "0x8603a12c549007a3afe026efad797640bda30760" as Address;
 
-type DepositWldToUsdParams = {
+type DepositWldParams = {
   amountWld: string;
   tokenDecimals?: number;
   poolAddress?: Address;
   tokenAddress?: Address;
 };
 
-type WithdrawUsdToWldParams = {
-  amountUsd: string;
+type WithdrawWldParams = {
+  amountWld: string;
 };
 
 type GetAvailableWldBalanceParams = {
@@ -91,6 +90,53 @@ function asOptionalString(value: unknown): string | undefined {
     return String(value);
   }
   return undefined;
+}
+
+function isUserCancelledRequest(error: unknown): boolean {
+  const visited = new Set<unknown>();
+  const queue: unknown[] = [error];
+  const rejectionKeywords = [
+    "user rejected",
+    "user denied",
+    "rejected the request",
+    "request rejected",
+    "cancelled",
+    "canceled",
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object" || visited.has(current)) {
+      continue;
+    }
+
+    visited.add(current);
+    const record = current as Record<string, unknown>;
+    const message = [
+      asOptionalString(record.message),
+      asOptionalString(record.shortMessage),
+      asOptionalString(record.details),
+      asOptionalString(record.reason),
+      asOptionalString(record.error_code),
+      asOptionalString(record.code),
+      asOptionalString(record.name),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    if (
+      message.includes("4001") ||
+      message.includes("action_rejected") ||
+      rejectionKeywords.some((keyword) => message.includes(keyword))
+    ) {
+      return true;
+    }
+
+    queue.push(record.cause, record.error, record.data);
+  }
+
+  return false;
 }
 
 function extractUserOpHash(value: unknown): string | null {
@@ -244,8 +290,6 @@ const useDepositWithdraw = () => {
   const [isDepositing, setIsDepositing] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  const getWldUsdPrice = useCallback(async () => fetchWldUsdPrice(), []);
-
   const getAvailableWldBalance = useCallback(
     async ({
       tokenAddress = WLD_TOKEN_ADDRESS,
@@ -268,13 +312,13 @@ const useDepositWithdraw = () => {
     [walletAddress],
   );
 
-  const depositWldToUsd = useCallback(
+  const depositWld = useCallback(
     async ({
       amountWld,
       tokenDecimals = 18,
       poolAddress = TICK_X_POOL_ADDRESS,
       tokenAddress = WLD_TOKEN_ADDRESS,
-    }: DepositWldToUsdParams) => {
+    }: DepositWldParams) => {
       if (!walletAddress) {
         throw new Error("Wallet not connected");
       }
@@ -287,7 +331,7 @@ const useDepositWithdraw = () => {
         throw new Error("WLD deposit is only available in World App");
       }
 
-      const parsedAmountWld = parsePositiveNumber(amountWld, "WLD amount");
+      parsePositiveNumber(amountWld, "WLD amount");
 
       setIsDepositing(true);
 
@@ -344,18 +388,13 @@ const useDepositWithdraw = () => {
           ],
         });
 
-        const wldUsdPrice = await fetchWldUsdPrice();
-        const usdAmount = trimTrailingZeros(
-          (parsedAmountWld * wldUsdPrice).toFixed(6),
-        );
-
         const userOpHash = extractUserOpHash(txResult);
         const finalTxHash = userOpHash
           ? ((await resolveTransactionHash(userOpHash)) ?? userOpHash)
           : undefined;
 
         await paymentControllerDebugDeposit({
-          amount: usdAmount,
+          amount: amountWld,
           txHash: finalTxHash,
         });
 
@@ -369,14 +408,16 @@ const useDepositWithdraw = () => {
           txResult,
           userOpHash,
           txHash: finalTxHash,
-          wldUsdPrice,
           wldAmount: amountWld,
-          usdAmount,
           wldBalance,
         };
       } catch (error) {
-        console.error("Deposit flow failed", error);
-        toast.error("Deposit failed");
+        if (isUserCancelledRequest(error)) {
+          toast.info("You canceled the request");
+        } else {
+          console.error("Deposit flow failed", error);
+          toast.error("Deposit failed");
+        }
         throw error;
       } finally {
         setIsDepositing(false);
@@ -385,16 +426,15 @@ const useDepositWithdraw = () => {
     [queryClient, walletAddress],
   );
 
-  const withdrawUsdToWld = useCallback(
-    async ({ amountUsd }: WithdrawUsdToWldParams) => {
-      const parsedAmountUsd = parsePositiveNumber(amountUsd, "USD amount");
+  const withdrawWld = useCallback(
+    async ({ amountWld }: WithdrawWldParams) => {
+      const parsedAmountWld = parsePositiveNumber(amountWld, "WLD amount");
       setIsWithdrawing(true);
 
       try {
         const authHeaders = buildAuthHeaders();
-        const wldUsdPrice = await fetchWldUsdPrice();
         const requestedAmountWld = trimTrailingZeros(
-          (parsedAmountUsd / wldUsdPrice).toFixed(6),
+          parsedAmountWld.toFixed(6),
         );
 
         const withdrawalResponse = await paymentControllerRequestWithdrawal(
@@ -519,19 +559,22 @@ const useDepositWithdraw = () => {
         toast.success("Withdrawal completed and backend balance synced");
 
         return {
-          amountUsd: trimTrailingZeros(parsedAmountUsd.toFixed(6)),
+          amountWld: trimTrailingZeros(parsedAmountWld.toFixed(6)),
           requestedAmountWld,
-          amountWld: trimTrailingZeros(
+          claimAmountWld: trimTrailingZeros(
             formatUnits(withdrawTokenAmountRaw, WLD_TOKEN_DECIMALS),
           ),
-          wldUsdPrice,
           txResult,
           userOpHash,
           txHash: claimTxHash,
         };
       } catch (error) {
-        console.error("Withdrawal flow failed", error);
-        toast.error("Withdrawal failed");
+        if (isUserCancelledRequest(error)) {
+          toast.info("You canceled the request");
+        } else {
+          console.error("Withdrawal flow failed", error);
+          toast.error("Withdrawal failed");
+        }
         throw error;
       } finally {
         setIsWithdrawing(false);
@@ -543,10 +586,9 @@ const useDepositWithdraw = () => {
   return {
     isDepositing,
     isWithdrawing,
-    getWldUsdPrice,
     getAvailableWldBalance,
-    depositWldToUsd,
-    withdrawUsdToWld,
+    depositWld,
+    withdrawWld,
   };
 };
 
