@@ -149,10 +149,22 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
         return;
       }
 
+      const alreadyFollowing = activeFollowingTargetIds.size > 0;
+      const isFollowingThisUser =
+        profile.targetUserId &&
+        activeFollowingTargetIds.has(profile.targetUserId);
+
+      if (alreadyFollowing && !isFollowingThisUser) {
+        toast.error(
+          "You are already following a trader. Unfollow them first before following someone else.",
+        );
+        return;
+      }
+
       setSelectedProfile(profile);
       setIsPayModalOpen(true);
     },
-    [isAuthenticated, isLoggingIn],
+    [isAuthenticated, isLoggingIn, activeFollowingTargetIds],
   );
 
   const handleCloseCopyTradeModal = useCallback(() => {

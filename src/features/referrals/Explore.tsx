@@ -28,7 +28,7 @@ import {
   Star,
 } from "lucide-react";
 import { toast } from "sonner";
-import BrowseCopyTrade from "@/src/features/referrals/components/BrowseCopyTrade";
+import FollowTradeView from "@/src/features/referrals/components/FollowTradeView";
 import CREProofView from "@/src/features/referrals/components/CREProofView";
 import HowItWork from "@/src/features/referrals/components/HowItWork";
 import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
@@ -705,7 +705,7 @@ const Explore = () => {
         {activeView === "follow-trade" ? (
           <div className="flex flex-col gap-4">
             <BackButton onClick={() => setActiveView("home")} />
-            <BrowseCopyTrade />
+            <FollowTradeView />
           </div>
         ) : null}
 
