@@ -141,13 +141,13 @@ const WalletActionPanel = () => {
     const resolvedBalance = apiBalance ?? storeBalance;
 
     if (!Number.isFinite(resolvedBalance)) {
-      return "0 WLD";
+      return "0";
     }
 
-    return `${resolvedBalance.toLocaleString(undefined, {
+    return resolvedBalance.toLocaleString(undefined, {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 6,
-    })} WLD`;
+      maximumFractionDigits: 2,
+    });
   }, [balanceResponse, storeBalance]);
 
   const visibleBalance = isBalanceVisible ? displayBalance : "******";
@@ -173,7 +173,7 @@ const WalletActionPanel = () => {
         })
       : availableWldBalance;
 
-    return `${formattedWldBalance} WLD`;
+    return formattedWldBalance;
   }, [availableWldBalance]);
 
   useEffect(() => {
@@ -294,8 +294,11 @@ const WalletActionPanel = () => {
               <p className="text-hint text-xs font-semibold tracking-[-0.01em]">
                 Balance:
               </p>
-              <p className="text-primary-light font-mono text-xs font-bold tracking-[-0.01em]">
+              <p className="text-primary-light flex items-center gap-1 font-mono text-xs font-bold tracking-[-0.01em]">
                 {visibleBalance}
+                {isBalanceVisible && (
+                  <WldMarketIcon aria-hidden className="size-3" />
+                )}
               </p>
               <button
                 type="button"
@@ -409,8 +412,9 @@ const WalletActionPanel = () => {
                         Amount
                       </p>
                       {!isWithdraw && (
-                        <p className="text-hint text-xs font-medium tracking-[-0.01em]">
-                          WLD Balance: {displayWldBalance}
+                        <p className="text-hint flex items-center gap-1 text-xs font-medium tracking-[-0.01em]">
+                          <WldMarketIcon aria-hidden className="size-3.5" />{" "}
+                          Balance: {displayWldBalance}
                         </p>
                       )}
                     </div>
@@ -423,9 +427,7 @@ const WalletActionPanel = () => {
                         placeholder="0"
                         aria-label="Amount"
                       />
-                      <p className="text-text-sub text-lg font-normal tracking-[-0.01em]">
-                        WLD
-                      </p>
+                      <WldMarketIcon aria-hidden className="size-5 shrink-0" />
                     </div>
                   </div>
                 </div>

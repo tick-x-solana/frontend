@@ -19,6 +19,7 @@ import React, {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { WalletIcon } from "@/src/assets/icons";
+import WldMarketIcon from "@/src/assets/icons/wld-market.svg";
 import { Button } from "@/src/components/shadcn/button";
 import {
   Dialog,
@@ -122,7 +123,7 @@ const livePriceFormatter = new Intl.NumberFormat("en-US", {
 });
 const balanceFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 0,
-  maximumFractionDigits: 6,
+  maximumFractionDigits: 2,
 });
 const shareTimeFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
@@ -253,8 +254,9 @@ function BalanceChip({ balance }: BalanceChipProps) {
       <span className="text-primary-light flex size-5 items-center justify-center">
         <WalletIcon className="size-3.5" aria-hidden="true" />
       </span>
-      <p className="text-primary-light text-center text-xs font-bold tracking-[-0.01em] whitespace-nowrap">
-        {balanceFormatter.format(safeBalance)} WLD
+      <p className="text-primary-light flex items-center gap-1 text-center text-xs font-bold tracking-[-0.01em] whitespace-nowrap">
+        {balanceFormatter.format(safeBalance)}{" "}
+        <WldMarketIcon aria-hidden className="size-3" />
       </p>
     </div>
   );
@@ -2249,7 +2251,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       return Math.max(settledPayout, 0);
     }
     return toFiniteNumber(
-      selectedShareAmount * Math.max((selectedShareCell.multiplier ?? 0) - 1, 0)
+      selectedShareAmount *
+        Math.max((selectedShareCell.multiplier ?? 0) - 1, 0),
     );
   }, [selectedShareAmount, selectedShareCell, settledOutcomes]);
   const shareWinRate = useMemo(() => {
@@ -2757,7 +2760,11 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                         fontSize: `${Math.max(11, Math.min(20, Math.round(target.cellEdge * 0.24)))}px`,
                       }}
                     >
-                      +{formatApproxUsd(target.totalPayout, wldUsdPrice ?? null) ?? "$--"}
+                      +
+                      {formatApproxUsd(
+                        target.totalPayout,
+                        wldUsdPrice ?? null,
+                      ) ?? "$--"}
                     </span>
                   </div>
                 ) : (
@@ -2772,7 +2779,11 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                         fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
                       }}
                     >
-                      +{formatApproxUsd(target.basePayout, wldUsdPrice ?? null) ?? "$--"}
+                      +
+                      {formatApproxUsd(
+                        target.basePayout,
+                        wldUsdPrice ?? null,
+                      ) ?? "$--"}
                     </span>
                     {target.isHumanVerified ? (
                       <Image
@@ -2796,7 +2807,11 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                           fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
                         }}
                       >
-                        +{formatApproxUsd(target.bonusPayout, wldUsdPrice ?? null) ?? "$--"}
+                        +
+                        {formatApproxUsd(
+                          target.bonusPayout,
+                          wldUsdPrice ?? null,
+                        ) ?? "$--"}
                       </span>
                     ) : null}
                   </div>

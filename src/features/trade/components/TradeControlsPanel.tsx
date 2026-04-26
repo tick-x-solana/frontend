@@ -13,7 +13,7 @@ const BID_OPTIONS_WLD = [1, 2, 5, 10];
 const formatCompactNumber = (amount: number) =>
   new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 6,
+    maximumFractionDigits: 2,
   }).format(amount);
 const formatApproxUsd = (amountWld: number, priceUsd: number | null) => {
   if (priceUsd === null) return null;
@@ -96,7 +96,7 @@ export default function TradeControlsPanel({
             <span className="truncate text-base font-semibold tracking-[-0.01em] text-white">
               {marketSymbol}
             </span>
-            <span className="truncate text-sm font-medium tracking-[-0.01em] text-text-sub">
+            <span className="text-text-sub truncate text-sm font-medium tracking-[-0.01em]">
               {marketPriceLabel}
             </span>
           </div>
@@ -106,7 +106,7 @@ export default function TradeControlsPanel({
               size="icon"
               variant="ghost"
               onClick={onClose}
-              className="text-text-sub hover:bg-surface-control hover:text-white size-8 rounded-full border border-transparent bg-transparent p-0 shadow-none"
+              className="text-text-sub hover:bg-surface-control size-8 rounded-full border border-transparent bg-transparent p-0 shadow-none hover:text-white"
               aria-label={closeLabel}
             >
               <X className="size-4" strokeWidth={1.75} />
@@ -118,18 +118,22 @@ export default function TradeControlsPanel({
       <div className={cn("flex flex-col gap-4", contentClassName)}>
         <section className="bg-background-surface flex items-center gap-3 rounded-[8px] p-2">
           <div className="bg-background-subtle flex size-10 shrink-0 items-center justify-center rounded-[8px]">
-            <WalletMinimal className="text-primary-light size-5" strokeWidth={1.8} />
+            <WalletMinimal
+              className="text-primary-light size-5"
+              strokeWidth={1.8}
+            />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium tracking-[-0.01em] text-text-main">
+            <p className="text-text-main truncate text-sm font-medium tracking-[-0.01em]">
               {walletAddress}
             </p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <p className="text-hint text-xs font-semibold tracking-[-0.01em]">
                 Balance:
               </p>
-              <p className="text-primary-light font-mono text-sm font-bold tracking-[-0.01em]">
-                {formatCompactNumber(balance)} WLD
+              <p className="text-primary-light flex items-center gap-1 font-mono text-sm font-bold tracking-[-0.01em]">
+                {formatCompactNumber(balance)}{" "}
+                <WldMarketIcon aria-hidden className="size-4" />
               </p>
             </div>
           </div>
@@ -180,7 +184,7 @@ export default function TradeControlsPanel({
           <Button
             type="button"
             onClick={onAddFunds}
-            className="bg-primary-light text-text-inverse hover:bg-primary-medium h-11 w-full rounded-[8px] px-4 text-sm font-medium tracking-[-0.01em] shadow-none"
+            className="bg-primary-light text-text-inverse hover:bg-primary-medium h-11 w-full rounded-[8px] px-4 text-sm font-medium tracking-[-0.01em] shadow-none max-md:hidden"
           >
             Add Funds
           </Button>

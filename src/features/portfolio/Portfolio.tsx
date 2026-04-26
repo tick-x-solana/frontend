@@ -25,7 +25,7 @@ const overviewCards = [
   },
 ];
 
-const FAUCET_AMOUNT_WLD = "200";
+const FAUCET_AMOUNT_WLD = "50";
 const FAUCET_COOLDOWN_MS = 30 * 60 * 1000;
 
 function getFaucetStorageKey(walletAddress: string | null): string | null {
