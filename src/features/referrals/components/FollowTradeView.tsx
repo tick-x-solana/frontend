@@ -1,14 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { MiniKit } from "@worldcoin/minikit-js";
 import { Copy, Loader2, UserMinus, Users } from "lucide-react";
 import { toast } from "sonner";
-import Image from "next/image";
 import { Button } from "@/src/components/shadcn/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/src/components/shadcn/dialog";
 import { useAuth } from "@/src/components/providers/AuthProvider";
-import { extractOrderFollowings } from "@/src/features/trade/orderFollow";
-import { getUserInitials } from "@/src/features/trade/orderFollow";
+import {
+  extractOrderFollowings,
+  getUserInitials,
+} from "@/src/features/trade/orderFollow";
 import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
 import {
   getOrderFollowControllerListFollowersQueryKey,
@@ -29,6 +37,39 @@ const FAKE_STATS = {
   slots: "12/24",
 };
 
+const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+
+function isAddress(value: string) {
+  return EVM_ADDRESS_REGEX.test(value);
+}
+
+function useWorldUsername(userId: string, apiUsername?: string | null) {
+  const [worldUsername, setWorldUsername] = useState<string | null>(
+    // Use apiUsername only if it's not itself an address
+    apiUsername && !isAddress(apiUsername) ? apiUsername : null,
+  );
+
+  useEffect(() => {
+    if (worldUsername) return; // already resolved
+    if (!isAddress(userId)) return;
+
+    let cancelled = false;
+    MiniKit.getUserByAddress(userId)
+      .then((user) => {
+        if (!cancelled && user?.username) {
+          setWorldUsername(user.username);
+        }
+      })
+      .catch(() => {/* silently fall back to address display */});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, worldUsername]);
+
+  return worldUsername;
+}
+
 function UserCard({
   userId,
   username,
@@ -39,14 +80,15 @@ function UserCard({
   userId: string;
   username?: string | null;
   canUnfollow?: boolean;
-  onUnfollow?: (userId: string) => void;
+  onUnfollow?: (userId: string, displayName: string) => void;
   isUnfollowing?: boolean;
 }) {
-  const initials = getUserInitials(username ?? userId);
-  const displayName = username
-    ? username.startsWith("@")
-      ? username
-      : `@${username}`
+  const resolvedUsername = useWorldUsername(userId, username);
+  const initials = getUserInitials(resolvedUsername ?? userId);
+  const displayName = resolvedUsername
+    ? resolvedUsername.startsWith("@")
+      ? resolvedUsername
+      : `@${resolvedUsername}`
     : `${userId.slice(0, 6)}...${userId.slice(-4)}`;
 
   return (
@@ -71,7 +113,7 @@ function UserCard({
             variant="ghost"
             size="icon-xs"
             disabled={isUnfollowing}
-            onClick={() => onUnfollow?.(userId)}
+            onClick={() => onUnfollow?.(userId, displayName)}
             className="text-hint hover:text-error-light hover:bg-surface-overlay-subtle size-8 rounded-[8px]"
             aria-label={`Unfollow ${displayName}`}
           >
@@ -211,7 +253,9 @@ function EmptyFollowingState() {
 
 const FollowTradeView = () => {
   const [activeTab, setActiveTab] = useState<Tab>("followers");
-  const [unfollowingId, setUnfollowingId] = useState<string | null>(null);
+  const [confirmUserId, setConfirmUserId] = useState<string | null>(null);
+  const [confirmDisplayName, setConfirmDisplayName] = useState<string>("");
+  const [isUnfollowing, setIsUnfollowing] = useState(false);
   const queryClient = useQueryClient();
   const { isAuthenticated, isLoggingIn, walletAddress, username } = useAuth();
   const { miniAppUsername } = useMiniAppUsername({
@@ -249,10 +293,16 @@ const FollowTradeView = () => {
     [followersResponse],
   );
 
-  const handleUnfollow = async (targetUserId: string) => {
-    setUnfollowingId(targetUserId);
+  const requestUnfollow = (userId: string, displayName: string) => {
+    setConfirmUserId(userId);
+    setConfirmDisplayName(displayName);
+  };
+
+  const handleConfirmUnfollow = async () => {
+    if (!confirmUserId) return;
+    setIsUnfollowing(true);
     try {
-      await unsubscribe({ targetUserId });
+      await unsubscribe({ targetUserId: confirmUserId.toLowerCase() });
       await queryClient.invalidateQueries({
         queryKey: getOrderFollowControllerListFollowingQueryKey(),
       });
@@ -260,10 +310,11 @@ const FollowTradeView = () => {
         queryKey: getOrderFollowControllerListFollowersQueryKey(),
       });
       toast.success("Unfollowed successfully");
+      setConfirmUserId(null);
     } catch {
       toast.error("Failed to unfollow");
     } finally {
-      setUnfollowingId(null);
+      setIsUnfollowing(false);
     }
   };
 
@@ -280,79 +331,128 @@ const FollowTradeView = () => {
     activeTab === "following" ? isLoadingFollowing : isLoadingFollowers;
 
   return (
-    <section className="flex flex-col gap-4 pb-4">
-      <h2 className="text-text-heading text-[20px] font-semibold tracking-[-0.01em]">
-        Follow Trade
-      </h2>
+    <>
+      <section className="flex flex-col gap-4 pb-4">
+        <h2 className="text-text-heading text-[20px] font-semibold tracking-[-0.01em]">
+          Follow Trade
+        </h2>
 
-      {/* Tab switcher */}
-      <div className="bg-surface-overlay-subtle flex items-center gap-1 rounded-[12px] p-1">
-        {(["followers", "following"] as Tab[]).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={cn(
-              "flex-1 rounded-[8px] px-3 py-1.5 text-[14px] font-semibold tracking-[-0.01em] capitalize transition-colors",
-              activeTab === tab
-                ? "bg-background-surface text-primary-medium"
-                : "text-hint hover:text-text-sub",
-            )}
-          >
-            {tab}
-            {tab === "following" && followingList.length > 0 && (
-              <span className="bg-primary-light/15 text-primary-medium ml-1.5 rounded-full px-1.5 py-0.5 text-[11px]">
-                {followingList.length}
-              </span>
-            )}
-            {tab === "followers" && followerList.length > 0 && (
-              <span className="bg-primary-light/15 text-primary-medium ml-1.5 rounded-full px-1.5 py-0.5 text-[11px]">
-                {followerList.length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-10">
-          <Loader2 className="text-text-sub size-6 animate-spin" />
+        {/* Tab switcher */}
+        <div className="bg-surface-overlay-subtle flex items-center gap-1 rounded-[12px] p-1">
+          {(["followers", "following"] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "flex-1 rounded-[8px] px-3 py-1.5 text-[14px] font-semibold tracking-[-0.01em] capitalize transition-colors",
+                activeTab === tab
+                  ? "bg-background-surface text-primary-medium"
+                  : "text-hint hover:text-text-sub",
+              )}
+            >
+              {tab}
+              {tab === "following" && followingList.length > 0 && (
+                <span className="bg-primary-light/15 text-primary-medium ml-1.5 rounded-full px-1.5 py-0.5 text-[11px]">
+                  {followingList.length}
+                </span>
+              )}
+              {tab === "followers" && followerList.length > 0 && (
+                <span className="bg-primary-light/15 text-primary-medium ml-1.5 rounded-full px-1.5 py-0.5 text-[11px]">
+                  {followerList.length}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-      ) : activeTab === "followers" ? (
-        followerList.length === 0 ? (
-          <EmptyFollowersState
-            referralLink={referralLink}
-            onCopy={handleCopyReferralLink}
-          />
+
+        {/* Content */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="text-text-sub size-6 animate-spin" />
+          </div>
+        ) : activeTab === "followers" ? (
+          followerList.length === 0 ? (
+            <EmptyFollowersState
+              referralLink={referralLink}
+              onCopy={handleCopyReferralLink}
+            />
+          ) : (
+            <div className="flex flex-col gap-3">
+              {followerList.map((item) => (
+                <UserCard
+                  key={item.subscriberUserId ?? item.targetUserId}
+                  userId={item.subscriberUserId ?? item.targetUserId}
+                  username={item.targetUsername}
+                />
+              ))}
+            </div>
+          )
+        ) : followingList.length === 0 ? (
+          <EmptyFollowingState />
         ) : (
           <div className="flex flex-col gap-3">
-            {followerList.map((item) => (
+            {followingList.map((item) => (
               <UserCard
-                key={item.subscriberUserId ?? item.targetUserId}
-                userId={item.subscriberUserId ?? item.targetUserId}
+                key={item.targetUserId}
+                userId={item.targetUserId}
                 username={item.targetUsername}
+                canUnfollow
+                isUnfollowing={isUnfollowing && confirmUserId === item.targetUserId}
+                onUnfollow={requestUnfollow}
               />
             ))}
           </div>
-        )
-      ) : followingList.length === 0 ? (
-        <EmptyFollowingState />
-      ) : (
-        <div className="flex flex-col gap-3">
-          {followingList.map((item) => (
-            <UserCard
-              key={item.targetUserId}
-              userId={item.targetUserId}
-              username={item.targetUsername}
-              canUnfollow
-              isUnfollowing={unfollowingId === item.targetUserId}
-              onUnfollow={handleUnfollow}
-            />
-          ))}
-        </div>
-      )}
-    </section>
+        )}
+      </section>
+
+      {/* Unfollow confirm dialog */}
+      <Dialog
+        open={confirmUserId !== null}
+        onOpenChange={(open) => {
+          if (!open && !isUnfollowing) setConfirmUserId(null);
+        }}
+      >
+        <DialogContent className="pointer-events-none">
+          <div className="border-border-main pointer-events-auto w-full max-w-[340px] rounded-[20px] border bg-background-surface p-5 shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
+            <DialogTitle className="text-text-heading mb-1 text-[17px] font-semibold tracking-[-0.01em]">
+              Unfollow trader?
+            </DialogTitle>
+            <DialogDescription className="text-text-sub mb-5 text-[13px] tracking-[-0.01em]">
+              You are about to unfollow{" "}
+              <span className="text-text-heading font-semibold">
+                {confirmDisplayName}
+              </span>
+              . Copy trading will stop immediately.
+            </DialogDescription>
+
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                disabled={isUnfollowing}
+                onClick={() => void handleConfirmUnfollow()}
+                className="h-11 w-full rounded-[10px] bg-red-500/90 text-[14px] font-semibold text-white hover:bg-red-500"
+              >
+                {isUnfollowing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  "Unfollow"
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={isUnfollowing}
+                onClick={() => setConfirmUserId(null)}
+                className="text-text-sub hover:bg-surface-overlay-subtle h-11 w-full rounded-[10px] text-[14px] font-semibold"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

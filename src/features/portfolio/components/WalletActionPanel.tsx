@@ -404,6 +404,14 @@ const WalletActionPanel = () => {
                   </div>
                 </div>
 
+                <div className="bg-surface-overlay-subtle border-border-main rounded-[12px] border px-3 py-2">
+                  <p className="text-text-sub text-xs font-medium">
+                    This demo uses mock WLD (not real WLD). If you need test
+                    tokens, please contact us or use the Faucet button in
+                    Portfolio.
+                  </p>
+                </div>
+
                 <div className="relative">
                   <div className="flex flex-col gap-2 rounded-[12px] bg-[#0D1E30] px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
