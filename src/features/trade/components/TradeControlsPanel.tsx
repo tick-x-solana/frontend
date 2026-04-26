@@ -7,6 +7,9 @@ import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
 import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
 import { cn } from "@/lib/utils";
+import { useAuthControllerGetPublicProfile } from "@/src/services/queries";
+import Image from "next/image";
+import { useMemo } from "react";
 
 const BID_OPTIONS_WLD = [1, 2, 5, 10];
 
@@ -55,16 +58,28 @@ export default function TradeControlsPanel({
   onClose,
   onAddFunds,
 }: TradeControlsPanelProps) {
-  const { walletAddress: rawAddress } = useAuth();
+  const { walletAddress: rawAddress, username } = useAuth();
+  const normalizedAddress = rawAddress?.trim().toLowerCase() ?? "";
   const balance = useGameStore((s) => s.balance);
   const betAmount = useGameStore((s) => s.betAmount);
   const setBetAmount = useGameStore((s) => s.setBetAmount);
   const { data: wldUsdPrice } = useWldUsdPrice();
+  const { data: publicProfileResponse } = useAuthControllerGetPublicProfile(
+    { address: normalizedAddress },
+    { query: { enabled: Boolean(normalizedAddress) } },
+  );
+  const hasVerifiedBadge = useMemo(() => {
+    if (!publicProfileResponse || typeof publicProfileResponse !== "object") return false;
+    const r = publicProfileResponse as { data?: { humanVerified?: boolean }; humanVerified?: boolean };
+    return (r.data ?? r)?.humanVerified === true;
+  }, [publicProfileResponse]);
 
   const selectedBid =
     BID_OPTIONS_WLD.find((amount) => Math.abs(amount - betAmount) < 1e-9) ??
     BID_OPTIONS_WLD[0];
-  const walletAddress = formatWalletAddress(rawAddress);
+  const displayIdentity = username?.trim()
+    ? `@${username.trim()}`
+    : formatWalletAddress(rawAddress);
   const marketPriceLabel =
     displayPrice === "--" ? displayPrice : `~ ${displayPrice}`;
   const selectedBidApproxUsd = formatApproxUsd(
@@ -124,9 +139,20 @@ export default function TradeControlsPanel({
             />
           </div>
           <div className="min-w-0">
-            <p className="text-text-main truncate text-sm font-medium tracking-[-0.01em]">
-              {walletAddress}
-            </p>
+            <div className="flex min-w-0 items-center gap-1">
+              <p className="text-text-main truncate text-sm font-medium tracking-[-0.01em]">
+                {displayIdentity}
+              </p>
+              {hasVerifiedBadge && (
+                <Image
+                  src="/onboarding/verified-badge.svg"
+                  alt="Verified"
+                  width={16}
+                  height={16}
+                  className="size-4 shrink-0"
+                />
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <p className="text-hint text-xs font-semibold tracking-[-0.01em]">
                 Balance:

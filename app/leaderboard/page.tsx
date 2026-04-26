@@ -255,7 +255,7 @@ export default function LeaderboardPage() {
                 id="leaderboard-search"
                 type="search"
                 placeholder="Search by username"
-                className="text-text-main placeholder:text-hint w-full bg-transparent text-[14px] tracking-[-0.14px] outline-none"
+                className="text-text-main placeholder:text-hint w-full bg-transparent text-[16px] tracking-[-0.14px] outline-none"
               />
             </label>
             <button

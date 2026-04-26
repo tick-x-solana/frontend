@@ -381,7 +381,7 @@ const WalletActionPanel = () => {
 
                   <div className="bg-background-subtle flex items-center gap-2 rounded-[8px] px-2 py-1">
                     <p className="text-hint text-xs font-semibold tracking-[-0.01em]">
-                      Balance:
+                      App Balance:
                     </p>
                     <p className="text-primary-light font-mono text-xs font-bold tracking-[-0.01em]">
                       {visibleBalance}
@@ -414,7 +414,7 @@ const WalletActionPanel = () => {
                       {!isWithdraw && (
                         <p className="text-hint flex items-center gap-1 text-xs font-medium tracking-[-0.01em]">
                           <WldMarketIcon aria-hidden className="size-3.5" />{" "}
-                          Balance: {displayWldBalance}
+                          Wallet: {displayWldBalance}
                         </p>
                       )}
                     </div>

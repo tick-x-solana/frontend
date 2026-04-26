@@ -972,12 +972,12 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
     betAmountUsdText,
   } = p;
   const inset = 0.75;
-  const radius = clamp(cellSize * 0.18, 8, 12);
-  const multiplierSize = clamp(Math.round(cellSize * 0.2), 11, 16);
-  const badgeBaseFontSize = clamp(Math.round(cellSize * 0.22), 12, 20);
-  const badgeWidth = clamp(width * 0.46, 38, width - 20);
-  const badgeHeight = clamp(height * 0.28, 18, 28);
-  const badgeRadius = clamp(cellSize * 0.14, 6, 10);
+  const radius = clamp(cellSize * 0.18, Math.min(8, cellSize * 0.15), 12);
+  const multiplierSize = clamp(Math.round(cellSize * 0.2), Math.max(6, Math.round(cellSize * 0.14)), 16);
+  const badgeBaseFontSize = clamp(Math.round(cellSize * 0.22), Math.max(7, Math.round(cellSize * 0.16)), 20);
+  const badgeWidth = clamp(width * 0.46, Math.min(38, width * 0.7), width - 4);
+  const badgeHeight = clamp(height * 0.28, Math.min(18, height * 0.22), Math.min(28, height * 0.32));
+  const badgeRadius = clamp(cellSize * 0.14, Math.min(6, cellSize * 0.1), 10);
   const centerX = x + width / 2;
   const multiplierY = y + height * 0.33;
   const badgeX = centerX - badgeWidth / 2;
@@ -1046,13 +1046,13 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
   roundRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, badgeRadius);
   ctx.fill();
 
-  const badgeMaxTextWidth = Math.max(12, badgeWidth - 12);
+  const badgeMaxTextWidth = Math.max(6, badgeWidth - 8);
   let badgeFontSize = badgeBaseFontSize;
   ctx.font = `700 ${badgeFontSize}px Inter, sans-serif`;
   const measuredBadgeTextWidth = ctx.measureText(badgeText).width;
   if (measuredBadgeTextWidth > badgeMaxTextWidth) {
     badgeFontSize = Math.max(
-      9,
+      Math.max(6, Math.round(cellSize * 0.1)),
       Math.floor((badgeFontSize * badgeMaxTextWidth) / measuredBadgeTextWidth),
     );
   }
