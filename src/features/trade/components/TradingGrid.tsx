@@ -142,6 +142,10 @@ const percentageFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
+
+function toFiniteNumber(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
 const FAKE_WIN_TOAST_MIN_DELAY_MS = 5000;
 const FAKE_WIN_TOAST_MAX_DELAY_MS = 20000;
 const FAKE_WIN_TOAST_VISIBLE_MS = 1000;
@@ -2232,18 +2236,19 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     () => cells.find((cell) => cell.id === shareCellId) ?? null,
     [cells, shareCellId],
   );
-  const selectedShareAmount = selectedShareCell
+  const selectedShareAmountWld = selectedShareCell
     ? bets[selectedShareCell.id] ||
       pendingBets[selectedShareCell.id] ||
       betAmount
     : betAmount;
+  const selectedShareAmount = toFiniteNumber(selectedShareAmountWld);
   const selectedShareProfit = useMemo(() => {
     if (!selectedShareCell) return 0;
     const settledPayout = settledOutcomes[selectedShareCell.id]?.payout;
     if (typeof settledPayout === "number" && Number.isFinite(settledPayout)) {
       return Math.max(settledPayout, 0);
     }
-    return (
+    return toFiniteNumber(
       selectedShareAmount * Math.max((selectedShareCell.multiplier ?? 0) - 1, 0)
     );
   }, [selectedShareAmount, selectedShareCell, settledOutcomes]);
@@ -2268,6 +2273,15 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       return null;
     return selectedShareProfit * wldUsdPrice;
   }, [selectedShareProfit, wldUsdPrice]);
+  const selectedShareAmountUsd = useMemo(() => {
+    if (typeof wldUsdPrice !== "number" || !Number.isFinite(wldUsdPrice))
+      return 0;
+    return toFiniteNumber(selectedShareAmount * wldUsdPrice);
+  }, [selectedShareAmount, wldUsdPrice]);
+  const selectedShareProfitUsd = useMemo(() => {
+    if (selectedShareProfitApproxUsd === null) return 0;
+    return toFiniteNumber(selectedShareProfitApproxUsd);
+  }, [selectedShareProfitApproxUsd]);
 
   const handleOpenShareSheet = useCallback((cellId: string) => {
     setShareCellId(cellId);
@@ -2743,7 +2757,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                         fontSize: `${Math.max(11, Math.min(20, Math.round(target.cellEdge * 0.24)))}px`,
                       }}
                     >
-                      +{formatApproxUsd(target.totalPayout, wldUsdPrice) ?? "$--"}
+                      +{formatApproxUsd(target.totalPayout, wldUsdPrice ?? null) ?? "$--"}
                     </span>
                   </div>
                 ) : (
@@ -2758,7 +2772,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                         fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
                       }}
                     >
-                      +{formatApproxUsd(target.basePayout, wldUsdPrice) ?? "$--"}
+                      +{formatApproxUsd(target.basePayout, wldUsdPrice ?? null) ?? "$--"}
                     </span>
                     {target.isHumanVerified ? (
                       <Image
@@ -2782,7 +2796,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                           fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
                         }}
                       >
-                        +{formatApproxUsd(target.bonusPayout, wldUsdPrice) ?? "$--"}
+                        +{formatApproxUsd(target.bonusPayout, wldUsdPrice ?? null) ?? "$--"}
                       </span>
                     ) : null}
                   </div>
@@ -3008,10 +3022,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                 <WinShareCard
                   marketSymbol={MARKET_SYMBOL}
                   multiplier={selectedShareCell.multiplier}
-                  amountWld={selectedShareAmount}
+                  amount={selectedShareAmountUsd}
                   openedAt={selectedShareTime}
-                  profitWld={selectedShareProfit}
-                  approxUsdPerWld={wldUsdPrice}
+                  profit={selectedShareProfitUsd}
                 />
                 <div className="px-5 pb-5">
                   <div className="flex flex-col gap-4">
@@ -3051,9 +3064,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
                           metrics: {
                             winRate: shareWinRate,
                             pnl:
-                              selectedShareProfit > 0
-                                ? `+${winAmountFormatter.format(selectedShareProfit)} WLD${selectedShareProfitApproxUsd !== null ? ` (~$${winAmountFormatter.format(selectedShareProfitApproxUsd)})` : ""}`
-                                : `${winAmountFormatter.format(selectedShareProfit)} WLD${selectedShareProfitApproxUsd !== null ? ` (~$${winAmountFormatter.format(selectedShareProfitApproxUsd)})` : ""}`,
+                              selectedShareProfitUsd > 0
+                                ? `+$${winAmountFormatter.format(selectedShareProfitUsd)}`
+                                : `$${winAmountFormatter.format(selectedShareProfitUsd)}`,
                             roi: selectedShareRoi,
                           },
                         })

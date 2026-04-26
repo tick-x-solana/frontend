@@ -537,9 +537,8 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       const loginResponse = (await authControllerLogin({
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, signature }),
+        address,
+        signature,
       })) as unknown as LoginResponse;
       const accessToken =
         loginResponse.accessToken ?? extractAccessToken(loginResponse);

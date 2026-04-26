@@ -334,7 +334,7 @@ const TradingHistoryTable = () => {
     [items, shareItemId],
   );
   const selectedShareMultiplier = selectedShareItem?.multiplier ?? 1;
-  const selectedShareAmount = selectedShareItem?.amountUsd ?? 0;
+  const selectedShareAmountUsd = selectedShareItem?.amountUsd ?? 0;
   const selectedShareProfit = Math.max(selectedShareItem?.pnl ?? 0, 0);
   const settledItems = useMemo(
     () => items.filter((item) => !item.inProgress && item.pnl !== null),
@@ -346,11 +346,11 @@ const TradingHistoryTable = () => {
     return formatPercent((wins / settledItems.length) * 100);
   }, [settledItems]);
   const selectedShareRoi = useMemo(() => {
-    if (!selectedShareItem || selectedShareAmount <= 0) return null;
+    if (!selectedShareItem || selectedShareAmountUsd <= 0) return null;
     const pnl = selectedShareItem.pnl;
     if (pnl === null) return null;
-    return formatPercent((pnl / selectedShareAmount) * 100);
-  }, [selectedShareAmount, selectedShareItem]);
+    return formatPercent((pnl / selectedShareAmountUsd) * 100);
+  }, [selectedShareAmountUsd, selectedShareItem]);
 
   const handleOpenShareSheet = (itemId: string) => {
     setShareItemId(itemId);
@@ -436,7 +436,7 @@ const TradingHistoryTable = () => {
                 <WinShareCard
                   marketSymbol={selectedShareItem.market}
                   multiplier={selectedShareMultiplier}
-                  amount={selectedShareAmount}
+                  amount={selectedShareAmountUsd}
                   openedAt={selectedShareItem.createdAtLabel}
                   profit={selectedShareProfit}
                 />
