@@ -11,7 +11,7 @@ import {
   useAccountControllerGetBalance,
   useAuthControllerGetPublicProfile,
 } from "@/src/services/queries";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LogOut } from "lucide-react";
 import Image from "next/image";
 import {
   type ChangeEvent,
@@ -69,7 +69,7 @@ const WalletActionPanel = () => {
   const [availableWldBalance, setAvailableWldBalance] = useState<string | null>(
     null,
   );
-  const { walletAddress, username } = useAuth();
+  const { walletAddress, username, logout } = useAuth();
   const normalizedWalletAddress = walletAddress?.trim().toLowerCase() ?? "";
   const storeBalance = useGameStore((state) => state.balance);
   const { data: balanceResponse, refetch: refetchBalance } =
@@ -155,6 +155,10 @@ const WalletActionPanel = () => {
   const toggleBalanceVisibility = useCallback(() => {
     setIsBalanceVisible((current) => !current);
   }, []);
+
+  const handleLogout = useCallback(() => {
+    logout();
+  }, [logout]);
 
   const displayWldBalance = useMemo(() => {
     if (availableWldBalance === null) {
@@ -257,20 +261,33 @@ const WalletActionPanel = () => {
             <WalletIcon className="size-5" aria-hidden="true" />
           </div>
 
-          <div className="flex flex-col justify-center gap-[2px]">
-            <div className="flex items-center gap-1.5">
-              <p className="text-text-main text-sm font-medium tracking-[-0.01em]">
-                {displayIdentity}
-              </p>
-              {hasVerifiedBadge ? (
-                <Image
-                  src="/onboarding/verified-badge.svg"
-                  alt="Verified badge"
-                  width={16}
-                  height={16}
-                  className="size-4"
-                />
-              ) : null}
+          <div className="flex min-w-0 flex-1 flex-col justify-center gap-[2px]">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <p className="text-text-main truncate text-sm font-medium tracking-[-0.01em]">
+                  {displayIdentity}
+                </p>
+                {hasVerifiedBadge ? (
+                  <Image
+                    src="/onboarding/verified-badge.svg"
+                    alt="Verified badge"
+                    width={16}
+                    height={16}
+                    className="size-4 shrink-0"
+                  />
+                ) : null}
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                aria-label="Log out"
+                className="text-hint hover:text-text-main hover:bg-background-subtle/80 size-7 shrink-0 rounded-[6px]"
+              >
+                <LogOut className="size-4" strokeWidth={1.75} />
+              </Button>
             </div>
 
             <div className="flex items-center gap-2">
