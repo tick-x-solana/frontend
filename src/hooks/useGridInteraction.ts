@@ -44,8 +44,17 @@ interface UseGridInteractionOptions {
   getMinZoom: () => number;
 }
 
+type EmitSocket = {
+  connected?: boolean;
+  emit: (event: string, payload: unknown) => void;
+};
+
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function getRemoteCellId(cell: CellData["original"]): string {
+  return `${cell.startTs}:${cell.endTs}:${cell.lowerPrice}:${cell.upperPrice}`;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -296,7 +305,7 @@ export function useGridInteraction({
         return;
       }
 
-      const { bets, pendingBets, betAmount, balance, socket, wssKey, address } =
+        const { bets, pendingBets, betAmount, balance, socket, wssKey, address } =
         storeRef.current;
       const now = nowRef.current;
 
@@ -345,26 +354,46 @@ export function useGridInteraction({
           return;
         }
 
+        const socketClient = socket as EmitSocket;
+        if (socketClient.connected === false) {
+          appToast.error("Socket disconnected. Reconnect and try again.", {
+            icon: "📡",
+          });
+          return;
+        }
+
+        if ((bets[cell.id] || 0) > 0 || (pendingBets[cell.id] || 0) > 0) {
+          appToast.info("You already have an open trade on this cell.", {
+            icon: "🧾",
+          });
+          return;
+        }
+
         const amountStr = betAmount.toString();
         const cellOrigin = cell.original;
-        const cellId = `${cellOrigin.startTs}:${cellOrigin.endTs}:${cellOrigin.lowerPrice}:${cellOrigin.upperPrice}`;
+        const cellId = getRemoteCellId(cellOrigin);
         const message = `${cellOrigin.gridTs}:${cellId}:${amountStr}`;
         const signature = await signWssMessage(wssKey, message);
         const userId = getAddress(address);
 
         const payload = {
           userId,
-          marketId: "BTCUSDT",
+          marketId: storeRef.current.marketId,
           amount: amountStr,
           cell: cellOrigin,
           userSignature: signature,
         };
 
-        socket.emit("place_bet", payload);
+        socketClient.emit("place_bet", payload);
 
         placeBet(cell.id, betAmount);
         clearPreviewCell();
-      } catch (err) {}
+      } catch (err) {
+        console.error("Failed to place bet:", err);
+        appToast.error("Failed to place trade. Please try again.", {
+          icon: "⚠️",
+        });
+      }
     },
     [
       canvasRef,

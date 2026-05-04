@@ -425,10 +425,14 @@ export const useGameStore = create<GameState>((set) => ({
             (state.pendingBets[cell.id] || 0) > 0 ||
             state.pendingWins[cell.id] !== undefined ||
             state.settledOutcomes[cell.id] !== undefined;
+          const settledOutcome = state.settledOutcomes[cell.id];
+          const shouldKeepSettledWin =
+            settledOutcome?.isWin === true || cell.status === "hit";
 
           // For plain cells, trust the newest server snapshot immediately.
           // Only preserve cells that have local tracked state (bet/outcome),
           // so user feedback remains visible while avoiding mixed-grid artifacts.
+          if (shouldKeepSettledWin) return true;
           return hasTrackedState && cell.timeWindowEnd > hideThresholdTime;
         })
         .map((cell) => ({

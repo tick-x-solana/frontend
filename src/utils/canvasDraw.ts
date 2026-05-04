@@ -20,9 +20,13 @@ const timeLabelFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: false,
 });
 
-const priceLabelFormatter = new Intl.NumberFormat("en-US", {
+const priceLabelFormatterOneDecimal = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
+});
+const priceLabelFormatterTwoDecimals = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 const approxUsdFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
@@ -87,6 +91,15 @@ function formatApproxUsd(amountWld: number, wldUsdPrice: number | null) {
   return `$${approxUsdFormatter.format(amountWld * wldUsdPrice)}`;
 }
 
+function formatPriceLabel(value: number, marketId: string): string {
+  const normalizedMarketId = marketId.trim().toUpperCase();
+  const isEthUsdMarket =
+    normalizedMarketId === "ETHUSD" || normalizedMarketId === "ETHUSDT";
+  return isEthUsdMarket
+    ? priceLabelFormatterTwoDecimals.format(value)
+    : priceLabelFormatterOneDecimal.format(value);
+}
+
 function hasChartPassedColumn(chartX: number, columnStartX: number, columnWidth: number) {
   return chartX >= columnStartX + columnWidth - 0.5;
 }
@@ -116,6 +129,7 @@ function getPriceAxisMetrics(
   ctx: CanvasRenderingContext2D,
   layout: GridLayout,
   isMobile: boolean,
+  marketId = "",
 ) {
   const { w, h, effectivePriceStep, basePrice } = layout;
   const priceAtTop = layout.toPrice(0);
@@ -127,8 +141,9 @@ function getPriceAxisMetrics(
 
   ctx.font = `bold ${fontSize}px monospace`;
 
-  const sampleLabel = priceLabelFormatter.format(
+  const sampleLabel = formatPriceLabel(
     basePrice + rowEndIdx * effectivePriceStep,
+    marketId,
   );
   const axisWidth = ctx.measureText(sampleLabel).width + 10;
 
@@ -346,6 +361,13 @@ export function drawBetCells(
     const rh = Math.min(cellTop + ch, h) - ry;
     if (rw <= 0 || rh <= 0) continue;
     if (shouldHideLosingBet) continue;
+    const needsClip = cx < 0 || cx + cw > w || cellTop < 0 || cellTop + ch > h;
+    if (needsClip) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(rx, ry, rw, rh);
+      ctx.clip();
+    }
 
     const textX = cx + cw - clamp(cellSize * 0.13, 6, 10);
     const textY = cellTop + ch - clamp(cellSize * 0.12, 6, 10);
@@ -466,16 +488,6 @@ export function drawBetCells(
           : COLOR_GRID;
       ctx.lineWidth = 0.5;
       ctx.strokeRect(rx, ry, rw, rh);
-    }
-
-    // Only clip when the cell is partially outside the viewport — saves save/clip/restore
-    // overhead (~130 cells/frame) for the common fully-visible case.
-    const needsClip = cx < 0 || cx + cw > w || cellTop < 0 || cellTop + ch > h;
-    if (needsClip) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(rx, ry, rw, rh);
-      ctx.clip();
     }
 
     // ── Text ──
@@ -1186,7 +1198,7 @@ export function drawPriceLine(
 export function drawPriceAxis(
   ctx: CanvasRenderingContext2D,
   layout: GridLayout,
-  _store: StoreSnapshot,
+  store: StoreSnapshot,
   isMobile: boolean,
 ) {
   const { w, h, toCellY, effectivePriceStep, basePrice } = layout;
@@ -1201,7 +1213,12 @@ export function drawPriceAxis(
   const rowStartIdx = Math.floor(Math.min(rowAtTop, rowAtBot)) - 2;
   const rowEndIdx = Math.ceil(Math.max(rowAtTop, rowAtBot)) + 2;
 
-  const { axisWidth, axisX } = getPriceAxisMetrics(ctx, layout, isMobile);
+  const { axisWidth, axisX } = getPriceAxisMetrics(
+    ctx,
+    layout,
+    isMobile,
+    store.marketId,
+  );
 
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
@@ -1223,13 +1240,13 @@ export function drawPriceAxis(
     const p = anchorPrice + (i - anchorRowIdx) * effectivePriceStep;
     const cy = toCellY(p);
     if (cy < -10 || cy > h + 10) continue;
-    ctx.fillText(priceLabelFormatter.format(p), w - 2, cy);
+    ctx.fillText(formatPriceLabel(p, store.marketId), w - 2, cy);
   }
 
   const focusPrice = layout.cam;
   const focusY = layout.toCanvasY(focusPrice);
   if (focusY > 8 && focusY < h - 8) {
-    const focusText = priceLabelFormatter.format(focusPrice);
+    const focusText = formatPriceLabel(focusPrice, store.marketId);
     const textWidth = ctx.measureText(focusText).width + 10;
     const boxX = w - textWidth - 2;
     const boxY = focusY - 8;

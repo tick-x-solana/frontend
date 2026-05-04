@@ -57,6 +57,7 @@ export interface StoreSnapshot {
   basePrice: number;
   modePriceStep: number;
   modeIntervalSeconds: number;
+  marketId: string;
   betAmount: number;
   balance: number;
   socket: unknown;
