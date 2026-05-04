@@ -1277,6 +1277,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         store.history,
         nowRef.current,
         cameraPriceRef.current,
+        priceMotionRef.current !== null,
       ),
       followedOrderActivities: isFollowTradeVisible
         ? store.followedOrderActivities.filter((activity) =>

@@ -356,17 +356,32 @@ export function buildDisplayHistory(
   history: StoreSnapshot["history"],
   now: number,
   displayPrice: number,
+  lockLatestPriceToDisplay = false,
 ): StoreSnapshot["history"] {
   if (history.length === 0 || !Number.isFinite(displayPrice)) return history;
 
   const lastPoint = history[history.length - 1];
+  const baseHistory =
+    lockLatestPriceToDisplay && history.length > 0
+      ? [
+          ...history.slice(0, -1),
+          {
+            time: lastPoint.time,
+            price: displayPrice,
+          },
+        ]
+      : history;
+  const latestPoint = baseHistory[baseHistory.length - 1];
   const displayTime = Math.max(now, lastPoint.time);
 
-  if (displayTime === lastPoint.time && Math.abs(displayPrice - lastPoint.price) < 1e-6) {
-    return history;
+  if (
+    displayTime === latestPoint.time &&
+    Math.abs(displayPrice - latestPoint.price) < 1e-6
+  ) {
+    return baseHistory;
   }
 
-  return [...history, { time: displayTime, price: displayPrice }];
+  return [...baseHistory, { time: displayTime, price: displayPrice }];
 }
 
 export function extractBinanceKlineHistory(value: unknown): StoreSnapshot["history"] {
