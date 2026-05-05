@@ -100,6 +100,7 @@ export function useTradingGridSocketEffects({
   updateOrder,
   storeRef,
 }: UseTradingGridSocketEffectsParams) {
+  // 1) Load initial price history (Binance 1s candles) to hydrate the chart.
   useEffect(() => {
     const abortController = new AbortController();
 
@@ -130,6 +131,7 @@ export function useTradingGridSocketEffects({
     return () => abortController.abort();
   }, [hydrateHistory, marketId]);
 
+  // 2) Connect a dedicated market socket for realtime price + grid state.
   useEffect(() => {
     const liveSocket = io("https://api.tickx.finance", {
       path: marketSocketPath,
@@ -166,6 +168,7 @@ export function useTradingGridSocketEffects({
     };
   }, [marketSocketPath, updateGrid, updatePrice]);
 
+  // 3) Connect the core/action socket for user/order-related events.
   useEffect(() => {
     const actionSocket = io("https://api.tickx.finance", {
       path: CORE_SOCKET_PATH,
@@ -180,6 +183,8 @@ export function useTradingGridSocketEffects({
     };
   }, [setConnection]);
 
+  // 4) When the user is authenticated: fetch wssKey + challenge + signature to subscribe to the user channel.
+  // Re-subscribe every time the socket reconnects.
   useEffect(() => {
     if (!isSocketLike(socket)) return;
     const userAddress = resolvedUserAddress;
@@ -220,6 +225,8 @@ export function useTradingGridSocketEffects({
     };
   }, [isAuthenticated, resolvedUserAddress, setConnection, setWssKey, socket]);
 
+  // 5) Subscribe/unsubscribe follow targets (copy-trade) while the Follow panel is visible.
+  // Unsubscribe in cleanup to avoid leaking subscriptions after closing the panel/changing targets.
   useEffect(() => {
     if (!isSocketLike(socket)) return;
     if (!isFollowTradeVisible) return;
@@ -284,6 +291,7 @@ export function useTradingGridSocketEffects({
     socket,
   ]);
 
+  // 6) Receive followed-order update events and push them to the overlay queue (cellId remapped to the current grid).
   useEffect(() => {
     if (!isSocketLike(socket) || !isFollowTradeVisible || enabledFollowTargetIds.length === 0) return;
 
@@ -310,6 +318,7 @@ export function useTradingGridSocketEffects({
     storeRef,
   ]);
 
+  // 7) Subscribe to the suggested strategy channel when the strategy panel is visible.
   useEffect(() => {
     if (!isSocketLike(socket) || !isSuggestedStrategyVisible) return;
 
@@ -319,6 +328,7 @@ export function useTradingGridSocketEffects({
     return () => socket.off("connect", subscribe);
   }, [isSuggestedStrategyVisible, socket]);
 
+  // 8) Receive suggested strategy updates and convert them to a list of valid cellIds.
   useEffect(() => {
     if (!isSocketLike(socket) || !isSuggestedStrategyVisible) return;
 
@@ -332,6 +342,7 @@ export function useTradingGridSocketEffects({
     return () => socket.off(SUGGESTED_STRATEGY_UPDATE_EVENT, handleSuggestedStrategyUpdate);
   }, [isSuggestedStrategyVisible, queueSuggestedStrategyCellIds, socket, storeRef]);
 
+  // 9) Sync the initial balance from the query response into the store.
   useEffect(() => {
     const nextServerBalance = extractBalanceAmount(balanceResponse);
     if (nextServerBalance === null) return;
@@ -339,6 +350,7 @@ export function useTradingGridSocketEffects({
     useGameStore.setState({ serverBalance: nextServerBalance, balance: nextServerBalance });
   }, [balanceResponse]);
 
+  // 10) Listen for realtime balance updates; apply only to the current user (if payload has userId).
   useEffect(() => {
     if (!isSocketLike(socket)) return;
 
@@ -358,6 +370,7 @@ export function useTradingGridSocketEffects({
     return () => socket.off(BALANCE_UPDATE_EVENT, handleBalanceUpdate);
   }, [resolvedUserAddress, socket]);
 
+  // 11) Listen for realtime order updates and forward them to the reducer/update handler.
   useEffect(() => {
     if (!isSocketLike(socket)) return;
 
@@ -366,12 +379,14 @@ export function useTradingGridSocketEffects({
     return () => socket.off(ORDER_UPDATE_EVENT, handleOrderUpdate);
   }, [socket, updateOrder]);
 
+  // 12) Backfill orders from the query response to sync the initial state.
   useEffect(() => {
     const orders = extractUserOrders(userOrdersResponse);
     if (orders.length === 0) return;
     orders.forEach((orderPayload) => updateOrder(orderPayload));
   }, [updateOrder, userOrdersResponse]);
 
+  // 13) Listen to additional follow-order events and handle them the same way as overlay follow updates.
   useEffect(() => {
     if (!isSocketLike(socket) || !isFollowTradeVisible || enabledFollowTargetIds.length === 0) return;
 

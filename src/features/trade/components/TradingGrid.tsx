@@ -123,6 +123,7 @@ type TradingGridProps = {
 export const TradingGrid: React.FC<TradingGridProps> = ({
   initialFollowRefCode = null,
 }) => {
+  // Market selector drives REST/socket endpoints and resets grid state on change.
   const [selectedMarketSymbol, setSelectedMarketSymbol] = useState(MARKET_SYMBOL);
   const selectedMarketId = useMemo(
     () => toMarketId(selectedMarketSymbol),
@@ -140,6 +141,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const queryClient = useQueryClient();
   const { data: wldUsdPrice } = useWldUsdPrice();
   // ── Store selectors ────────────────────────────────────────────────────────
+  // Read-only slices from zustand store for render + side-effects.
   const cells = useGameStore((s) => s.cells);
   const history = useGameStore((s) => s.history);
   const basePrice = useGameStore((s) => s.basePrice);
@@ -171,6 +173,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
   const { address } = useAccount();
   const { isAuthenticated, isLoggingIn, username, walletAddress } = useAuth();
+  // Resolve the active user wallet from World App first, then auth provider, then wagmi.
   const isMiniApp = MiniKit.isInWorldApp();
   const miniKitWalletAddress = isMiniApp
     ? (MiniKit.user?.walletAddress ?? null)
@@ -180,6 +183,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       parseAddress(miniKitWalletAddress ?? walletAddress ?? address ?? null),
     [address, miniKitWalletAddress, walletAddress],
   );
+  // Queries used by grid auth, follow trade and user balance/order hydration.
   const { data: wssKeyResponse } = useAuthControllerGetWssKey({
     query: {
       enabled: isAuthenticated && !isLoggingIn,
@@ -221,6 +225,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     },
   });
 
+  // Derived follow-trade options after status normalization + wallet de-duplication.
   const resolvedWssKey = extractWssKey(wssKeyResponse);
   const activeFollowings = useMemo(
     () =>
@@ -266,11 +271,12 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     [availableFollowTargetIds],
   );
   // ── Refs ───────────────────────────────────────────────────────────────────
+  // Imperative canvas DOM handles and remount key (used after major resize/market reset).
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [canvasInstanceKey, setCanvasInstanceKey] = useState(0);
 
-  // Live values kept in refs to avoid re-triggering the rAF loop
+  // Live values in refs keep the animation loop stable without hook dependency churn.
   const initialIsMobile =
     typeof window !== "undefined" ? window.innerWidth < 640 : false;
   const initialMinZoom = initialIsMobile ? MOBILE_ZOOM_MIN : DESKTOP_ZOOM_MIN;
@@ -302,6 +308,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const rafRef = useRef<number>(0);
   const previousWinningCellIdsRef = useRef<Set<string>>(new Set());
   const previewCellIdRef = useRef<string | null>(null);
+  // Keep backing store size in sync with DPR for sharp rendering on high-density screens.
   const syncCanvasSize = useCallback((canvas: HTMLCanvasElement | null) => {
     if (!canvas) return;
 
@@ -317,6 +324,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     (node: HTMLCanvasElement | null) => {
       canvasRef.current = node;
       syncCanvasSize(node);
+      // Draw immediately after mount so the first frame appears without waiting for next rAF tick.
       if (node) drawRef.current();
     },
     [syncCanvasSize],
@@ -386,6 +394,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     };
   });
 
+  // `isReady` gates data layers so the user does not see partially hydrated frames.
   const [isReady, setIsReady] = useState(false);
 
   // Clear stale store data from the previous mount so the loading gate
@@ -394,6 +403,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     resetGridData();
   }, [resetGridData]);
 
+  // Overlay mode toggles. Suggested strategy and follow trade are mutually exclusive.
   const [suggestedStrategyEnabled, setSuggestedStrategyEnabled] =
     useState(false);
   const [suggestedStrategyEnabledDraft, setSuggestedStrategyEnabledDraft] =
@@ -432,6 +442,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       walletAddress,
       resolvedUserAddress,
     });
+  // Derived overlay anchors for share/win elements, updated from draw() each frame.
   const shareTargetsRef = useRef<ShareOverlayTarget[]>([]);
   const shareTargetIdsHashRef = useRef("");
   const lastFollowOverlayUpdateAtRef = useRef(0);
@@ -479,6 +490,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     () => new Set(Object.keys(activeWinEffectByCellId)),
     [activeWinEffectByCellId],
   );
+  // Follow-trade currently supports selecting exactly one target at a time.
   const ensureSingleFollowTargetConfig = useCallback(
     (source: Record<string, boolean>) => {
       const nextConfig: Record<string, boolean> = {};
@@ -515,6 +527,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         : nextValue;
     });
   }, [ensureSingleFollowTargetConfig]);
+  // Sheet-ready follow target options (label/subtitle/enabled) for UI rendering.
   const followTradeTargetsDraft = useMemo(
     () =>
       availableFollowTargets.map((target) => ({
@@ -552,6 +565,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, [followReferralCode]);
   const followReferralStats = FOLLOW_REFERRAL_STATS;
 
+  // Resolve referral input to a canonical wallet address (address literal or @username).
   const resolveFollowTargetWallet = useCallback(async (refCode: string) => {
     const normalizedRefCode = normalizeReferralCode(refCode);
     if (!normalizedRefCode) {
@@ -596,6 +610,11 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     [handleCloseFollowReferralModal],
   );
 
+  // Confirm flow for referral modal:
+  // 1) ensure signed-in state
+  // 2) resolve wallet target
+  // 3) register follow relation
+  // 4) refresh following list + enable follow-trade mode
   const handleFollowByReferral = useCallback(async () => {
     if (!followReferralCode) return;
     if (!isAuthenticated || isLoggingIn) {
@@ -689,6 +708,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     resolvedFollowTargetWallet,
   ]);
 
+  // Keep storeRef overlay data in sync with UI toggles so draw() can read directly from refs.
   useEffect(() => {
     if (!followReferralCode) {
       return;
@@ -751,6 +771,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     suggestedStrategyCellIdsRef.current = suggestedStrategyCellIds;
   }, [suggestedStrategyCellIds]);
 
+  // Apply follow overlay activities with throttling to avoid high-frequency socket churn.
   const applyFollowOverlayActivities = useCallback(
     (activities: FollowOverlayActivity[]) => {
       if (activities.length === 0) return;
@@ -789,6 +810,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     [applyFollowOverlayActivities],
   );
 
+  // Merge current + incoming suggested cells and remove cells that are already behind chart head.
   const applySuggestedStrategyCellIds = useCallback(
     (incomingCellIds: string[]) => {
       lastSuggestedStrategyUpdateAtRef.current = Date.now();
@@ -833,6 +855,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     [applySuggestedStrategyCellIds],
   );
 
+  // Reset queue state when follow-trade overlay is hidden.
   useEffect(() => {
     if (isFollowTradeVisible) {
       lastFollowOverlayUpdateAtRef.current = 0;
@@ -847,6 +870,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     }
   }, [isFollowTradeVisible]);
 
+  // Reset queue state when suggested-strategy overlay is hidden.
   useEffect(() => {
     if (isSuggestedStrategyVisible) {
       lastSuggestedStrategyUpdateAtRef.current = 0;
@@ -861,6 +885,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     }
   }, [isSuggestedStrategyVisible]);
 
+  // Cleanup pending timers on unmount.
   useEffect(() => {
     return () => {
       if (followOverlayFlushTimerRef.current) {
@@ -872,6 +897,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     };
   }, []);
 
+  // Lazy-refresh following list only when any follow-related UI is visible.
   useEffect(() => {
     if (
       !isAuthenticated ||
@@ -898,6 +924,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, [resolvedWssKey, setWssKey]);
 
 
+  // Socket hook hydrates grid/history, order state, follow activities and strategy suggestions.
   useTradingGridSocketEffects({
     marketId: selectedMarketId,
     marketSocketPath,
@@ -957,6 +984,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     previousWinningCellIdsRef.current = nextWinningCellIds;
   }, [cells, bets, pendingBets, pendingWins]);
 
+  // Win-effect lifecycle:
+  // track newly hit bet cells and start one visual pulse per transition.
   useEffect(
     () => {
       if (Object.keys(activeWinEffectByCellId).length === 0) return;
@@ -994,6 +1023,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     [activeWinEffectByCellId],
   );
 
+  // Convert incoming history ticks into smooth price-motion segments for the line renderer.
   useEffect(() => {
     if (history.length === 0) return;
 
@@ -1118,6 +1148,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, [getMinZoom, syncCanvasSize]);
 
   // ── Hit-test ───────────────────────────────────────────────────────────────
+  // Strict hit-test for betting: only returns a currently valid/interactive cell.
+  // This is used by click/tap handlers before calling placeBet.
   const hitTest = useCallback((cx: number, cy: number) => {
     const layout = computeLayout(
       transformRef.current,
@@ -1129,6 +1161,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     return hitTestCell(cx, cy, layout, storeRef.current, nowRef.current);
   }, []);
 
+  // Broad hit-test for hover/preview UX: returns any cell under pointer
+  // (even when it cannot be bet right now).
   const hitTestAny = useCallback((cx: number, cy: number) => {
     const layout = computeLayout(
       transformRef.current,
@@ -1140,6 +1174,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     return hitTestAnyCell(cx, cy, layout, storeRef.current);
   }, []);
 
+  // Share sheet derived state for selected cell (amount/profit/ROI/time + USD approximations).
   const selectedShareCell = useMemo(
     () => cells.find((cell) => cell.id === shareCellId) ?? null,
     [cells, shareCellId],
@@ -1219,6 +1254,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     [],
   );
 
+  // Position HTML overlay elements over canvas cells using latest per-frame target coordinates.
   const syncShareOverlayPositions = useCallback(
     (targets: ShareOverlayTarget[]) => {
       const targetById = new Map(
@@ -1271,6 +1307,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     );
     const store = storeRef.current;
     const isMobile = isMobileRef.current;
+    // Render-time store projection:
+    // - smooth display history while animating line
+    // - filter follow activities by enabled target
+    // - optionally include suggested cells
     const animatedPriceStore = {
       ...store,
       history: buildDisplayHistory(
@@ -1288,6 +1328,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         ? store.suggestedStrategyCellIds
         : [],
     };
+    // Compute share/win overlay anchor positions from currently visible winning cells.
     const nextShareTargets: ShareOverlayTarget[] = [];
     for (const cell of store.cells) {
       if (cell.status !== "hit") continue;
@@ -1382,12 +1423,13 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     isSuggestedStrategyVisible,
   ]);
 
-  // Keep drawRef in sync so the resize observer always calls the latest draw
+  // Keep drawRef in sync so the resize observer always calls the latest draw.
   useEffect(() => {
     drawRef.current = draw;
   });
 
   // ── Animation loop ─────────────────────────────────────────────────────────
+  // Keep `nowRef` aligned whenever server offset changes.
   useEffect(() => {
     nowRef.current = Date.now() + serverTimeOffset;
   }, [serverTimeOffset]);
@@ -1413,6 +1455,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, []);
 
   useEffect(() => {
+    // Main render loop:
+    // advances time, animates camera price, checks win transitions and paints canvas.
     // Keep bet-status transitions visually immediate when the chart head crosses
     // a cell boundary. 1s cadence causes noticeable lag; run at sub-frame cadence.
     const WIN_CHECK_INTERVAL_MS = 50;
@@ -1496,6 +1540,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         }
       }
 
+      // Sync HTML overlays to latest canvas geometry.
       const nextTargets = shareTargetsRef.current;
       syncShareOverlayPositions(nextTargets);
       const nextIdsHash = nextTargets
@@ -1516,6 +1561,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, [draw, syncShareOverlayPositions]);
 
   // ── Interaction ────────────────────────────────────────────────────────────
+  // Centralized pointer/touch interaction for the grid:
+  // - resolve pointer -> cell via hitTest/hitTestAny
+  // - trigger placeBet on click/tap when target cell is eligible
+  // - manage preview, drag-pan and zoom state
   const {
     isDragging,
     handleWheel,
@@ -1555,6 +1604,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
 
   // ── Loading state ──────────────────────────────────────────────────────────
 
+  // Top-bar display helpers.
   const displayPrice =
     currentPrice > 0 ? livePriceFormatter.format(currentPrice) : "--";
   const displayMarketPrice =
@@ -1563,6 +1613,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     clearPreviewCell();
     resetTransform();
   }, [clearPreviewCell, resetTransform]);
+  // Hard reset visual/runtime state when market changes to prevent stale carry-over.
   const handleMarketChange = useCallback(
     (nextMarketSymbol: string) => {
       if (nextMarketSymbol === selectedMarketSymbol) return;
@@ -1581,6 +1632,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     },
     [resetGridData, selectedMarketSymbol],
   );
+  // Open overlay sheet from current committed mode into editable draft state.
   const handleOpenOverlaySheet = useCallback(() => {
     const nextSuggestedStrategyEnabled = suggestedStrategyEnabled;
     const nextFollowTradeEnabled =
@@ -1591,6 +1643,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     setIsOverlaySheetOpen(true);
   }, [followTradeEnabled, followTradeTargetEnabled, suggestedStrategyEnabled]);
 
+  // Close overlay sheet and discard draft-only changes.
   const handleCloseOverlaySheet = useCallback(() => {
     const nextSuggestedStrategyEnabled = suggestedStrategyEnabled;
     const nextFollowTradeEnabled =
@@ -1627,6 +1680,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     },
     [ensureSingleFollowTargetConfig],
   );
+  // Commit draft settings to active overlay mode.
   const handleApplyOverlayMode = useCallback(() => {
     const nextSuggestedStrategyEnabled = suggestedStrategyEnabledDraft;
     const nextFollowTradeEnabled =
