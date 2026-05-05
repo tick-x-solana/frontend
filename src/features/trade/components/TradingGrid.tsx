@@ -959,7 +959,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       const hasTrackedStake =
         (bets[cell.id] || 0) > 0 ||
         (pendingBets[cell.id] || 0) > 0 ||
-        pendingWins[cell.id] !== undefined;
+        pendingWins[cell.id] !== undefined ||
+        settledOutcomes[cell.id] !== undefined;
       if (!hasTrackedStake) return;
 
       nextWinningCellIds.add(cell.id);
@@ -982,7 +983,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     }
 
     previousWinningCellIdsRef.current = nextWinningCellIds;
-  }, [cells, bets, pendingBets, pendingWins]);
+  }, [cells, bets, pendingBets, pendingWins, settledOutcomes]);
 
   // Win-effect lifecycle:
   // track newly hit bet cells and start one visual pulse per transition.
@@ -1335,7 +1336,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       const hasTrackedStake =
         (store.bets[cell.id] || 0) > 0 ||
         (store.pendingBets[cell.id] || 0) > 0 ||
-        store.pendingWins[cell.id] !== undefined;
+        store.pendingWins[cell.id] !== undefined ||
+        store.settledOutcomes[cell.id] !== undefined;
       if (!hasTrackedStake) continue;
 
       const x = layout.toCanvasX(cell.timeWindowStart);

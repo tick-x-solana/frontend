@@ -35,6 +35,13 @@ import StarIcon from "./star.svg";
 import UserIdIcon from "./user-id.svg";
 import UserIcon from "./user.svg";
 import WalletIcon from "./wallet.svg";
+import Leaderboard1stBody from "./leaderboard/1st-body.svg?react";
+import Leaderboard1stHead from "./leaderboard/1s-head.svg?react";
+import Leaderboard2ndBody from "./leaderboard/2nd-body.svg?react";
+import Leaderboard2ndHead from "./leaderboard/2nd-head.svg?react";
+import LeaderboardBottom from "./leaderboard/leaderboard-bottom.svg?react";
+import LeaderboardDot from "./leaderboard/dot.svg?react";
+import LeaderboardLight from "./leaderboard/light.svg?react";
 
 export {
   AddCircleIcon,
@@ -74,4 +81,11 @@ export {
   UserIcon,
   UserIdIcon,
   WalletIcon,
+  Leaderboard1stBody,
+  Leaderboard1stHead,
+  Leaderboard2ndBody,
+  Leaderboard2ndHead,
+  LeaderboardBottom,
+  LeaderboardDot,
+  LeaderboardLight,
 };

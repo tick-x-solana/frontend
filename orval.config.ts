@@ -1,8 +1,7 @@
 import { defineConfig } from "orval";
 
 const swaggerTarget =
-  process.env.ORVAL_SWAGGER_URL ??
-  "https://api-tap-fun-chainlink.nysm.work/swagger/json";
+  process.env.ORVAL_SWAGGER_URL ?? "https://api.tickx.finance/swagger/json";
 
 export default defineConfig({
   api: {

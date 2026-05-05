@@ -626,8 +626,14 @@ export const useGameStore = create<GameState>((set) => ({
           const resolvedPayoutFromParts = hasSettledPayoutParts
             ? (settledBasePayout ?? 0) + (settledBonusPayout ?? 0)
             : null;
+          const mult =
+            rewardRateNum ??
+            state.cells.find((c) => c.id === cellId)?.multiplier ??
+            0;
+          const fallbackPayoutFromStake =
+            baseAmount > 0 ? baseAmount * Math.max(mult, 0) : null;
           const resolvedPayout =
-            resolvedPayoutFromParts ?? settledPayout ?? null;
+            resolvedPayoutFromParts ?? settledPayout ?? fallbackPayoutFromStake;
           const isHumanVerified = (settledBonusPayout ?? 0) > 0;
 
           nextSettledOutcomes[cellId] = {
@@ -644,12 +650,6 @@ export const useGameStore = create<GameState>((set) => ({
 
           if (resolvedPayout !== null && resolvedPayout > 0) {
             nextPendingWins[cellId] = resolvedPayout;
-          } else if (baseAmount > 0) {
-            const mult =
-              rewardRateNum ??
-              state.cells.find((c) => c.id === cellId)?.multiplier ??
-              0;
-            nextPendingWins[cellId] = baseAmount * Math.max(mult, 0);
           }
         } else {
           delete nextPendingWins[cellId];
