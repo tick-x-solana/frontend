@@ -6,6 +6,29 @@ import {
   getLatestChartTime,
 } from "@/src/features/trade/gridTiming";
 import type { FollowedOrderActivity } from "@/src/features/trade/orderFollow";
+import {
+  MODE_INTERVAL_SECONDS,
+  MODE_PRICE_STEP,
+  DEFAULT_BET_AMOUNT_WLD,
+  MAX_FOLLOWED_ORDER_ACTIVITIES,
+} from "./storeConstants";
+import {
+  normalizeTs,
+  toFiniteNumber,
+  toNonNegativeFiniteNumber,
+  toNonEmptyString,
+  getServerNow,
+  blendServerOffset,
+  statusForWindow,
+  mapRemoteCells,
+  keepLatestGridSnapshot,
+  sortGridCells,
+  extractPriceStepFromCells,
+  resolveOrderCellId,
+  resolveRewardRate,
+} from "./storeUtils";
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface PricePoint {
   time: number;
@@ -59,6 +82,8 @@ interface GameState {
   followedOrderActivities: FollowedOrderActivity[];
   betAmount: number;
   serverTimeOffset: number;
+  priceStepChangedAt: number | null;
+
   setBetAmount: (amount: number) => void;
   placeBet: (cellId: string, amount: number) => void;
   checkWinEffects: (now: number) => void;
@@ -72,199 +97,7 @@ interface GameState {
   resetGridData: () => void;
 }
 
-const MODE_INTERVAL_SECONDS = 5;
-const MODE_PRICE_STEP = 25;
-const DEFAULT_BET_AMOUNT_WLD = 1;
-const MAX_FOLLOWED_ORDER_ACTIVITIES = 200;
-// Very slow smoothing (2%) so each price tick moves serverTimeOffset by at most
-// ~120ms — shift of ~0.8px at typical zoom. Faster convergence would cause
-// nowRef to jump each tick, shifting the entire viewport.
-const SERVER_OFFSET_SMOOTHING = 0.02;
-
-const toCellId = (
-  startTs: number,
-  endTs: number,
-  lowerPrice: string,
-  upperPrice: string,
-) => `${startTs}:${endTs}:${lowerPrice}:${upperPrice}`;
-
-function statusForWindow(
-  now: number,
-  startTs: number,
-  endTs: number,
-): CellData["status"] {
-  if (now > endTs) return "past";
-  if (now >= startTs && now <= endTs) return "active";
-  return "active";
-}
-
-function normalizeTs(ts?: number): number {
-  if (!ts || !Number.isFinite(ts)) return Date.now();
-  return ts > 1_000_000_000_000 ? ts : ts * 1000;
-}
-
-function toMsIfFinite(ts: number | null | undefined): number | null {
-  if (typeof ts !== "number" || !Number.isFinite(ts)) return null;
-  return ts > 1_000_000_000_000 ? ts : ts * 1000;
-}
-
-function toFiniteNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
-function toNonNegativeFiniteNumber(value: unknown): number | null {
-  const parsed = toFiniteNumber(value);
-  if (parsed === null) return null;
-  return parsed >= 0 ? parsed : null;
-}
-
-function toNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function parseOrderIdCellParts(orderId: unknown) {
-  if (typeof orderId !== "string") return null;
-  const parts = orderId.split(":");
-  if (parts.length < 5) return null;
-  const start = parts[parts.length - 4];
-  const end = parts[parts.length - 3];
-  const lower = parts[parts.length - 2];
-  const upper = parts[parts.length - 1];
-  return { start, end, lower, upper };
-}
-
-function resolveOrderCellId(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  const record = payload as Record<string, unknown>;
-  const cell =
-    record.cell && typeof record.cell === "object" && !Array.isArray(record.cell)
-      ? (record.cell as Record<string, unknown>)
-      : null;
-  const orderIdParts = parseOrderIdCellParts(record.orderId);
-
-  const startRaw =
-    record.cellTimeStart ??
-    record.startTs ??
-    cell?.startTs ??
-    orderIdParts?.start;
-  const endRaw =
-    record.cellTimeEnd ??
-    record.endTs ??
-    cell?.endTs ??
-    orderIdParts?.end;
-  const lowerRaw = record.lowerPrice ?? cell?.lowerPrice ?? orderIdParts?.lower;
-  const upperRaw = record.upperPrice ?? cell?.upperPrice ?? orderIdParts?.upper;
-
-  const startMs = toMsIfFinite(toFiniteNumber(startRaw));
-  const endMs = toMsIfFinite(toFiniteNumber(endRaw));
-  const lower = toNonEmptyString(lowerRaw);
-  const upper = toNonEmptyString(upperRaw);
-
-  if (startMs === null || endMs === null || !lower || !upper) return null;
-  return toCellId(startMs, endMs, lower, upper);
-}
-
-function resolveRewardRate(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  const record = payload as Record<string, unknown>;
-  const cell =
-    record.cell && typeof record.cell === "object" && !Array.isArray(record.cell)
-      ? (record.cell as Record<string, unknown>)
-      : null;
-  return toNonEmptyString(record.rewardRate) ?? toNonEmptyString(cell?.rewardRate);
-}
-
-function getServerNow(serverTimeOffset: number): number {
-  return Date.now() + serverTimeOffset;
-}
-
-function blendServerOffset(
-  previousOffset: number,
-  nextObservedOffset: number,
-): number {
-  if (!Number.isFinite(nextObservedOffset)) return previousOffset;
-  if (!Number.isFinite(previousOffset)) return nextObservedOffset;
-
-  const delta = nextObservedOffset - previousOffset;
-  // Only snap on very large divergence (>30s) — e.g. first tick after reconnect.
-  // Smaller deltas use the slow EMA so serverTimeOffset drifts gradually.
-  if (Math.abs(delta) > 30000) return nextObservedOffset;
-
-  return previousOffset + delta * SERVER_OFFSET_SMOOTHING;
-}
-
-function mapRemoteCells(remoteCells: RemoteCell[], now: number): CellData[] {
-  return remoteCells
-    .map((remote) => {
-      const lower = Number(remote.lowerPrice);
-      const upper = Number(remote.upperPrice);
-      if (!Number.isFinite(lower) || !Number.isFinite(upper)) return null;
-
-      const startTs = toMsIfFinite(remote.startTs);
-      const endTs = toMsIfFinite(remote.endTs);
-      if (startTs === null || endTs === null) return null;
-      const priceLevel = (lower + upper) / 2;
-      const multiplier = Number(remote.rewardRate);
-      const id = toCellId(startTs, endTs, remote.lowerPrice, remote.upperPrice);
-
-      return {
-        id,
-        timeWindowStart: startTs,
-        timeWindowEnd: endTs,
-        priceLevel,
-        multiplier: Number.isFinite(multiplier) ? multiplier : 0,
-        status: statusForWindow(now, startTs, endTs),
-        original: remote,
-      };
-    })
-    .filter((cell): cell is CellData => cell !== null);
-}
-
-/**
- * Some backend bursts may include cells from multiple grid snapshots in one payload.
- * Keep only the newest snapshot to avoid mixing old/new windows and distorting
- * the visible grid shape after fast price moves.
- */
-function keepLatestGridSnapshot(remoteCells: RemoteCell[]): RemoteCell[] {
-  if (remoteCells.length <= 1) return remoteCells;
-
-  let latestGridTs: number | null = null;
-  for (const cell of remoteCells) {
-    const gridTsMs = toMsIfFinite(cell.gridTs);
-    if (gridTsMs === null) continue;
-    if (latestGridTs === null || gridTsMs > latestGridTs) {
-      latestGridTs = gridTsMs;
-    }
-  }
-
-  if (latestGridTs === null) return remoteCells;
-  return remoteCells.filter((cell) => toMsIfFinite(cell.gridTs) === latestGridTs);
-}
-
-function sortGridCells(a: CellData, b: CellData): number {
-  if (a.timeWindowStart !== b.timeWindowStart) {
-    return a.timeWindowStart - b.timeWindowStart;
-  }
-  return b.priceLevel - a.priceLevel;
-}
-
-function extractPriceStepFromCells(cells: Array<{ lowerPrice: string; upperPrice: string }>): number | null {
-  for (const cell of cells) {
-    const lower = Number(cell.lowerPrice);
-    const upper = Number(cell.upperPrice);
-    if (!Number.isFinite(lower) || !Number.isFinite(upper)) continue;
-    const step = Math.abs(upper - lower);
-    if (step > 0) return step;
-  }
-  return null;
-}
+// ─── Store ─────────────────────────────────────────────────────────────────────
 
 export const useGameStore = create<GameState>((set) => ({
   balance: 0,
@@ -284,8 +117,10 @@ export const useGameStore = create<GameState>((set) => ({
   followedOrderActivities: [],
   betAmount: DEFAULT_BET_AMOUNT_WLD,
   serverTimeOffset: 0,
+  priceStepChangedAt: null,
 
-  resetGridData: () => set({ cells: [], history: [], currentPrice: 0, basePrice: 0 }),
+  resetGridData: () =>
+    set({ cells: [], history: [], currentPrice: 0, basePrice: 0 }),
 
   setBetAmount: (amount) => set({ betAmount: amount }),
 
@@ -293,6 +128,7 @@ export const useGameStore = create<GameState>((set) => ({
 
   setWssKey: (wssKey) => set({ wssKey }),
 
+  /** Adds or replaces a followed-order activity entry, keeping the list bounded. */
   upsertFollowedOrderActivity: (activity) =>
     set((state) => {
       const nextActivities = state.followedOrderActivities.filter(
@@ -307,34 +143,23 @@ export const useGameStore = create<GameState>((set) => ({
       nextActivities.sort((a, b) => b.observedAt - a.observedAt);
 
       return {
-        followedOrderActivities: nextActivities.slice(
-          0,
-          MAX_FOLLOWED_ORDER_ACTIVITIES,
-        ),
+        followedOrderActivities: nextActivities.slice(0, MAX_FOLLOWED_ORDER_ACTIVITIES),
       };
     }),
 
+  /** Merges a batch of historical price points into the running history, deduplicating by timestamp. */
   hydrateHistory: (points) =>
     set((state) => {
       if (!Array.isArray(points) || points.length === 0) return state;
 
       const historyByTime = new Map<number, number>();
       for (const point of state.history) {
-        if (
-          Number.isFinite(point?.time) &&
-          Number.isFinite(point?.price) &&
-          point.time > 0
-        ) {
+        if (Number.isFinite(point?.time) && Number.isFinite(point?.price) && point.time > 0) {
           historyByTime.set(point.time, point.price);
         }
       }
-
       for (const point of points) {
-        if (
-          Number.isFinite(point?.time) &&
-          Number.isFinite(point?.price) &&
-          point.time > 0
-        ) {
+        if (Number.isFinite(point?.time) && Number.isFinite(point?.price) && point.time > 0) {
           historyByTime.set(point.time, point.price);
         }
       }
@@ -349,77 +174,72 @@ export const useGameStore = create<GameState>((set) => ({
 
       const latestPoint = mergedHistory[mergedHistory.length - 1];
       const observedOffset = latestPoint.time - Date.now();
-      const nextServerTimeOffset = blendServerOffset(
-        state.serverTimeOffset,
-        observedOffset,
-      );
 
       return {
         history: mergedHistory,
         currentPrice: latestPoint.price,
         basePrice: state.basePrice > 0 ? state.basePrice : mergedHistory[0].price,
-        serverTimeOffset: nextServerTimeOffset,
+        serverTimeOffset: blendServerOffset(state.serverTimeOffset, observedOffset),
       };
     }),
 
+  /** Appends a live price tick, guarding against backwards-in-time points. */
   updatePrice: (price, ts) =>
     set((state) => {
       if (!Number.isFinite(price)) return state;
       const normalizedTs = normalizeTs(ts);
 
-      // Never append a history point that goes backwards in time — this would
-      // cause the price-line dot to jump left each time a tick arrives without
-      // a valid timestamp (normalizeTs falls back to Date.now() which can be
-      // several seconds behind the last server-timestamped point).
+      // Never append a point that goes backwards — normalizeTs falls back to
+      // Date.now() which can lag behind the last server-timestamped point.
       const lastHistoryTime =
-        state.history.length > 0
-          ? state.history[state.history.length - 1].time
-          : 0;
+        state.history.length > 0 ? state.history[state.history.length - 1].time : 0;
       const safeTs = Math.max(normalizedTs, lastHistoryTime);
 
-      const nextHistory = [...state.history, { time: safeTs, price }];
       const observedOffset = normalizedTs - Date.now();
-      const nextServerTimeOffset = blendServerOffset(
-        state.serverTimeOffset,
-        observedOffset,
-      );
+
       return {
         currentPrice: price,
-        history: nextHistory,
+        history: [...state.history, { time: safeTs, price }],
         basePrice: state.basePrice > 0 ? state.basePrice : price,
-        serverTimeOffset: nextServerTimeOffset,
+        serverTimeOffset: blendServerOffset(state.serverTimeOffset, observedOffset),
       };
     }),
 
+  /**
+   * Replaces the visible grid with the latest server snapshot.
+   * Cells with local bet/outcome state are retained or merged to avoid losing
+   * user-facing feedback across grid refreshes.
+   */
   updateGrid: (remoteCells) =>
     set((state) => {
       if (!Array.isArray(remoteCells)) return {};
-      // gridTs can represent grid window anchors (often in the future), not
-      // authoritative server "now". Sync clock only from price timestamps.
+
       const now = getServerNow(state.serverTimeOffset);
       const chartTime = getLatestChartTime(state.history, now);
       const hideThresholdTime = getCellHideThresholdTime(chartTime);
       const latestSnapshotCells = keepLatestGridSnapshot(remoteCells);
+
       const previousPriceStep = extractPriceStepFromCells(
-        state.cells.map((cell) => ({
-          lowerPrice: cell.original.lowerPrice,
-          upperPrice: cell.original.upperPrice,
-        })),
+        state.cells.map((c) => ({ lowerPrice: c.original.lowerPrice, upperPrice: c.original.upperPrice })),
       );
       const nextPriceStep = extractPriceStepFromCells(latestSnapshotCells);
       const hasPriceStepChanged =
         previousPriceStep !== null &&
         nextPriceStep !== null &&
         Math.abs(previousPriceStep - nextPriceStep) > 1e-8;
-      // When grid price step changes, old active bets no longer align with
-      // the new row geometry; clear active order states to avoid mis-rendering.
+
+      // When the grid row height changes, existing bet positions no longer
+      // align with new rows — clear all local order state to avoid mis-rendering.
+      const priceStepChangedAt = hasPriceStepChanged ? Date.now() : state.priceStepChangedAt;
       const activeBets = hasPriceStepChanged ? {} : state.bets;
       const activePendingBets = hasPriceStepChanged ? {} : state.pendingBets;
       const activePendingWins = hasPriceStepChanged ? {} : state.pendingWins;
-      const activeSettledOutcomes = hasPriceStepChanged
-        ? {}
-        : state.settledOutcomes;
+      const activeSettledOutcomes = hasPriceStepChanged ? {} : state.settledOutcomes;
+
       const existingCellById = new Map(state.cells.map((cell) => [cell.id, cell]));
+
+      // Merge incoming cells: freeze multiplier/status for cells with active bets
+      // so that server-pushed odds changes don't alter the user's committed view.
       const incomingCells = mapRemoteCells(latestSnapshotCells, now).map((incomingCell) => {
         const existingCell = existingCellById.get(incomingCell.id);
         if (!existingCell) return incomingCell;
@@ -439,13 +259,14 @@ export const useGameStore = create<GameState>((set) => ({
             existingCell.status === "hit" || existingCell.status === "lose"
               ? existingCell.status
               : incomingCell.status,
-          original: {
-            ...incomingCell.original,
-            rewardRate: existingCell.original.rewardRate,
-          },
+          original: { ...incomingCell.original, rewardRate: existingCell.original.rewardRate },
         };
       });
-      const incomingIds = new Set(incomingCells.map((cell) => cell.id));
+
+      const incomingIds = new Set(incomingCells.map((c) => c.id));
+
+      // Retain old cells that are no longer in the new snapshot only when they
+      // carry local state (bet/outcome) to keep feedback visible.
       const retainedCells = state.cells
         .filter((cell) => {
           if (incomingIds.has(cell.id)) return false;
@@ -456,12 +277,8 @@ export const useGameStore = create<GameState>((set) => ({
             activePendingWins[cell.id] !== undefined ||
             activeSettledOutcomes[cell.id] !== undefined;
           const settledOutcome = activeSettledOutcomes[cell.id];
-          const shouldKeepSettledWin =
-            settledOutcome?.isWin === true || cell.status === "hit";
+          const shouldKeepSettledWin = settledOutcome?.isWin === true || cell.status === "hit";
 
-          // For plain cells, trust the newest server snapshot immediately.
-          // Only preserve cells that have local tracked state (bet/outcome),
-          // so user feedback remains visible while avoiding mixed-grid artifacts.
           if (shouldKeepSettledWin) return true;
           return hasTrackedState && cell.timeWindowEnd > hideThresholdTime;
         })
@@ -479,16 +296,15 @@ export const useGameStore = create<GameState>((set) => ({
         pendingBets: activePendingBets,
         pendingWins: activePendingWins,
         settledOutcomes: activeSettledOutcomes,
+        priceStepChangedAt,
       };
     }),
 
+  /** Moves a bet from pending to the grid; no-ops if a bet already exists for this cell. */
   placeBet: (cellId, amount) =>
     set((state) => {
       if (amount <= 0 || amount > state.balance) return state;
-      if (
-        (state.bets[cellId] || 0) > 0 ||
-        (state.pendingBets[cellId] || 0) > 0
-      ) {
+      if ((state.bets[cellId] || 0) > 0 || (state.pendingBets[cellId] || 0) > 0) {
         return state;
       }
       return {
@@ -496,6 +312,10 @@ export const useGameStore = create<GameState>((set) => ({
       };
     }),
 
+  /**
+   * Advances cell display statuses based on the current chart time.
+   * Reveals settled outcomes and transitions cells to "hit" or "lose" when appropriate.
+   */
   checkWinEffects: (now) =>
     set((state) => {
       const nextPendingBets = { ...state.pendingBets };
@@ -525,32 +345,22 @@ export const useGameStore = create<GameState>((set) => ({
           if (settledOutcome.isWin) {
             nextStatus = "hit";
             if (!settledOutcome.revealed) {
-              if (nextPendingWins[cell.id] !== undefined) {
-                delete nextPendingWins[cell.id];
-              }
-              nextSettledOutcomes[cell.id] = {
-                ...settledOutcome,
-                revealed: true,
-              };
+              delete nextPendingWins[cell.id];
+              nextSettledOutcomes[cell.id] = { ...settledOutcome, revealed: true };
               changed = true;
             }
           } else {
-            // Keep losing cells neutral until the chart actually reaches them.
-            // This avoids painting other same-row bets red too early when the
-            // backend settles outcomes ahead of the visual chart head.
+            // Delay "lose" paint until the chart visually reaches the cell end
+            // to avoid marking other same-row bets red prematurely.
             nextStatus = chartPassedCellEnd ? "lose" : isPast ? "past" : "active";
             if (!settledOutcome.revealed) {
-              nextSettledOutcomes[cell.id] = {
-                ...settledOutcome,
-                revealed: true,
-              };
+              nextSettledOutcomes[cell.id] = { ...settledOutcome, revealed: true };
               changed = true;
             }
           }
         } else if (chartPassedCellEnd) {
-          // Show immediate loss feedback when chart passes the bet cell end but
-          // no settled outcome has arrived yet; a later WIN update can still
-          // override this to "hit".
+          // Optimistic loss feedback while waiting for the server settlement.
+          // A WIN update arriving later will still override this to "hit".
           nextStatus = "lose";
         } else if (cell.status === "hit" || cell.status === "lose") {
           nextStatus = cell.status;
@@ -576,15 +386,17 @@ export const useGameStore = create<GameState>((set) => ({
       };
     }),
 
+  /**
+   * Handles a WebSocket order event: confirms pending bets, records settled
+   * outcomes (win/lose/payout), and rejects cancelled orders.
+   */
   updateOrder: (payload) =>
     set((state) => {
       const cellId = resolveOrderCellId(payload);
       if (!cellId) return state;
 
       const record =
-        payload && typeof payload === "object"
-          ? (payload as Record<string, unknown>)
-          : null;
+        payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
       if (!record) return state;
 
       const status = toNonEmptyString(record.status)?.toUpperCase();
@@ -593,10 +405,7 @@ export const useGameStore = create<GameState>((set) => ({
       const rewardRateNum = toFiniteNumber(rewardRate);
       const statusIsWin = status === "WIN" || status === "WON";
       const statusIsLose =
-        status === "LOSE" ||
-        status === "LOST" ||
-        status === "FAIL" ||
-        status === "FAILED";
+        status === "LOSE" || status === "LOST" || status === "FAIL" || status === "FAILED";
       const isSettled = status === "SETTLED" || statusIsWin || statusIsLose;
 
       const nextPendingBets = { ...state.pendingBets };
@@ -609,21 +418,16 @@ export const useGameStore = create<GameState>((set) => ({
       if (status === "OPEN") {
         const confirmedAmount = amount ?? nextPendingBets[cellId] ?? 0;
         delete nextPendingBets[cellId];
-        if (confirmedAmount > 0) {
-          nextBets[cellId] = confirmedAmount;
-        }
+        if (confirmedAmount > 0) nextBets[cellId] = confirmedAmount;
         changed = true;
       }
 
       if (isSettled) {
         const settledWinRaw = record.settledWin ?? record.outcome;
         const settledWinText = toNonEmptyString(settledWinRaw)?.toUpperCase();
-        const hasExplicitOutcome =
-          settledWinRaw !== undefined && settledWinRaw !== null;
+        const hasExplicitOutcome = settledWinRaw !== undefined && settledWinRaw !== null;
         const outcomeIsWin =
-          settledWinRaw === true ||
-          settledWinText === "TRUE" ||
-          settledWinText === "WIN";
+          settledWinRaw === true || settledWinText === "TRUE" || settledWinText === "WIN";
         const outcomeIsLose =
           settledWinRaw === false ||
           settledWinText === "FALSE" ||
@@ -648,26 +452,17 @@ export const useGameStore = create<GameState>((set) => ({
 
         if (resolvedIsWin) {
           const baseAmount = amount ?? nextBets[cellId] ?? nextPendingBets[cellId] ?? 0;
-          const settledBasePayout = toNonNegativeFiniteNumber(
-            record.settledBasePayout,
-          );
-          const settledBonusPayout = toNonNegativeFiniteNumber(
-            record.settledBonusPayout,
-          );
+          const settledBasePayout = toNonNegativeFiniteNumber(record.settledBasePayout);
+          const settledBonusPayout = toNonNegativeFiniteNumber(record.settledBonusPayout);
           const settledPayout = toNonNegativeFiniteNumber(record.settledPayout);
-          const hasSettledPayoutParts =
-            settledBasePayout !== null || settledBonusPayout !== null;
+          const hasSettledPayoutParts = settledBasePayout !== null || settledBonusPayout !== null;
           const resolvedPayoutFromParts = hasSettledPayoutParts
             ? (settledBasePayout ?? 0) + (settledBonusPayout ?? 0)
             : null;
           const mult =
-            rewardRateNum ??
-            state.cells.find((c) => c.id === cellId)?.multiplier ??
-            0;
-          const fallbackPayoutFromStake =
-            baseAmount > 0 ? baseAmount * Math.max(mult, 0) : null;
-          const resolvedPayout =
-            resolvedPayoutFromParts ?? settledPayout ?? fallbackPayoutFromStake;
+            rewardRateNum ?? state.cells.find((c) => c.id === cellId)?.multiplier ?? 0;
+          const fallbackPayoutFromStake = baseAmount > 0 ? baseAmount * Math.max(mult, 0) : null;
+          const resolvedPayout = resolvedPayoutFromParts ?? settledPayout ?? fallbackPayoutFromStake;
           const isHumanVerified = (settledBonusPayout ?? 0) > 0;
 
           nextSettledOutcomes[cellId] = {
@@ -689,11 +484,8 @@ export const useGameStore = create<GameState>((set) => ({
           delete nextPendingWins[cellId];
         }
 
-        const resolvedStakeAmount =
-          amount ?? nextBets[cellId] ?? nextPendingBets[cellId] ?? 0;
-        if (resolvedStakeAmount > 0 && !nextBets[cellId]) {
-          nextBets[cellId] = resolvedStakeAmount;
-        }
+        const resolvedStakeAmount = amount ?? nextBets[cellId] ?? nextPendingBets[cellId] ?? 0;
+        if (resolvedStakeAmount > 0 && !nextBets[cellId]) nextBets[cellId] = resolvedStakeAmount;
         delete nextPendingBets[cellId];
         changed = true;
       }
@@ -711,14 +503,11 @@ export const useGameStore = create<GameState>((set) => ({
 
         const nextCell: CellData = { ...cell };
         const chartPassedCellEnd = now >= cell.timeWindowEnd;
+
         if (rewardRate) {
-          const resolvedMultiplier =
-            rewardRateNum !== null ? rewardRateNum : cell.multiplier;
+          const resolvedMultiplier = rewardRateNum !== null ? rewardRateNum : cell.multiplier;
           nextCell.multiplier = resolvedMultiplier;
-          nextCell.original = {
-            ...cell.original,
-            rewardRate,
-          };
+          nextCell.original = { ...cell.original, rewardRate };
         }
 
         if (isSettled) {

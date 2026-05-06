@@ -171,6 +171,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const betAmount = useGameStore((s) => s.betAmount);
   const balance = useGameStore((s) => s.balance);
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
+  const priceStepChangedAt = useGameStore((s) => s.priceStepChangedAt);
   const { address } = useAccount();
   const { isAuthenticated, isLoggingIn, username, walletAddress } = useAuth();
   // Resolve the active user wallet from World App first, then auth provider, then wagmi.
@@ -355,6 +356,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     suggestedStrategyCellIds: [],
     dims: null,
   });
+  useEffect(() => {
+    if (priceStepChangedAt === null) return;
+    appToast.warning("Price range updated — your bets are cleared from view, but will still settle normally.");
+  }, [priceStepChangedAt]);
   useEffect(() => {
     // Recompute dims only when cells change — avoids Map/sort allocation every frame.
     const prevCells = storeRef.current.cells;
