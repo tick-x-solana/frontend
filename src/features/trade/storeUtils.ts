@@ -60,18 +60,37 @@ export function getServerNow(serverTimeOffset: number): number {
 /**
  * Blends a new observed server-time offset into the running estimate using a slow EMA.
  * Snaps immediately on large divergence (e.g. after reconnect) to avoid stale state.
+ * Also snaps on the very first observation (previousOffset === 0) to avoid slow convergence from zero.
  */
 export function blendServerOffset(
   previousOffset: number,
   nextObservedOffset: number,
+  isFirstObservation = false,
 ): number {
   if (!Number.isFinite(nextObservedOffset)) return previousOffset;
   if (!Number.isFinite(previousOffset)) return nextObservedOffset;
+
+  // Snap immediately on first real observation or large divergence (e.g. reconnect)
+  if (isFirstObservation) return nextObservedOffset;
 
   const delta = nextObservedOffset - previousOffset;
   if (Math.abs(delta) > SERVER_OFFSET_SNAP_THRESHOLD_MS) return nextObservedOffset;
 
   return previousOffset + delta * SERVER_OFFSET_SMOOTHING;
+}
+
+/**
+ * Computes the clock offset from a server timestamp, compensating for one-way
+ * network latency using the elapsed time since the request was initiated (rttMs / 2).
+ *
+ * observedOffset = serverTs - clientNow  (includes clock drift + one-way latency)
+ * correctedOffset = serverTs + rttMs/2 - clientNow  (removes latency bias)
+ */
+export function computeOffsetWithLatency(serverTs: number, requestStartMs: number): number {
+  const clientNow = Date.now();
+  const rttMs = clientNow - requestStartMs;
+  const halfRtt = Math.max(0, rttMs / 2);
+  return serverTs + halfRtt - clientNow;
 }
 
 // ─── Cell status ───────────────────────────────────────────────────────────────
@@ -118,6 +137,62 @@ export function mapRemoteCells(remoteCells: RemoteCell[], now: number): CellData
       };
     })
     .filter((cell): cell is CellData => cell !== null);
+}
+
+/**
+ * Reconstructs a RemoteCell from order payload fields so settled/open orders can
+ * still be rendered even after the live grid snapshot has moved past that cell.
+ */
+export function resolveRemoteCellFromOrderPayload(payload: unknown): RemoteCell | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const record = payload as Record<string, unknown>;
+  const cell =
+    record.cell && typeof record.cell === "object" && !Array.isArray(record.cell)
+      ? (record.cell as Record<string, unknown>)
+      : null;
+  const orderIdParts = parseOrderIdCellParts(record.orderId);
+
+  const startRaw =
+    record.cellTimeStart ?? record.startTs ?? cell?.startTs ?? orderIdParts?.start;
+  const endRaw =
+    record.cellTimeEnd ?? record.endTs ?? cell?.endTs ?? orderIdParts?.end;
+  const lowerPrice =
+    toNonEmptyString(record.lowerPrice) ??
+    toNonEmptyString(cell?.lowerPrice) ??
+    orderIdParts?.lower ??
+    null;
+  const upperPrice =
+    toNonEmptyString(record.upperPrice) ??
+    toNonEmptyString(cell?.upperPrice) ??
+    orderIdParts?.upper ??
+    null;
+
+  const startTs = toMsIfFinite(toFiniteNumber(startRaw));
+  const endTs = toMsIfFinite(toFiniteNumber(endRaw));
+  if (startTs === null || endTs === null || !lowerPrice || !upperPrice) {
+    return null;
+  }
+
+  const rewardRate = resolveRewardRate(payload) ?? "0";
+  const gridTs =
+    toMsIfFinite(
+      toFiniteNumber(record.gridTs ?? record.cellGridTs ?? cell?.gridTs),
+    ) ?? startTs;
+  const gridSignature =
+    toNonEmptyString(record.gridSignature) ??
+    toNonEmptyString(cell?.gridSignature) ??
+    `order:${startTs}:${endTs}:${lowerPrice}:${upperPrice}`;
+
+  return {
+    gridTs,
+    startTs,
+    endTs,
+    lowerPrice,
+    upperPrice,
+    rewardRate,
+    gridSignature,
+  };
 }
 
 /**

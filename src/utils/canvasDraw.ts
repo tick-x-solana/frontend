@@ -295,11 +295,14 @@ export function drawBetCells(
   // Closing window: cells whose window starts within this many ms cannot be bet on
   const CLOSING_MS = 5000;
   for (const cell of cells) {
-    if (cell.timeWindowEnd < firstTime || cell.timeWindowStart > lastTime)
+    const isHit = cell.status === "hit";
+    // Win cells are drawn even if they've scrolled past the left viewport edge
+    // so the green state remains visible until the cell is completely off-canvas.
+    if (!isHit && (cell.timeWindowEnd < firstTime || cell.timeWindowStart > lastTime))
       continue;
+    if (cell.timeWindowStart > lastTime) continue;
 
     const isPast = now >= cell.timeWindowEnd;
-    const isHit = cell.status === "hit";
     const isLose = cell.status === "lose";
     const betAmountVal = bets[cell.id] || 0;
     const pendingBetAmountVal = pendingBets[cell.id] || 0;
@@ -487,7 +490,7 @@ export function drawBetCells(
           ? `rgba(22,46,71,${0.2 + plainCellVisualAlpha * 0.4})`
           : COLOR_GRID;
       ctx.lineWidth = 0.5;
-      ctx.strokeRect(rx, ry, rw, rh);
+      ctx.strokeRect(rx + 0.5, ry + 0.5, Math.max(0, rw - 1), Math.max(0, rh - 1));
     }
 
     // ── Text ──

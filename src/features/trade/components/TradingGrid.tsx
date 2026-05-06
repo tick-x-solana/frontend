@@ -12,6 +12,7 @@
 
 import React, {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useCallback,
@@ -24,7 +25,6 @@ import { useAuth } from "@/src/components/providers/AuthProvider";
 import {
   extractFollowedOrderActivities,
   extractOrderFollowings,
-  extractWssKey,
 } from "@/src/features/trade/orderFollow";
 import { getLatestChartTime } from "@/src/features/trade/gridTiming";
 import type { RemoteCell } from "@/src/features/trade/store";
@@ -34,7 +34,6 @@ import {
   authControllerGetChallenge,
   getOrderFollowControllerListFollowingQueryKey,
   useAccountControllerGetBalance,
-  useAuthControllerGetWssKey,
   useOrderControllerGetUserOrders,
   useOrderFollowControllerListFollowing,
   useOrderFollowControllerRegister,
@@ -158,8 +157,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const followedOrderActivities = useGameStore(
     (s) => s.followedOrderActivities,
   );
-  const setConnection = useGameStore((s) => s.setConnection);
-  const setWssKey = useGameStore((s) => s.setWssKey);
   const upsertFollowedOrderActivity = useGameStore(
     (s) => s.upsertFollowedOrderActivity,
   );
@@ -167,6 +164,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const hydrateHistory = useGameStore((s) => s.hydrateHistory);
   const updateGrid = useGameStore((s) => s.updateGrid);
   const updateOrder = useGameStore((s) => s.updateOrder);
+  const cancelPendingBet = useGameStore((s) => s.cancelPendingBet);
+  const wssKeyExpiresAt = useGameStore((s) => s.wssKeyExpiresAt);
   const resetGridData = useGameStore((s) => s.resetGridData);
   const betAmount = useGameStore((s) => s.betAmount);
   const balance = useGameStore((s) => s.balance);
@@ -185,13 +184,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     [address, miniKitWalletAddress, walletAddress],
   );
   // Queries used by grid auth, follow trade and user balance/order hydration.
-  const { data: wssKeyResponse } = useAuthControllerGetWssKey({
-    query: {
-      enabled: isAuthenticated && !isLoggingIn,
-      staleTime: 0,
-      refetchOnWindowFocus: false,
-    },
-  });
   const {
     data: followingResponse,
     refetch: refetchFollowing,
@@ -227,7 +219,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   });
 
   // Derived follow-trade options after status normalization + wallet de-duplication.
-  const resolvedWssKey = extractWssKey(wssKeyResponse);
   const activeFollowings = useMemo(
     () =>
       extractOrderFollowings(followingResponse).filter((item) => {
@@ -360,17 +351,19 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     if (priceStepChangedAt === null) return;
     appToast.warning("Price range updated — your bets are cleared from view, but will still settle normally.");
   }, [priceStepChangedAt]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     // Recompute dims only when cells change — avoids Map/sort allocation every frame.
     const prevCells = storeRef.current.cells;
     const nextDims =
       cells !== prevCells
         ? computeGridDimensions(
-            cells.map((c) => ({
-              ...c.original,
-              startTs: c.timeWindowStart,
-              endTs: c.timeWindowEnd,
-            })),
+            cells
+              .filter((c) => c.status !== "hit" && c.status !== "lose")
+              .map((c) => ({
+                ...c.original,
+                startTs: c.timeWindowStart,
+                endTs: c.timeWindowEnd,
+              })),
           )
         : storeRef.current.dims;
     storeRef.current = {
@@ -924,11 +917,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     refetchFollowing,
   ]);
 
-  useEffect(() => {
-    setWssKey(resolvedWssKey);
-  }, [resolvedWssKey, setWssKey]);
-
-
   // Socket hook hydrates grid/history, order state, follow activities and strategy suggestions.
   useTradingGridSocketEffects({
     marketId: selectedMarketId,
@@ -936,12 +924,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     updatePrice,
     updateGrid,
     hydrateHistory,
-    setConnection,
-    socket,
     isAuthenticated,
     resolvedUserAddress,
-    setWssKey,
-    wssKey,
     isFollowTradeVisible,
     enabledFollowTargetIds,
     enabledFollowTargetsKey,
@@ -951,6 +935,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     balanceResponse,
     userOrdersResponse,
     updateOrder,
+    cancelPendingBet,
+    pendingBets,
+    wssKeyExpiresAt,
     storeRef,
   });
 
@@ -1345,11 +1332,14 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         store.settledOutcomes[cell.id] !== undefined;
       if (!hasTrackedStake) continue;
 
-      const x = layout.toCanvasX(cell.timeWindowStart);
+      const xRaw = layout.toCanvasX(cell.timeWindowStart);
       const y = layout.toCellY(cell.priceLevel + layout.effectivePriceStep / 2);
       const w = layout.cellW;
       const h = layout.cellH;
-      if (x + w < 0 || x > layout.w || y + h < 0 || y > layout.h) continue;
+      if (xRaw > layout.w || y + h < 0 || y > layout.h) continue;
+      // Pin win cells that have scrolled past the left edge so the share button
+      // remains reachable until the user scrolls back or navigates away.
+      const x = Math.max(0, xRaw);
       const settled = store.settledOutcomes[cell.id];
       const hasSettledBreakdown =
         settled?.basePayout !== null || settled?.bonusPayout !== null;

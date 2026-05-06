@@ -9,6 +9,9 @@ export const LARGE_MOVE_DURATION_FACTOR_MIN = 0.38;
 export const RESIZE_COMMIT_DEBOUNCE_MS = 180;
 export const FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS = 250;
 export const SUGGESTED_STRATEGY_MIN_HOLD_MS = 3000;
+// Refresh the socket auth key shortly before expiry so the user channel can
+// re-subscribe without waiting for an invalid-signature error from the server.
+export const WSS_KEY_REFRESH_BEFORE_EXPIRY_MS = 5000;
 export const FOLLOW_ORDER_EVENTS = [
   "order_follow",
   "order_follow_update",

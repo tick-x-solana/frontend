@@ -19,12 +19,14 @@ import {
   toNonEmptyString,
   getServerNow,
   blendServerOffset,
+  computeOffsetWithLatency,
   statusForWindow,
   mapRemoteCells,
   keepLatestGridSnapshot,
   sortGridCells,
   extractPriceStepFromCells,
   resolveOrderCellId,
+  resolveRemoteCellFromOrderPayload,
   resolveRewardRate,
 } from "./storeUtils";
 
@@ -79,19 +81,22 @@ interface GameState {
   settledOutcomes: Record<string, SettledOutcome>;
   socket: unknown | null;
   wssKey: string | null;
+  wssKeyExpiresAt: number | null;
   followedOrderActivities: FollowedOrderActivity[];
   betAmount: number;
   serverTimeOffset: number;
+  serverTimeOffsetReady: boolean;
   priceStepChangedAt: number | null;
 
   setBetAmount: (amount: number) => void;
   placeBet: (cellId: string, amount: number) => void;
+  cancelPendingBet: (cellId: string) => void;
   checkWinEffects: (now: number) => void;
   setConnection: (socket: unknown | null, wssKey?: string | null) => void;
-  setWssKey: (wssKey: string | null) => void;
+  setWssKey: (wssKey: string | null, expiresAt?: number | null) => void;
   upsertFollowedOrderActivity: (activity: FollowedOrderActivity) => void;
   hydrateHistory: (points: PricePoint[]) => void;
-  updatePrice: (price: number, ts?: number) => void;
+  updatePrice: (price: number, ts?: number, receivedAt?: number) => void;
   updateGrid: (remoteCells: RemoteCell[]) => void;
   updateOrder: (payload: unknown) => void;
   resetGridData: () => void;
@@ -114,9 +119,11 @@ export const useGameStore = create<GameState>((set) => ({
   settledOutcomes: {},
   socket: null,
   wssKey: null,
+  wssKeyExpiresAt: null,
   followedOrderActivities: [],
   betAmount: DEFAULT_BET_AMOUNT_WLD,
   serverTimeOffset: 0,
+  serverTimeOffsetReady: false,
   priceStepChangedAt: null,
 
   resetGridData: () =>
@@ -126,7 +133,7 @@ export const useGameStore = create<GameState>((set) => ({
 
   setConnection: (socket, wssKey = null) => set({ socket, wssKey }),
 
-  setWssKey: (wssKey) => set({ wssKey }),
+  setWssKey: (wssKey, expiresAt = null) => set({ wssKey, wssKeyExpiresAt: expiresAt }),
 
   /** Adds or replaces a followed-order activity entry, keeping the list bounded. */
   upsertFollowedOrderActivity: (activity) =>
@@ -173,18 +180,17 @@ export const useGameStore = create<GameState>((set) => ({
       if (mergedHistory.length === 0) return state;
 
       const latestPoint = mergedHistory[mergedHistory.length - 1];
-      const observedOffset = latestPoint.time - Date.now();
 
       return {
         history: mergedHistory,
         currentPrice: latestPoint.price,
         basePrice: state.basePrice > 0 ? state.basePrice : mergedHistory[0].price,
-        serverTimeOffset: blendServerOffset(state.serverTimeOffset, observedOffset),
+        // Binance candle timestamps are close times, not "now" — don't use them for offset
       };
     }),
 
   /** Appends a live price tick, guarding against backwards-in-time points. */
-  updatePrice: (price, ts) =>
+  updatePrice: (price, ts, receivedAt) =>
     set((state) => {
       if (!Number.isFinite(price)) return state;
       const normalizedTs = normalizeTs(ts);
@@ -195,13 +201,30 @@ export const useGameStore = create<GameState>((set) => ({
         state.history.length > 0 ? state.history[state.history.length - 1].time : 0;
       const safeTs = Math.max(normalizedTs, lastHistoryTime);
 
-      const observedOffset = normalizedTs - Date.now();
+      // Only update offset when the server sent a real timestamp.
+      // Use RTT-compensated offset: ts was generated server-side before transit,
+      // so we add half the elapsed time since receivedAt to approximate one-way latency.
+      if (!ts || !Number.isFinite(normalizedTs)) {
+        return {
+          currentPrice: price,
+          history: [...state.history, { time: safeTs, price }],
+          basePrice: state.basePrice > 0 ? state.basePrice : price,
+        };
+      }
+
+      const correctedOffset = computeOffsetWithLatency(normalizedTs, receivedAt ?? Date.now());
+      const nextOffset = blendServerOffset(
+        state.serverTimeOffset,
+        correctedOffset,
+        !state.serverTimeOffsetReady,
+      );
 
       return {
         currentPrice: price,
         history: [...state.history, { time: safeTs, price }],
         basePrice: state.basePrice > 0 ? state.basePrice : price,
-        serverTimeOffset: blendServerOffset(state.serverTimeOffset, observedOffset),
+        serverTimeOffset: nextOffset,
+        serverTimeOffsetReady: true,
       };
     }),
 
@@ -230,7 +253,9 @@ export const useGameStore = create<GameState>((set) => ({
 
       // When the grid row height changes, existing bet positions no longer
       // align with new rows — clear all local order state to avoid mis-rendering.
-      const priceStepChangedAt = hasPriceStepChanged ? Date.now() : state.priceStepChangedAt;
+      const priceStepChangedAt = hasPriceStepChanged
+        ? (state.priceStepChangedAt ?? Date.now())
+        : null;
       const activeBets = hasPriceStepChanged ? {} : state.bets;
       const activePendingBets = hasPriceStepChanged ? {} : state.pendingBets;
       const activePendingWins = hasPriceStepChanged ? {} : state.pendingWins;
@@ -298,6 +323,15 @@ export const useGameStore = create<GameState>((set) => ({
         settledOutcomes: activeSettledOutcomes,
         priceStepChangedAt,
       };
+    }),
+
+  /** Removes a pending bet for a cell — used when socket confirmation times out. */
+  cancelPendingBet: (cellId) =>
+    set((state) => {
+      if (!(cellId in state.pendingBets)) return state;
+      const nextPendingBets = { ...state.pendingBets };
+      delete nextPendingBets[cellId];
+      return { pendingBets: nextPendingBets };
     }),
 
   /** Moves a bet from pending to the grid; no-ops if a bet already exists for this cell. */
@@ -413,7 +447,22 @@ export const useGameStore = create<GameState>((set) => ({
       const nextPendingWins = { ...state.pendingWins };
       const nextSettledOutcomes = { ...state.settledOutcomes };
       const now = getServerNow(state.serverTimeOffset);
+      const existingCell = state.cells.find((cell) => cell.id === cellId) ?? null;
+      const reconstructedCell = existingCell
+        ? null
+        : mapRemoteCells(
+            [resolveRemoteCellFromOrderPayload(payload)].filter(
+              (cell): cell is RemoteCell => cell !== null,
+            ),
+            now,
+          )[0] ?? null;
+      const cellsWithRecoveredTarget =
+        reconstructedCell !== null ? [...state.cells, reconstructedCell] : state.cells;
       let changed = false;
+
+      if (reconstructedCell !== null) {
+        changed = true;
+      }
 
       if (status === "OPEN") {
         const confirmedAmount = amount ?? nextPendingBets[cellId] ?? 0;
@@ -460,7 +509,10 @@ export const useGameStore = create<GameState>((set) => ({
             ? (settledBasePayout ?? 0) + (settledBonusPayout ?? 0)
             : null;
           const mult =
-            rewardRateNum ?? state.cells.find((c) => c.id === cellId)?.multiplier ?? 0;
+            rewardRateNum ??
+            existingCell?.multiplier ??
+            reconstructedCell?.multiplier ??
+            0;
           const fallbackPayoutFromStake = baseAmount > 0 ? baseAmount * Math.max(mult, 0) : null;
           const resolvedPayout = resolvedPayoutFromParts ?? settledPayout ?? fallbackPayoutFromStake;
           const isHumanVerified = (settledBonusPayout ?? 0) > 0;
@@ -498,7 +550,7 @@ export const useGameStore = create<GameState>((set) => ({
         changed = true;
       }
 
-      const nextCells = state.cells.map((cell) => {
+      const nextCells = cellsWithRecoveredTarget.map((cell) => {
         if (cell.id !== cellId) return cell;
 
         const nextCell: CellData = { ...cell };

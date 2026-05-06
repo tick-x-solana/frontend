@@ -158,13 +158,19 @@ export function extractWssKey(response: unknown): string | null {
   return (
     asString(record.key) ??
     asString(record.signature) ??
-    asString(record.key) ??
     asString(record.token) ??
     asString(record.data) ??
     asString(readNestedRecord(record, "data")?.wssKey) ??
     asString(readNestedRecord(record, "data")?.signature) ??
     null
   );
+}
+
+export function extractWssKeyExpiry(response: unknown): number | null {
+  const record = asRecord(response);
+  if (!record) return null;
+  const raw = record.expiresAt ?? readNestedRecord(record, "data")?.expiresAt;
+  return readTimestamp(raw);
 }
 
 function readFollowingUsername(record: UnknownRecord): string | null {

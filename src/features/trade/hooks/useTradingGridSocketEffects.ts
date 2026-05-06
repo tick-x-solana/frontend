@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import {
   authControllerGetChallenge,
@@ -10,6 +10,7 @@ import type { CellData, RemoteCell } from "@/src/features/trade/store";
 import {
   extractFollowedOrderActivities,
   extractWssKey,
+  extractWssKeyExpiry,
 } from "@/src/features/trade/orderFollow";
 import {
   BALANCE_UPDATE_EVENT,
@@ -22,6 +23,7 @@ import {
   SUBSCRIBE_USER_EVENT,
   SUGGESTED_STRATEGY_UPDATE_EVENT,
   UNSUBSCRIBE_ORDER_FOLLOWS_EVENT,
+  WSS_KEY_REFRESH_BEFORE_EXPIRY_MS,
 } from "@/src/features/trade/components/tradingGrid.constants";
 import {
   extractBalanceAmount,
@@ -53,18 +55,16 @@ function isSocketLike(value: unknown): value is SocketLike {
   );
 }
 
+const PENDING_BET_TIMEOUT_MS = 3000;
+
 type UseTradingGridSocketEffectsParams = {
   marketId: string;
   marketSocketPath: string;
-  updatePrice: (price: number, ts?: number) => void;
+  updatePrice: (price: number, ts?: number, receivedAt?: number) => void;
   updateGrid: (cells: RemoteCell[]) => void;
   hydrateHistory: (history: Array<{ time: number; price: number }>) => void;
-  setConnection: (socket: unknown, wssKey: string | null) => void;
-  socket: unknown;
   isAuthenticated: boolean;
   resolvedUserAddress: string | null;
-  setWssKey: (wssKey: string | null) => void;
-  wssKey: string | null;
   isFollowTradeVisible: boolean;
   enabledFollowTargetIds: string[];
   enabledFollowTargetsKey: string;
@@ -74,6 +74,9 @@ type UseTradingGridSocketEffectsParams = {
   balanceResponse: unknown;
   userOrdersResponse: unknown;
   updateOrder: (payload: unknown) => void;
+  cancelPendingBet: (cellId: string) => void;
+  pendingBets: Record<string, number>;
+  wssKeyExpiresAt: number | null;
   storeRef: React.MutableRefObject<{ cells: CellData[] }>;
 };
 
@@ -83,12 +86,8 @@ export function useTradingGridSocketEffects({
   updatePrice,
   updateGrid,
   hydrateHistory,
-  setConnection,
-  socket,
   isAuthenticated,
   resolvedUserAddress,
-  setWssKey,
-  wssKey,
   isFollowTradeVisible,
   enabledFollowTargetIds,
   enabledFollowTargetsKey,
@@ -98,8 +97,13 @@ export function useTradingGridSocketEffects({
   balanceResponse,
   userOrdersResponse,
   updateOrder,
+  cancelPendingBet,
+  pendingBets,
+  wssKeyExpiresAt,
   storeRef,
 }: UseTradingGridSocketEffectsParams) {
+  const socketRef = useRef<SocketLike | null>(null);
+  const scheduledWssExpiryRef = useRef<number | null>(null);
   // 1) Load initial price history (Binance 1s candles) to hydrate the chart.
   useEffect(() => {
     const abortController = new AbortController();
@@ -115,7 +119,9 @@ export function useTradingGridSocketEffects({
           },
         );
         if (!response.ok) {
-          throw new Error(`Binance history request failed (${response.status})`);
+          throw new Error(
+            `Binance history request failed (${response.status})`,
+          );
         }
 
         const payload: unknown = await response.json();
@@ -123,7 +129,10 @@ export function useTradingGridSocketEffects({
         if (nextHistory.length > 0) hydrateHistory(nextHistory);
       } catch (error) {
         if (abortController.signal.aborted) return;
-        console.error("[TradingGrid] Failed to load Binance chart history", error);
+        console.error(
+          "[TradingGrid] Failed to load Binance chart history",
+          error,
+        );
       }
     };
 
@@ -140,12 +149,16 @@ export function useTradingGridSocketEffects({
     });
 
     liveSocket.on("price_now", (payload: unknown) => {
-      const data = payload as number | { price?: number | string; ts?: number; time?: number };
+      const receivedAt = Date.now();
+      const data = payload as
+        | number
+        | { price?: number | string; ts?: number; time?: number };
       const priceRaw = typeof data === "number" ? data : data?.price;
       const price = Number(priceRaw);
       if (!Number.isFinite(price)) return;
-      const ts = typeof data === "number" ? undefined : (data?.ts ?? data?.time);
-      updatePrice(price, ts);
+      const ts =
+        typeof data === "number" ? undefined : (data?.ts ?? data?.time);
+      updatePrice(price, ts, receivedAt);
     });
 
     liveSocket.on("grid_update", (payload: unknown) => {
@@ -154,8 +167,10 @@ export function useTradingGridSocketEffects({
         remoteCells = payload as RemoteCell[];
       } else if (payload && typeof payload === "object") {
         const wrapped = payload as { data?: unknown; grids?: unknown };
-        if (Array.isArray(wrapped.data)) remoteCells = wrapped.data as RemoteCell[];
-        if (Array.isArray(wrapped.grids)) remoteCells = wrapped.grids as RemoteCell[];
+        if (Array.isArray(wrapped.data))
+          remoteCells = wrapped.data as RemoteCell[];
+        if (Array.isArray(wrapped.grids))
+          remoteCells = wrapped.grids as RemoteCell[];
       }
 
       if (remoteCells) updateGrid(remoteCells);
@@ -169,6 +184,7 @@ export function useTradingGridSocketEffects({
   }, [marketSocketPath, updateGrid, updatePrice]);
 
   // 3) Connect the core/action socket for user/order-related events.
+  // Stored in a ref (not Zustand) so it never triggers re-renders or effect loops.
   useEffect(() => {
     const actionSocket = io("https://api.tickx.finance", {
       path: CORE_SOCKET_PATH,
@@ -176,16 +192,20 @@ export function useTradingGridSocketEffects({
       reconnection: true,
     });
 
-    setConnection(actionSocket, null);
+    socketRef.current = actionSocket;
+    useGameStore.getState().setConnection(actionSocket, null);
+
     return () => {
       actionSocket.disconnect();
-      setConnection(null, null);
+      socketRef.current = null;
+      useGameStore.getState().setConnection(null, null);
     };
-  }, [setConnection]);
+  }, []);
 
   // 4) When the user is authenticated: fetch wssKey + challenge + signature to subscribe to the user channel.
   // Re-subscribe every time the socket reconnects.
   useEffect(() => {
+    const socket = socketRef.current;
     if (!isSocketLike(socket)) return;
     const userAddress = resolvedUserAddress;
     if (!isAuthenticated || !userAddress) return;
@@ -195,16 +215,23 @@ export function useTradingGridSocketEffects({
     const subscribeUser = async () => {
       const wssKeyResponse = await authControllerGetWssKey();
       const nextWssKey = extractWssKey(wssKeyResponse);
+      const nextExpiresAt = extractWssKeyExpiry(wssKeyResponse);
       if (!nextWssKey) throw new Error("Missing WSS key");
 
-      setConnection(socket, nextWssKey);
-      setWssKey(nextWssKey);
+      useGameStore.getState().setConnection(socketRef.current, nextWssKey);
+      useGameStore.getState().setWssKey(nextWssKey, nextExpiresAt);
 
-      const challengeResponse = await authControllerGetChallenge({ address: userAddress });
+      const challengeResponse = await authControllerGetChallenge({
+        address: userAddress,
+      });
       const challenge = extractChallenge(challengeResponse);
       if (!challenge) throw new Error("Missing socket user challenge");
 
-      const signature = await signWssMessage(nextWssKey, userAddress, challenge);
+      const signature = await signWssMessage(
+        nextWssKey,
+        userAddress,
+        challenge,
+      );
       if (isDisposed) return;
 
       socket.emit(SUBSCRIBE_USER_EVENT, { userId: userAddress, signature });
@@ -223,21 +250,26 @@ export function useTradingGridSocketEffects({
       isDisposed = true;
       socket.off("connect", handleConnect);
     };
-  }, [isAuthenticated, resolvedUserAddress, setConnection, setWssKey, socket]);
+  }, [isAuthenticated, resolvedUserAddress]);
 
   // 5) Subscribe/unsubscribe follow targets (copy-trade) while the Follow panel is visible.
   // Unsubscribe in cleanup to avoid leaking subscriptions after closing the panel/changing targets.
   useEffect(() => {
+    const socket = socketRef.current;
     if (!isSocketLike(socket)) return;
     if (!isFollowTradeVisible) return;
-    if (!wssKey || enabledFollowTargetIds.length === 0 || !resolvedUserAddress) return;
+    const wssKey = useGameStore.getState().wssKey;
+    if (!wssKey || enabledFollowTargetIds.length === 0 || !resolvedUserAddress)
+      return;
 
     const userAddress = resolvedUserAddress;
     const activeWssKey = wssKey;
     let isDisposed = false;
 
     const getFollowSignature = async () => {
-      const challengeResponse = await authControllerGetChallenge({ address: userAddress });
+      const challengeResponse = await authControllerGetChallenge({
+        address: userAddress,
+      });
       const challenge = extractChallenge(challengeResponse);
       if (!challenge) throw new Error("Missing socket follow challenge");
       return signWssMessage(activeWssKey, userAddress, challenge);
@@ -286,19 +318,29 @@ export function useTradingGridSocketEffects({
     enabledFollowTargetIds,
     enabledFollowTargetsKey,
     isFollowTradeVisible,
-    wssKey,
     resolvedUserAddress,
-    socket,
   ]);
 
   // 6) Receive followed-order update events and push them to the overlay queue (cellId remapped to the current grid).
   useEffect(() => {
-    if (!isSocketLike(socket) || !isFollowTradeVisible || enabledFollowTargetIds.length === 0) return;
+    const socket = socketRef.current;
+    if (
+      !isSocketLike(socket) ||
+      !isFollowTradeVisible ||
+      enabledFollowTargetIds.length === 0
+    )
+      return;
 
     const handleFollowedOrderUpdate = (payload: unknown) => {
-      const activities = extractFollowedOrderActivities(payload, enabledFollowTargetIds)
+      const activities = extractFollowedOrderActivities(
+        payload,
+        enabledFollowTargetIds,
+      )
         .map((activity) => {
-          const resolvedCellId = resolveGridCellIdFromActivityCellId(activity.cellId, storeRef.current.cells);
+          const resolvedCellId = resolveGridCellIdFromActivityCellId(
+            activity.cellId,
+            storeRef.current.cells,
+          );
           if (resolvedCellId === activity.cellId) return activity;
           return { ...activity, cellId: resolvedCellId };
         })
@@ -308,76 +350,101 @@ export function useTradingGridSocketEffects({
     };
 
     socket.on(FOLLOWED_ORDER_UPDATE_EVENT, handleFollowedOrderUpdate);
-    return () => socket.off(FOLLOWED_ORDER_UPDATE_EVENT, handleFollowedOrderUpdate);
+    return () =>
+      socket.off(FOLLOWED_ORDER_UPDATE_EVENT, handleFollowedOrderUpdate);
   }, [
     enabledFollowTargetIds,
     enabledFollowTargetsKey,
     isFollowTradeVisible,
     queueFollowOverlayActivities,
-    socket,
     storeRef,
   ]);
 
   // 7) Subscribe to the suggested strategy channel when the strategy panel is visible.
   useEffect(() => {
+    const socket = socketRef.current;
     if (!isSocketLike(socket) || !isSuggestedStrategyVisible) return;
 
     const subscribe = () => socket.emit(SUBSCRIBE_SUGGESTED_STRATEGY_EVENT);
     if (socket.connected) subscribe();
     socket.on("connect", subscribe);
     return () => socket.off("connect", subscribe);
-  }, [isSuggestedStrategyVisible, socket]);
+  }, [isSuggestedStrategyVisible]);
 
   // 8) Receive suggested strategy updates and convert them to a list of valid cellIds.
   useEffect(() => {
+    const socket = socketRef.current;
     if (!isSocketLike(socket) || !isSuggestedStrategyVisible) return;
 
     const handleSuggestedStrategyUpdate = (payload: unknown) => {
-      const nextCellIds = extractSuggestedStrategyCellIds(payload, storeRef.current.cells);
+      const nextCellIds = extractSuggestedStrategyCellIds(
+        payload,
+        storeRef.current.cells,
+      );
       if (nextCellIds === null) return;
       queueSuggestedStrategyCellIds(nextCellIds);
     };
 
     socket.on(SUGGESTED_STRATEGY_UPDATE_EVENT, handleSuggestedStrategyUpdate);
-    return () => socket.off(SUGGESTED_STRATEGY_UPDATE_EVENT, handleSuggestedStrategyUpdate);
-  }, [isSuggestedStrategyVisible, queueSuggestedStrategyCellIds, socket, storeRef]);
+    return () =>
+      socket.off(
+        SUGGESTED_STRATEGY_UPDATE_EVENT,
+        handleSuggestedStrategyUpdate,
+      );
+  }, [
+    isSuggestedStrategyVisible,
+    queueSuggestedStrategyCellIds,
+    storeRef,
+  ]);
 
   // 9) Sync the initial balance from the query response into the store.
   useEffect(() => {
     const nextServerBalance = extractBalanceAmount(balanceResponse);
     if (nextServerBalance === null) return;
 
-    useGameStore.setState({ serverBalance: nextServerBalance, balance: nextServerBalance });
+    useGameStore.setState({
+      serverBalance: nextServerBalance,
+      balance: nextServerBalance,
+    });
   }, [balanceResponse]);
 
   // 10) Listen for realtime balance updates; apply only to the current user (if payload has userId).
   useEffect(() => {
+    const socket = socketRef.current;
     if (!isSocketLike(socket)) return;
 
     const normalizedCurrentUser = parseAddress(resolvedUserAddress);
 
     const handleBalanceUpdate = (payload: unknown) => {
       const payloadUserId = parseAddress(extractBalanceUserId(payload));
-      if (payloadUserId && (!normalizedCurrentUser || payloadUserId !== normalizedCurrentUser)) return;
+      if (
+        payloadUserId &&
+        (!normalizedCurrentUser || payloadUserId !== normalizedCurrentUser)
+      )
+        return;
 
       const nextServerBalance = extractBalanceAmount(payload);
       if (nextServerBalance === null) return;
 
-      useGameStore.setState({ serverBalance: nextServerBalance, balance: nextServerBalance });
+      useGameStore.setState({
+        serverBalance: nextServerBalance,
+        balance: nextServerBalance,
+      });
     };
 
     socket.on(BALANCE_UPDATE_EVENT, handleBalanceUpdate);
     return () => socket.off(BALANCE_UPDATE_EVENT, handleBalanceUpdate);
-  }, [resolvedUserAddress, socket]);
+  }, [resolvedUserAddress]);
 
   // 11) Listen for realtime order updates and forward them to the reducer/update handler.
   useEffect(() => {
+    const socket = socketRef.current;
     if (!isSocketLike(socket)) return;
 
     const handleOrderUpdate = (payload: unknown) => updateOrder(payload);
     socket.on(ORDER_UPDATE_EVENT, handleOrderUpdate);
     return () => socket.off(ORDER_UPDATE_EVENT, handleOrderUpdate);
-  }, [socket, updateOrder]);
+  }, [updateOrder]);
 
   // 12) Backfill orders from the query response to sync the initial state.
   useEffect(() => {
@@ -388,12 +455,24 @@ export function useTradingGridSocketEffects({
 
   // 13) Listen to additional follow-order events and handle them the same way as overlay follow updates.
   useEffect(() => {
-    if (!isSocketLike(socket) || !isFollowTradeVisible || enabledFollowTargetIds.length === 0) return;
+    const socket = socketRef.current;
+    if (
+      !isSocketLike(socket) ||
+      !isFollowTradeVisible ||
+      enabledFollowTargetIds.length === 0
+    )
+      return;
 
     const handleFollowedOrder = (payload: unknown) => {
-      const activities = extractFollowedOrderActivities(payload, enabledFollowTargetIds)
+      const activities = extractFollowedOrderActivities(
+        payload,
+        enabledFollowTargetIds,
+      )
         .map((activity) => {
-          const resolvedCellId = resolveGridCellIdFromActivityCellId(activity.cellId, storeRef.current.cells);
+          const resolvedCellId = resolveGridCellIdFromActivityCellId(
+            activity.cellId,
+            storeRef.current.cells,
+          );
           if (resolvedCellId === activity.cellId) return activity;
           return { ...activity, cellId: resolvedCellId };
         })
@@ -402,16 +481,155 @@ export function useTradingGridSocketEffects({
       queueFollowOverlayActivities(activities);
     };
 
-    FOLLOW_ORDER_EVENTS.forEach((event) => socket.on(event, handleFollowedOrder));
+    FOLLOW_ORDER_EVENTS.forEach((event) =>
+      socket.on(event, handleFollowedOrder),
+    );
     return () => {
-      FOLLOW_ORDER_EVENTS.forEach((event) => socket.off(event, handleFollowedOrder));
+      FOLLOW_ORDER_EVENTS.forEach((event) =>
+        socket.off(event, handleFollowedOrder),
+      );
     };
   }, [
     enabledFollowTargetIds,
     enabledFollowTargetsKey,
     isFollowTradeVisible,
     queueFollowOverlayActivities,
-    socket,
     storeRef,
   ]);
+
+  // 14) Handle "Invalid wss signature" errors: re-fetch wssKey and re-subscribe the user channel.
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!isSocketLike(socket) || !isAuthenticated || !resolvedUserAddress)
+      return;
+
+    const userAddress = resolvedUserAddress;
+    let isDisposed = false;
+
+    const resubscribe = async () => {
+      const wssKeyResponse = await authControllerGetWssKey();
+      const nextWssKey = extractWssKey(wssKeyResponse);
+      const nextExpiresAt = extractWssKeyExpiry(wssKeyResponse);
+      if (!nextWssKey || isDisposed) return;
+
+      useGameStore.getState().setConnection(socketRef.current, nextWssKey);
+      useGameStore.getState().setWssKey(nextWssKey, nextExpiresAt);
+
+      const challengeResponse = await authControllerGetChallenge({
+        address: userAddress,
+      });
+      const challenge = extractChallenge(challengeResponse);
+      if (!challenge || isDisposed) return;
+
+      const signature = await signWssMessage(nextWssKey, userAddress, challenge);
+      if (isDisposed) return;
+
+      socket.emit(SUBSCRIBE_USER_EVENT, { userId: userAddress, signature });
+    };
+
+    const isInvalidWssSignature = (payload: unknown): boolean => {
+      if (typeof payload === "string") {
+        return payload.toLowerCase().includes("invalid wss signature");
+      }
+      if (payload && typeof payload === "object") {
+        const record = payload as Record<string, unknown>;
+        const msg = record.message ?? record.msg ?? record.error;
+        return typeof msg === "string" && msg.toLowerCase().includes("invalid wss signature");
+      }
+      return false;
+    };
+
+    const handleInvalidSignature = (payload: unknown) => {
+      if (!isInvalidWssSignature(payload)) return;
+      void resubscribe().catch((error) => {
+        console.error("[TradingGrid] Failed to re-subscribe after invalid wss signature:", error);
+      });
+    };
+
+    // The server sends "Invalid wss signature" as a named "message" event.
+    // Also guard "error" and "exception" for other transports.
+    socket.on("message", handleInvalidSignature);
+    socket.on("error", handleInvalidSignature);
+    socket.on("exception", handleInvalidSignature);
+    return () => {
+      isDisposed = true;
+      socket.off("message", handleInvalidSignature);
+      socket.off("error", handleInvalidSignature);
+      socket.off("exception", handleInvalidSignature);
+    };
+  }, [isAuthenticated, resolvedUserAddress]);
+
+  // 15) Cancel pending bets that have not been confirmed by socket within 3 seconds.
+  useEffect(() => {
+    const pendingCellIds = Object.keys(pendingBets);
+    if (pendingCellIds.length === 0) return;
+
+    const timers = pendingCellIds.map((cellId) =>
+      setTimeout(() => cancelPendingBet(cellId), PENDING_BET_TIMEOUT_MS),
+    );
+
+    return () => timers.forEach(clearTimeout);
+  }, [cancelPendingBet, pendingBets]);
+
+  // 16) Proactively refresh the wssKey shortly before it expires so the connection
+  //     never goes invalid mid-session (complements the reactive socket message handler).
+  //     Guard with a ref so updating wssKeyExpiresAt after refresh doesn't re-trigger this effect.
+  useEffect(() => {
+    if (!isAuthenticated || !resolvedUserAddress || !wssKeyExpiresAt) return;
+
+    // Skip re-scheduling if we already have a timer for this exact expiry.
+    if (scheduledWssExpiryRef.current === wssKeyExpiresAt) return;
+    scheduledWssExpiryRef.current = wssKeyExpiresAt;
+
+    const msUntilExpiry = wssKeyExpiresAt - Date.now();
+    // If the key is already expired or expires within the configured refresh window, skip scheduling —
+    // the reactive handler (effect #14) covers the invalid-signature case.
+    if (msUntilExpiry <= WSS_KEY_REFRESH_BEFORE_EXPIRY_MS) return;
+    const refreshAfterMs =
+      msUntilExpiry - WSS_KEY_REFRESH_BEFORE_EXPIRY_MS;
+
+    const userAddress = resolvedUserAddress;
+    let isDisposed = false;
+
+    const timer = setTimeout(async () => {
+      if (isDisposed) return;
+      const socket = socketRef.current;
+      if (!isSocketLike(socket)) return;
+      try {
+        const wssKeyResponse = await authControllerGetWssKey();
+        const nextWssKey = extractWssKey(wssKeyResponse);
+        const nextExpiresAt = extractWssKeyExpiry(wssKeyResponse);
+        if (!nextWssKey || isDisposed) return;
+
+        // Only update the store if the new expiry is genuinely in the future
+        // to avoid scheduling another immediate refresh.
+        if (
+          nextExpiresAt !== null &&
+          nextExpiresAt - Date.now() > WSS_KEY_REFRESH_BEFORE_EXPIRY_MS
+        ) {
+          useGameStore.getState().setConnection(socketRef.current, nextWssKey);
+          useGameStore.getState().setWssKey(nextWssKey, nextExpiresAt);
+        } else {
+          useGameStore.getState().setConnection(socketRef.current, nextWssKey);
+          useGameStore.getState().setWssKey(nextWssKey, null);
+        }
+
+        const challengeResponse = await authControllerGetChallenge({ address: userAddress });
+        const challenge = extractChallenge(challengeResponse);
+        if (!challenge || isDisposed) return;
+
+        const signature = await signWssMessage(nextWssKey, userAddress, challenge);
+        if (isDisposed) return;
+
+        socket.emit(SUBSCRIBE_USER_EVENT, { userId: userAddress, signature });
+      } catch (error) {
+        console.error("[TradingGrid] Failed to proactively refresh wssKey:", error);
+      }
+    }, refreshAfterMs);
+
+    return () => {
+      isDisposed = true;
+      clearTimeout(timer);
+    };
+  }, [isAuthenticated, resolvedUserAddress, wssKeyExpiresAt]);
 }
