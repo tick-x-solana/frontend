@@ -1,8 +1,18 @@
 import React from "react";
 import { Copy, Eye, Info, LocateFixed, Share2, Wallet } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/src/components/shadcn/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/src/components/shadcn/dialog";
 import { Button } from "@/src/components/shadcn/button";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/src/components/shadcn/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/src/components/shadcn/select";
 import { Sheet } from "react-modal-sheet";
 import { cn } from "@/lib/utils";
 import OverlayModePanel from "@/src/features/trade/components/OverlayModePanel";
@@ -62,7 +72,7 @@ export function TradingGridTopBar({
                 className={cn(
                   "rounded-[8px] px-2 py-1.5 text-sm font-semibold tracking-[-0.01em]",
                   option.enabled
-                    ? "text-white focus:bg-surface-control-active focus:text-white"
+                    ? "focus:bg-surface-control-active text-white focus:text-white"
                     : "text-text-sub opacity-60",
                 )}
               >
@@ -70,7 +80,11 @@ export function TradingGridTopBar({
                   {option.iconSrc ? (
                     <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={option.iconSrc} alt="" className="h-full w-full object-contain" />
+                      <img
+                        src={option.iconSrc}
+                        alt=""
+                        className="h-full w-full object-contain"
+                      />
                     </span>
                   ) : (
                     <span className="bg-surface-control-active text-text-sub flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold">
@@ -78,32 +92,43 @@ export function TradingGridTopBar({
                     </span>
                   )}
                   <span>{option.symbol}</span>
-                  {!option.enabled ? <span className="text-hint ml-auto text-[10px] uppercase">Soon</span> : null}
+                  {!option.enabled ? (
+                    <span className="text-hint ml-auto text-[10px] uppercase">
+                      Soon
+                    </span>
+                  ) : null}
                 </span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <span className="text-text-sub truncate text-xs font-semibold tracking-[-0.01em]">{displayMarketPrice}</span>
+        <span className="text-text-sub truncate text-xs font-semibold tracking-[-0.01em]">
+          {displayMarketPrice}
+        </span>
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
         <GridActionButton aria-label="Market info" onClick={onOpenInfo}>
           <Info className="size-4" strokeWidth={1.75} />
         </GridActionButton>
+        {false && (
+          <GridActionButton
+            aria-label={
+              isSuggestedStrategyVisible || isFollowTradeVisible
+                ? "Overlay filters enabled. Open overlay settings"
+                : "Open overlay settings"
+            }
+            aria-haspopup="dialog"
+            active={isSuggestedStrategyVisible || isFollowTradeVisible}
+            onClick={onOpenOverlay}
+          >
+            <Eye className="size-4" strokeWidth={1.75} />
+          </GridActionButton>
+        )}
         <GridActionButton
-          aria-label={
-            isSuggestedStrategyVisible || isFollowTradeVisible
-              ? "Overlay filters enabled. Open overlay settings"
-              : "Open overlay settings"
-          }
-          aria-haspopup="dialog"
-          active={isSuggestedStrategyVisible || isFollowTradeVisible}
-          onClick={onOpenOverlay}
+          aria-label="Recenter trading grid"
+          onClick={onRecenter}
         >
-          <Eye className="size-4" strokeWidth={1.75} />
-        </GridActionButton>
-        <GridActionButton aria-label="Recenter trading grid" onClick={onRecenter}>
           <LocateFixed className="size-4" strokeWidth={1.75} />
         </GridActionButton>
       </div>
@@ -118,7 +143,11 @@ type FollowReferralDialogProps = {
   followReferralHandle: string | null;
   isFollowReferralAlreadyActive: boolean;
   resolvedFollowTargetWallet: string | null;
-  followReferralStats: ReadonlyArray<{ label: string; value: string; color: string }>;
+  followReferralStats: ReadonlyArray<{
+    label: string;
+    value: string;
+    color: string;
+  }>;
   formatWalletShort: (value: string) => string;
   isSubmittingFollowReferral: boolean;
   onCancel: () => void;
@@ -145,7 +174,9 @@ export function FollowReferralDialog(props: FollowReferralDialogProps) {
       <DialogContent className="pointer-events-none">
         <div className="border-border-main pointer-events-auto w-full max-w-[540px] rounded-[20px] border bg-[linear-gradient(112deg,var(--background-main)_0%,var(--surface-card-strong)_62%,var(--background-main)_100%)] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
           <div className="flex flex-col gap-4">
-            <DialogTitle className="text-text-heading text-xl font-semibold tracking-[-0.01em]">Start Follow Trade</DialogTitle>
+            <DialogTitle className="text-text-heading text-xl font-semibold tracking-[-0.01em]">
+              Start Follow Trade
+            </DialogTitle>
             <DialogDescription className="text-text-sub text-sm font-medium tracking-[-0.01em]">
               {followReferralCode
                 ? `Follow ${followReferralHandle ? `@${followReferralHandle}` : "this trader"} directly from this shared link.`
@@ -154,7 +185,9 @@ export function FollowReferralDialog(props: FollowReferralDialogProps) {
 
             <div className="bg-surface-overlay-subtle border-border-main rounded-[12px] border p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-text-heading text-sm font-semibold tracking-[-0.01em]">Trader Snapshot</p>
+                <p className="text-text-heading text-sm font-semibold tracking-[-0.01em]">
+                  Trader Snapshot
+                </p>
                 <span
                   className={cn(
                     "rounded-[999px] border px-2 py-0.5 text-[11px] font-semibold tracking-[-0.01em]",
@@ -183,8 +216,17 @@ export function FollowReferralDialog(props: FollowReferralDialogProps) {
                       index !== 0 && "border-border-main border-l",
                     )}
                   >
-                    <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">{item.label}</p>
-                    <p className={cn("text-sm font-semibold tracking-[-0.01em]", item.color)}>{item.value}</p>
+                    <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
+                      {item.label}
+                    </p>
+                    <p
+                      className={cn(
+                        "text-sm font-semibold tracking-[-0.01em]",
+                        item.color,
+                      )}
+                    >
+                      {item.value}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -203,7 +245,9 @@ export function FollowReferralDialog(props: FollowReferralDialogProps) {
               <Button
                 type="button"
                 onClick={onConfirm}
-                disabled={isSubmittingFollowReferral || isFollowReferralAlreadyActive}
+                disabled={
+                  isSubmittingFollowReferral || isFollowReferralAlreadyActive
+                }
                 className="bg-primary-medium text-text-inverse hover:bg-primary-light h-11 rounded-[10px]"
               >
                 {isSubmittingFollowReferral
@@ -235,7 +279,10 @@ export function TradingInfoSheet({
 }: InfoSheetProps) {
   return (
     <Sheet isOpen={isOpen} onClose={onClose} detent="content" unstyled>
-      <Sheet.Backdrop onTap={onClose} className="bg-background-main/55 backdrop-blur-[2px]" />
+      <Sheet.Backdrop
+        onTap={onClose}
+        className="bg-background-main/55 backdrop-blur-[2px]"
+      />
       <Sheet.Container className="pointer-events-none">
         <Sheet.Content
           disableDrag={false}
@@ -260,11 +307,19 @@ type OverlaySheetProps = {
   onClose: () => void;
   suggestedStrategyEnabledDraft: boolean;
   followTradeEnabledDraft: boolean;
-  followTradeTargetsDraft: Array<{ id: string; label: string; subtitle: string; enabled: boolean }>;
+  followTradeTargetsDraft: Array<{
+    id: string;
+    label: string;
+    subtitle: string;
+    enabled: boolean;
+  }>;
   isFollowingFetching: boolean;
   onSuggestedStrategyDraftChange: (value: boolean) => void;
   onFollowTradeDraftChange: (value: boolean) => void;
-  onFollowTradeTargetDraftChange: (targetUserId: string, value: boolean) => void;
+  onFollowTradeTargetDraftChange: (
+    targetUserId: string,
+    value: boolean,
+  ) => void;
   onApplyOverlayMode: () => void;
 };
 
@@ -284,7 +339,10 @@ export function TradingOverlaySheet(props: OverlaySheetProps) {
 
   return (
     <Sheet isOpen={isOpen} onClose={onClose} detent="content" unstyled>
-      <Sheet.Backdrop onTap={onClose} className="bg-background-main/55 backdrop-blur-[2px]" />
+      <Sheet.Backdrop
+        onTap={onClose}
+        className="bg-background-main/55 backdrop-blur-[2px]"
+      />
       <Sheet.Container className="pointer-events-none">
         <Sheet.Content
           disableDrag={false}
@@ -345,7 +403,10 @@ export function TradingShareSheet(props: ShareSheetProps) {
 
   return (
     <Sheet isOpen={isOpen} onClose={onClose} detent="content" unstyled>
-      <Sheet.Backdrop onTap={onClose} className="bg-background-main/55 backdrop-blur-[2px]" />
+      <Sheet.Backdrop
+        onTap={onClose}
+        className="bg-background-main/55 backdrop-blur-[2px]"
+      />
       <Sheet.Container className="pointer-events-none">
         <Sheet.Content
           disableDrag={false}
@@ -362,7 +423,9 @@ export function TradingShareSheet(props: ShareSheetProps) {
               />
               <div className="px-5 pb-5">
                 <div className="flex flex-col gap-4">
-                  <p className="text-hint text-sm font-medium tracking-[-0.01em]">Share your win</p>
+                  <p className="text-hint text-sm font-medium tracking-[-0.01em]">
+                    Share your win
+                  </p>
                   <div className="bg-surface-overlay rounded-[8px] px-3 py-2">
                     <div className="flex items-center gap-2">
                       <p className="text-text-heading min-w-0 flex-1 truncate text-sm font-medium tracking-[-0.01em]">

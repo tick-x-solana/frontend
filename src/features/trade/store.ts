@@ -255,6 +255,17 @@ function sortGridCells(a: CellData, b: CellData): number {
   return b.priceLevel - a.priceLevel;
 }
 
+function extractPriceStepFromCells(cells: Array<{ lowerPrice: string; upperPrice: string }>): number | null {
+  for (const cell of cells) {
+    const lower = Number(cell.lowerPrice);
+    const upper = Number(cell.upperPrice);
+    if (!Number.isFinite(lower) || !Number.isFinite(upper)) continue;
+    const step = Math.abs(upper - lower);
+    if (step > 0) return step;
+  }
+  return null;
+}
+
 export const useGameStore = create<GameState>((set) => ({
   balance: 0,
   serverBalance: 0,
@@ -389,16 +400,35 @@ export const useGameStore = create<GameState>((set) => ({
       const chartTime = getLatestChartTime(state.history, now);
       const hideThresholdTime = getCellHideThresholdTime(chartTime);
       const latestSnapshotCells = keepLatestGridSnapshot(remoteCells);
+      const previousPriceStep = extractPriceStepFromCells(
+        state.cells.map((cell) => ({
+          lowerPrice: cell.original.lowerPrice,
+          upperPrice: cell.original.upperPrice,
+        })),
+      );
+      const nextPriceStep = extractPriceStepFromCells(latestSnapshotCells);
+      const hasPriceStepChanged =
+        previousPriceStep !== null &&
+        nextPriceStep !== null &&
+        Math.abs(previousPriceStep - nextPriceStep) > 1e-8;
+      // When grid price step changes, old active bets no longer align with
+      // the new row geometry; clear active order states to avoid mis-rendering.
+      const activeBets = hasPriceStepChanged ? {} : state.bets;
+      const activePendingBets = hasPriceStepChanged ? {} : state.pendingBets;
+      const activePendingWins = hasPriceStepChanged ? {} : state.pendingWins;
+      const activeSettledOutcomes = hasPriceStepChanged
+        ? {}
+        : state.settledOutcomes;
       const existingCellById = new Map(state.cells.map((cell) => [cell.id, cell]));
       const incomingCells = mapRemoteCells(latestSnapshotCells, now).map((incomingCell) => {
         const existingCell = existingCellById.get(incomingCell.id);
         if (!existingCell) return incomingCell;
 
         const shouldFreezeMultiplier =
-          (state.bets[incomingCell.id] || 0) > 0 ||
-          (state.pendingBets[incomingCell.id] || 0) > 0 ||
-          state.pendingWins[incomingCell.id] !== undefined ||
-          state.settledOutcomes[incomingCell.id] !== undefined;
+          (activeBets[incomingCell.id] || 0) > 0 ||
+          (activePendingBets[incomingCell.id] || 0) > 0 ||
+          activePendingWins[incomingCell.id] !== undefined ||
+          activeSettledOutcomes[incomingCell.id] !== undefined;
 
         if (!shouldFreezeMultiplier) return incomingCell;
 
@@ -421,11 +451,11 @@ export const useGameStore = create<GameState>((set) => ({
           if (incomingIds.has(cell.id)) return false;
 
           const hasTrackedState =
-            (state.bets[cell.id] || 0) > 0 ||
-            (state.pendingBets[cell.id] || 0) > 0 ||
-            state.pendingWins[cell.id] !== undefined ||
-            state.settledOutcomes[cell.id] !== undefined;
-          const settledOutcome = state.settledOutcomes[cell.id];
+            (activeBets[cell.id] || 0) > 0 ||
+            (activePendingBets[cell.id] || 0) > 0 ||
+            activePendingWins[cell.id] !== undefined ||
+            activeSettledOutcomes[cell.id] !== undefined;
+          const settledOutcome = activeSettledOutcomes[cell.id];
           const shouldKeepSettledWin =
             settledOutcome?.isWin === true || cell.status === "hit";
 
@@ -445,6 +475,10 @@ export const useGameStore = create<GameState>((set) => ({
 
       return {
         cells: [...retainedCells, ...incomingCells].sort(sortGridCells),
+        bets: activeBets,
+        pendingBets: activePendingBets,
+        pendingWins: activePendingWins,
+        settledOutcomes: activeSettledOutcomes,
       };
     }),
 
