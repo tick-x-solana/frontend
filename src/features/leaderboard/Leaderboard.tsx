@@ -9,12 +9,27 @@ import {
 } from "@/src/components/shadcn/select";
 import LeaderboardRank from "@/src/features/leaderboard/components/LeaderboardRank";
 import { useLeaderboardData } from "@/src/features/leaderboard/hooks/useLeaderboardData";
+import { CheckIcon, RefreshIcon } from "@/src/assets/icons";
 import { Search } from "lucide-react";
 import Image from "next/image";
-import { useMemo, useState } from "react";
-import type { LeaderboardControllerGetLeaderboardWindow } from "@/src/services/models";
+import { useCallback, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import type {
+  LeaderboardControllerGetLeaderboardWindow,
+  LeaderboardControllerGetLeaderboardMetric,
+} from "@/src/services/models";
+import { Sheet } from "react-modal-sheet";
 
 type LeaderboardWindowFilter = LeaderboardControllerGetLeaderboardWindow;
+type LeaderboardMetric = LeaderboardControllerGetLeaderboardMetric;
+
+const VALID_WINDOWS: LeaderboardWindowFilter[] = ["all", "30d", "7d", "1d"];
+const VALID_METRICS: LeaderboardMetric[] = ["pnl", "volume"];
+
+const METRIC_LABELS: Record<LeaderboardMetric, string> = {
+  pnl: "PNL",
+  volume: "Volume",
+};
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -30,6 +45,7 @@ function LeaderboardRow({
   volume,
   pnl,
   isHumanVerified,
+  metric,
 }: {
   rank: number;
   initials: string;
@@ -37,6 +53,7 @@ function LeaderboardRow({
   volume: string;
   pnl: number;
   isHumanVerified: boolean;
+  metric: LeaderboardMetric;
 }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_150px] items-center gap-4 px-4 py-2">
@@ -64,34 +81,114 @@ function LeaderboardRow({
               />
             ) : null}
           </div>
-          <p className="text-text-sub truncate text-[14px] tracking-[-0.14px]">
-            {volume}
-          </p>
         </div>
       </div>
 
       <p className="text-success-light text-right text-[14px] tracking-[-0.14px] tabular-nums">
-        {currencyFormatter.format(pnl)}
+        {metric === "volume" ? volume : currencyFormatter.format(pnl)}
       </p>
     </div>
   );
 }
 
-export default function LeaderboardPage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [windowFilter, setWindowFilter] =
-    useState<LeaderboardWindowFilter>("all");
+function AttributeSheet({
+  isOpen,
+  onClose,
+  metric,
+  onMetricChange,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  metric: LeaderboardMetric;
+  onMetricChange: (metric: LeaderboardMetric) => void;
+}) {
+  return (
+    <Sheet isOpen={isOpen} onClose={onClose} detent="content">
+      <Sheet.Backdrop onClick={onClose} />
+      <Sheet.Container className="bg-background-main! rounded-t-[20px]! border-t border-[#1E3550]">
+        <Sheet.Header>
+          <div className="flex justify-center pt-3 pb-3">
+            <div className="bg-border-main h-1 w-10 rounded-full" />
+          </div>
+        </Sheet.Header>
+        <Sheet.Content>
+          <div className="px-4 pb-2">
+            <p className="text-text-main mb-4 text-center text-[16px] font-semibold tracking-[-0.16px]">
+              Select attribute
+            </p>
 
-  const { entries, isLoading, isFetching, isError } =
-    useLeaderboardData(windowFilter);
+            <div className="border-border-main flex flex-col divide-y divide-(--color-border-main)">
+              {VALID_METRICS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    onMetricChange(m);
+                    onClose();
+                  }}
+                  className="flex items-center justify-between py-4 outline-none"
+                >
+                  <span className="text-text-main text-[16px] tracking-[-0.16px]">
+                    {METRIC_LABELS[m]}
+                  </span>
+                  {metric === m ? (
+                    <CheckIcon className="text-primary-light h-5 w-5" />
+                  ) : null}
+                </button>
+              ))}
+            </div>
+
+            <div
+              aria-hidden
+              className="h-[calc(env(safe-area-inset-bottom)+8px)]"
+            />
+          </div>
+        </Sheet.Content>
+      </Sheet.Container>
+    </Sheet>
+  );
+}
+
+export default function LeaderboardPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const windowParam = searchParams.get(
+    "window",
+  ) as LeaderboardWindowFilter | null;
+  const metricParam = searchParams.get("mode") as LeaderboardMetric | null;
+
+  const windowFilter: LeaderboardWindowFilter =
+    windowParam && VALID_WINDOWS.includes(windowParam) ? windowParam : "all";
+  const metric: LeaderboardMetric =
+    metricParam && VALID_METRICS.includes(metricParam) ? metricParam : "pnl";
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const updateParams = useCallback(
+    (
+      updates: Partial<{
+        window: LeaderboardWindowFilter;
+        mode: LeaderboardMetric;
+      }>,
+    ) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (updates.window !== undefined) params.set("window", updates.window);
+      if (updates.mode !== undefined) params.set("mode", updates.mode);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
+
+  const { entries, isLoading, isFetching, isError } = useLeaderboardData(
+    windowFilter,
+    metric,
+  );
 
   const filteredEntries = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
-
-    if (!normalizedSearch) {
-      return entries;
-    }
-
+    if (!normalizedSearch) return entries;
     return entries.filter((entry) =>
       entry.username.toLowerCase().includes(normalizedSearch),
     );
@@ -160,10 +257,10 @@ export default function LeaderboardPage() {
             <Select
               value={windowFilter}
               onValueChange={(value) =>
-                setWindowFilter(value as LeaderboardWindowFilter)
+                updateParams({ window: value as LeaderboardWindowFilter })
               }
             >
-              <SelectTrigger className="bg-surface-field/90 text-text-sub h-10 min-w-[92px] rounded-[10px] border-0 px-3 text-[14px] tracking-[-0.14px]">
+              <SelectTrigger className="bg-surface-field/90 text-text-sub h-10 min-w-[92px] rounded-[10px] border-0 px-3 text-[14px] tracking-[-0.14px] focus:ring-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-surface-field border-border-main text-text-main">
@@ -185,11 +282,16 @@ export default function LeaderboardPage() {
             </div>
             <div className="flex min-w-0 items-center justify-end gap-2">
               <p className="text-text-sub text-[14px] tracking-[-0.14px]">
-                PNL
+                {METRIC_LABELS[metric]}
               </p>
-              <span className="text-hint text-[16px]" aria-hidden>
-                ↻
-              </span>
+
+              <button
+                type="button"
+                aria-label="Select attribute"
+                onClick={() => setSheetOpen(true)}
+              >
+                <RefreshIcon className="h-4 w-4" />
+              </button>
             </div>
           </div>
 
@@ -225,7 +327,7 @@ export default function LeaderboardPage() {
             !isLoading &&
             !isFetching &&
             listEntries.length === 0 ? (
-              <p className="text-hint px-4 py-4 text-[14px]">
+              <p className="text-hint px-4 py-4 text-center text-[14px]">
                 No leaderboard data found.
               </p>
             ) : null}
@@ -233,7 +335,7 @@ export default function LeaderboardPage() {
             {!isLoading &&
               !isFetching &&
               listEntries.map((entry) => (
-                <LeaderboardRow key={entry.rank} {...entry} />
+                <LeaderboardRow key={entry.rank} {...entry} metric={metric} />
               ))}
             <div
               aria-hidden
@@ -242,6 +344,13 @@ export default function LeaderboardPage() {
           </div>
         </section>
       </div>
+
+      <AttributeSheet
+        isOpen={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        metric={metric}
+        onMetricChange={(m) => updateParams({ mode: m })}
+      />
     </div>
   );
 }

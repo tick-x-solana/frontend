@@ -4,9 +4,11 @@
  * TickX Trading Core API
  * OpenAPI spec version: 0.0.12
  */
+import type { LeaderboardControllerGetLeaderboardMetric } from './leaderboardControllerGetLeaderboardMetric';
 import type { LeaderboardControllerGetLeaderboardWindow } from './leaderboardControllerGetLeaderboardWindow';
 
 export type LeaderboardControllerGetLeaderboardParams = {
 limit?: number;
 window?: LeaderboardControllerGetLeaderboardWindow;
+metric?: LeaderboardControllerGetLeaderboardMetric;
 };

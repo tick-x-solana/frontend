@@ -3108,7 +3108,7 @@ export function useStrategyControllerGetCurrentRegime<TData = Awaited<ReturnType
 
 
 /**
- * @summary Get top leaderboard users by realized pnl
+ * @summary Get top leaderboard users by pnl or volume
  */
 export type leaderboardControllerGetLeaderboardResponse200 = {
   data: LeaderboardEntryDto[]
@@ -3206,7 +3206,7 @@ export function useLeaderboardControllerGetLeaderboard<TData = Awaited<ReturnTyp
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Get top leaderboard users by realized pnl
+ * @summary Get top leaderboard users by pnl or volume
  */
 
 export function useLeaderboardControllerGetLeaderboard<TData = Awaited<ReturnType<typeof leaderboardControllerGetLeaderboard>>, TError = ErrorType<unknown>>(

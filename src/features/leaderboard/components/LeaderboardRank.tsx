@@ -65,7 +65,7 @@ const PodiumUser = ({
             alt="Verified human"
             width={28}
             height={28}
-            className="absolute right-[-2px] bottom-[2px] h-7 w-7"
+            className="absolute -right-3 -bottom-2 h-7 w-7"
           />
         ) : null}
       </div>
@@ -149,7 +149,7 @@ export const RecondRank = ({
     <div
       className={cn(
         "relative top-[40px] left-8 w-fit",
-        isDimmed && "opacity-70",
+        isDimmed && "opacity-85",
         className,
       )}
     >
@@ -181,7 +181,7 @@ const LeaderboardRank = ({ topUsers }: { topUsers: LeaderboardTopUser[] }) => {
           label="2nd"
           user={secondUser}
           infoClassName="left-[40%] w-[64%]"
-          avatarClassName="bg-[#56C5C5]"
+          avatarClassName="bg-[#56C5C5] text-[28px]"
           isDimmed
         />
 
@@ -192,12 +192,12 @@ const LeaderboardRank = ({ topUsers }: { topUsers: LeaderboardTopUser[] }) => {
           label="3rd"
           user={thirdUser}
           infoClassName="left-[60%]"
-          avatarClassName="bg-[#5A8FE5] left-[50%]"
+          avatarClassName="bg-[#5A8FE5] left-[50%] text-[28px]"
           isDimmed
         />
       </div>
 
-      <LeaderboardBottom className="absolute -bottom-14 z-20 w-full scale-y-110" />
+      <LeaderboardBottom className="absolute -bottom-14 z-20 scale-x-120 scale-y-110" />
     </div>
   );
 };

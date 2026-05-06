@@ -2,7 +2,10 @@
 
 import { useLeaderboardControllerGetLeaderboard } from "@/src/services/queries";
 import { useMemo } from "react";
-import type { LeaderboardControllerGetLeaderboardWindow } from "@/src/services/models";
+import type {
+  LeaderboardControllerGetLeaderboardWindow,
+  LeaderboardControllerGetLeaderboardMetric,
+} from "@/src/services/models";
 import type { LeaderboardEntryDto } from "@/src/services/models";
 import { truncateAddress } from "@/src/lib/utils";
 
@@ -55,8 +58,9 @@ const extractRows = (payload: unknown): LeaderboardEntryDto[] => {
 
 export const useLeaderboardData = (
   window: LeaderboardControllerGetLeaderboardWindow,
+  metric: LeaderboardControllerGetLeaderboardMetric,
 ) => {
-  const query = useLeaderboardControllerGetLeaderboard({ window, limit: 20 });
+  const query = useLeaderboardControllerGetLeaderboard({ window, metric, limit: 20 });
 
   const entries = useMemo<LeaderboardViewEntry[]>(() => {
     const rows = extractRows(query.data);

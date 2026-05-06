@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import LeaderboardPage from "@/src/features/leaderboard/Leaderboard";
 
-const Page = () => <LeaderboardPage />;
+const Page = () => (
+  <Suspense>
+    <LeaderboardPage />
+  </Suspense>
+);
 
 export default Page;

@@ -27,7 +27,7 @@ import LightbulbIcon from "./lightbulb.svg";
 import LikeIcon from "./like.svg";
 import MedalRibbonsStarIcon from "./medal-ribbons-star.svg";
 import PhoneIcon from "./phone.svg";
-import RefreshIcon from "./refresh.svg";
+import RefreshIcon from "./refresh.svg?react";
 import RoundTransferVerticalIcon from "./round-transfer-vertical.svg";
 import ShareIcon from "./share.svg";
 import ShieldCheckIcon from "./shield-check.svg";

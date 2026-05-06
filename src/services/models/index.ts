@@ -21,6 +21,7 @@ export * from './distributionControllerGetPendingBatches200BatchesItemDestinatio
 export * from './distributionControllerGetPendingBatches200BatchesItemLpSharesItem';
 export * from './expireTimeoutDto';
 export * from './finalizeWithdrawalDto';
+export * from './leaderboardControllerGetLeaderboardMetric';
 export * from './leaderboardControllerGetLeaderboardParams';
 export * from './leaderboardControllerGetLeaderboardWindow';
 export * from './leaderboardEntryDto';
