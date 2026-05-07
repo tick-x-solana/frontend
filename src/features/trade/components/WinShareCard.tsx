@@ -2,6 +2,11 @@
 
 import React from "react";
 import Image from "next/image";
+import {
+  formatFixedTwoDecimal,
+  formatCompactNumber,
+  formatUpToOneDecimalNumber,
+} from "@/src/utils/formatters";
 
 type WinShareCardProps = {
   marketSymbol: string;
@@ -11,21 +16,6 @@ type WinShareCardProps = {
   profit: number;
   currencySymbol?: string;
 };
-
-const amountFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const receivedAmountFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
-
-const percentFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 1,
-});
 
 function toFiniteNumber(value: number): number {
   return Number.isFinite(value) ? value : 0;
@@ -75,7 +65,7 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
               </p>
               <p className="text-success-medium text-[24px] font-semibold tracking-[-0.01em]">
                 +{currencySymbol}
-                {amountFormatter.format(safeProfit)}
+                {formatFixedTwoDecimal(safeProfit)}
               </p>
             </div>
           </div>
@@ -84,7 +74,7 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
             <div className="min-w-0 flex-1 text-center">
               <p className="text-primary-light text-[20px] font-semibold tracking-[-0.01em]">
                 {currencySymbol}
-                {amountFormatter.format(safeAmount)}
+                {formatFixedTwoDecimal(safeAmount)}
               </p>
               <p className="text-text-sub text-sm tracking-[-0.01em]">Amount</p>
             </div>
@@ -104,7 +94,7 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
 
             <div className="min-w-0 flex-1 text-center">
               <p className="text-primary-light text-[20px] font-semibold tracking-[-0.01em]">
-                +{percentFormatter.format(pnlPercent)}%
+                +{formatUpToOneDecimalNumber(pnlPercent)}%
               </p>
               <p className="text-text-sub text-sm tracking-[-0.01em]">PNL</p>
             </div>
@@ -134,7 +124,7 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
             <div className="border-success-medium absolute top-[70px] left-[140px] flex h-[68px] w-[71px] flex-col items-center justify-center rounded-[8px] border bg-[#0a151a] shadow-[0_0_16.5px_rgb(0_229_255_/_0.25),0_0_24.8px_rgb(0_229_255_/_0.25),inset_0_0_16.8px_rgb(0_229_255_/_0.25)]">
               <p className="text-success-medium text-[16px] font-extrabold tracking-[-0.01em]">
                 +{currencySymbol}
-                {receivedAmountFormatter.format(receivedAmount)}
+                {formatCompactNumber(receivedAmount)}
               </p>
               <p className="text-text-disabled text-[11px] tracking-[-0.01em]">
                 {safeMultiplier.toFixed(2)}x

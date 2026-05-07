@@ -19,6 +19,7 @@ import type {
   LeaderboardControllerGetLeaderboardMetric,
 } from "@/src/services/models";
 import { Sheet } from "react-modal-sheet";
+import { formatUsdCurrencyFixedTwo } from "@/src/utils/formatters";
 
 type LeaderboardWindowFilter = LeaderboardControllerGetLeaderboardWindow;
 type LeaderboardMetric = LeaderboardControllerGetLeaderboardMetric;
@@ -30,13 +31,6 @@ const METRIC_LABELS: Record<LeaderboardMetric, string> = {
   pnl: "PNL",
   volume: "Volume",
 };
-
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 function LeaderboardRow({
   rank,
@@ -85,7 +79,7 @@ function LeaderboardRow({
       </div>
 
       <p className="text-success-light text-right text-[14px] tracking-[-0.14px] tabular-nums">
-        {metric === "volume" ? volume : currencyFormatter.format(pnl)}
+        {metric === "volume" ? volume : formatUsdCurrencyFixedTwo(pnl)}
       </p>
     </div>
   );

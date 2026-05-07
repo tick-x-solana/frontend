@@ -1,3 +1,9 @@
+import {
+  compactNumberFormatter,
+  fixedTwoDecimalFormatter,
+  oneDecimalFormatter,
+} from "@/src/utils/formatters";
+
 export const DESKTOP_ZOOM_MIN = 0.5;
 export const MOBILE_ZOOM_MIN = 1;
 export const MIN_PRICE_MOTION_MS = 250;
@@ -65,10 +71,7 @@ export const FOLLOW_REFERRAL_STATS = [
   { label: "7D PnL", value: "+343.5", color: "text-text-heading" },
 ] as const;
 
-export const livePriceFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+export const livePriceFormatter = fixedTwoDecimalFormatter;
 
 export const shareTimeFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
@@ -77,22 +80,10 @@ export const shareTimeFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: true,
 });
 
-export const winAmountFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+export const winAmountFormatter = fixedTwoDecimalFormatter;
 
-export const percentageFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
+export const percentageFormatter = oneDecimalFormatter;
 
-export const balanceFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
+export const balanceFormatter = compactNumberFormatter;
 
-export const approxUsdFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+export const approxUsdFormatter = fixedTwoDecimalFormatter;

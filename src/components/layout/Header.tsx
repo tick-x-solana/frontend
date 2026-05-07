@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import { formatWalletAddress } from "@/src/utils/formatters";
 import { sepolia } from "wagmi/chains";
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 
@@ -21,9 +22,6 @@ const navItems: NavItem[] = [
   { label: "Leaderboard", href: "/leaderboard" },
   { label: "More", href: "#", hasDropdown: true },
 ];
-
-const formatWalletAddress = (address: string) =>
-  `${address.slice(0, 6)}...${address.slice(-4)}`;
 
 const Header = () => {
   const pathname = usePathname();

@@ -12,6 +12,7 @@ import {
   getCellHideThresholdTime,
   getLatestChartTime,
 } from "@/src/features/trade/gridTiming";
+import { formatApproxUsd as formatApproxUsdValue } from "@/src/utils/formatters";
 
 const timeLabelFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
@@ -28,11 +29,6 @@ const priceLabelFormatterTwoDecimals = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
-const approxUsdFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 export const COLOR_BG = "#030C1C";
@@ -81,14 +77,7 @@ function formatMultiplier(value: number): string {
 }
 
 function formatApproxUsd(amountWld: number, wldUsdPrice: number | null) {
-  if (
-    typeof wldUsdPrice !== "number" ||
-    !Number.isFinite(wldUsdPrice) ||
-    wldUsdPrice <= 0
-  ) {
-    return null;
-  }
-  return `$${approxUsdFormatter.format(amountWld * wldUsdPrice)}`;
+  return formatApproxUsdValue(amountWld, wldUsdPrice);
 }
 
 function formatPriceLabel(value: number, marketId: string): string {

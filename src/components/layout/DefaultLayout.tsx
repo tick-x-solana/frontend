@@ -15,7 +15,7 @@ const DefaultLayout = ({ children }: { children: React.ReactNode }) => {
       {!hideLayoutChrome && <Header />}
       <main
         className={[
-          "bg-background-main flex-1",
+          "bg-background-main flex min-h-0 flex-1 flex-col",
           hideLayoutChrome
             ? "pb-0"
             : "pb-[calc(80px+env(safe-area-inset-bottom))] md:pb-0",

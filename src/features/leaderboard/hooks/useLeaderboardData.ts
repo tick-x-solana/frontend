@@ -8,6 +8,7 @@ import type {
 } from "@/src/services/models";
 import type { LeaderboardEntryDto } from "@/src/services/models";
 import { truncateAddress } from "@/src/lib/utils";
+import { formatUsdCurrencyFixedTwo } from "@/src/utils/formatters";
 
 export type LeaderboardViewEntry = {
   rank: number;
@@ -17,13 +18,6 @@ export type LeaderboardViewEntry = {
   pnl: number;
   isHumanVerified: boolean;
 };
-
-const usdFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const toNumber = (value: string) => {
   const parsed = Number(value);
@@ -69,7 +63,7 @@ export const useLeaderboardData = (
       rank: row.rank,
       username: row.miniAppUsername || truncateAddress(row.userId, 4, 2),
       initials: getInitials(row.miniAppUsername || "anonymous"),
-      volume: usdFormatter.format(toNumber(row.totalVolume)),
+      volume: formatUsdCurrencyFixedTwo(toNumber(row.totalVolume)),
       pnl: toNumber(row.pnl),
       isHumanVerified: row.humanVerified,
     }));

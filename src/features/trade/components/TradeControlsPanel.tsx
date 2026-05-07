@@ -8,30 +8,15 @@ import { useGameStore } from "@/src/features/trade/store";
 import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
 import { cn } from "@/lib/utils";
 import { useAuthControllerGetPublicProfile } from "@/src/services/queries";
+import {
+  formatApproxUsd,
+  formatCompactNumber,
+  formatWalletAddress,
+} from "@/src/utils/formatters";
 import Image from "next/image";
 import { useMemo } from "react";
 
 const BID_OPTIONS_WLD = [1, 2, 5, 10];
-
-const formatCompactNumber = (amount: number) =>
-  new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-const formatApproxUsd = (amountWld: number, priceUsd: number | null) => {
-  if (priceUsd === null) return null;
-  const approxUsd = amountWld * priceUsd;
-  return `~$${new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(approxUsd)}`;
-};
-
-const formatWalletAddress = (address: string | null) => {
-  if (!address) return "Not connected";
-  if (!address.startsWith("0x") || address.length < 14) return address;
-  return `${address.slice(0, 7)}...${address.slice(-7)}`;
-};
 
 type TradeControlsPanelProps = {
   className?: string;
@@ -79,7 +64,7 @@ export default function TradeControlsPanel({
     BID_OPTIONS_WLD[0];
   const displayIdentity = username?.trim()
     ? `@${username.trim()}`
-    : formatWalletAddress(rawAddress);
+    : formatWalletAddress(rawAddress, { start: 7, end: 7, minLength: 14 });
   const marketPriceLabel =
     displayPrice === "--" ? displayPrice : `~ ${displayPrice}`;
   const selectedBidApproxUsd = formatApproxUsd(
@@ -87,6 +72,7 @@ export default function TradeControlsPanel({
     typeof wldUsdPrice === "number" && Number.isFinite(wldUsdPrice)
       ? wldUsdPrice
       : null,
+    { includeApproxPrefix: true },
   );
 
   return (

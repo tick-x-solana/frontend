@@ -19,6 +19,11 @@ import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
 import useWinShareActions from "@/src/hooks/useWinShareActions";
 import { WinShareCard } from "@/src/features/trade/components/WinShareCard";
 import { useOrderControllerGetUserOrders } from "@/src/services/queries";
+import {
+  formatFixedTwoDecimal,
+  formatIntegerNumber,
+  formatOneDecimalNumber,
+} from "@/src/utils/formatters";
 import { cn } from "@/lib/utils";
 
 dayjs.extend(relativeTime);
@@ -41,19 +46,6 @@ interface TradingHistoryItem {
   createdAtLabel: string;
   progress: number;
 }
-
-const moneyFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const integerFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 0,
-});
-const percentageFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
 
 function asRecord(value: unknown): UnknownRecord | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -101,12 +93,12 @@ function readTimestampMs(value: unknown): number | null {
 
 function formatMoney(value: number | null): string {
   if (value === null) return "--";
-  return `$${moneyFormatter.format(value)}`;
+  return `$${formatFixedTwoDecimal(value)}`;
 }
 
 function formatWld(value: number | null): string {
   if (value === null) return "-- WLD";
-  return `${integerFormatter.format(Math.round(value))} WLD`;
+  return `${formatIntegerNumber(Math.round(value))} WLD`;
 }
 
 function formatMultiplier(value: number | null): string {
@@ -123,7 +115,7 @@ function formatClockTime(timestampMs: number): string {
 }
 
 function formatPercent(value: number): string {
-  return `${percentageFormatter.format(value)}%`;
+  return `${formatOneDecimalNumber(value)}%`;
 }
 
 function extractOrders(value: unknown): unknown[] {
@@ -152,18 +144,24 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
   if (!record) return null;
 
   const cell = asRecord(record.cell);
-  const amountUsd =
-    asNumber(record.amountUsd) ??
+  const placedQuotePriceUsd = asNumber(record.placedQuotePriceUsd);
+  const amountBetWld =
     asNumber(record.amount) ??
-    asNumber(record.totalAmount) ??
-    asNumber(record.stakeAmount) ??
-    null;
-  const amountWld =
     asNumber(record.amountWld) ??
     asNumber(record.tokenAmount) ??
     asNumber(record.size) ??
     asNumber(record.quantity) ??
     null;
+  const amountUsd =
+    asNumber(record.amountUsd) ??
+    asNumber(record.totalAmount) ??
+    asNumber(record.stakeAmount) ??
+    (amountBetWld !== null && placedQuotePriceUsd !== null
+      ? amountBetWld * placedQuotePriceUsd
+      : null) ??
+    null;
+  const amountWld =
+    amountBetWld;
   const multiplier =
     asNumber(record.multiplier) ??
     asNumber(record.rewardRate) ??
@@ -316,7 +314,18 @@ const TradingHistoryTable = () => {
       .map(toHistoryItem)
       .filter((item): item is TradingHistoryItem => item !== null)
       .map((item) => {
-        if (item.amountUsd === null || !wldUsdPrice || wldUsdPrice <= 0) {
+        if (!wldUsdPrice || wldUsdPrice <= 0) {
+          return item;
+        }
+
+        if (item.amountUsd === null && item.amountWld !== null) {
+          return {
+            ...item,
+            amountUsd: item.amountWld * wldUsdPrice,
+          };
+        }
+
+        if (item.amountUsd === null) {
           return item;
         }
 
@@ -364,57 +373,59 @@ const TradingHistoryTable = () => {
           Trading History
         </h3>
       </div>
-      <Table className="text-text-main w-full table-fixed border-collapse">
-        <TableHeader className="border-border-main border-y">
-          <TableRow className="bg-surface-overlay-subtle border-border-main hover:bg-surface-overlay-subtle">
-            <TableHead className="text-text-sub w-[140px] px-4 py-3 text-[14px] font-normal">
-              Size
-            </TableHead>
-            <TableHead className="text-text-sub w-[70px] px-4 py-3 text-[14px] font-normal">
-              Mult
-            </TableHead>
-            <TableHead className="text-text-sub w-[130px] px-4 py-3 text-[14px] font-normal">
-              PNL
-            </TableHead>
-            <TableHead className="text-text-sub bg-surface-overlay-subtle w-[170px] px-4 py-3 text-[14px] font-normal whitespace-nowrap">
-              When
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading ? (
-            <TableRow className="border-border-main hover:bg-background-main">
-              <TableCell
-                colSpan={4}
-                className="text-hint px-4 py-6 text-center text-[14px]"
-              >
-                Loading trading history...
-              </TableCell>
+      <div className="max-h-[460px] overflow-y-auto">
+        <Table className="text-text-main w-full table-fixed border-collapse">
+          <TableHeader className="border-border-main border-y sticky top-0 z-10">
+            <TableRow className="bg-surface-overlay-subtle border-border-main hover:bg-surface-overlay-subtle">
+              <TableHead className="text-text-sub w-[140px] px-4 py-3 text-[14px] font-normal">
+                Size
+              </TableHead>
+              <TableHead className="text-text-sub w-[70px] px-4 py-3 text-[14px] font-normal">
+                Mult
+              </TableHead>
+              <TableHead className="text-text-sub w-[130px] px-4 py-3 text-[14px] font-normal">
+                PNL
+              </TableHead>
+              <TableHead className="text-text-sub bg-surface-overlay-subtle w-[170px] px-4 py-3 text-[14px] font-normal whitespace-nowrap">
+                When
+              </TableHead>
             </TableRow>
-          ) : null}
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow className="border-border-main hover:bg-background-main">
+                <TableCell
+                  colSpan={4}
+                  className="text-hint px-4 py-6 text-center text-[14px]"
+                >
+                  Loading trading history...
+                </TableCell>
+              </TableRow>
+            ) : null}
 
-          {emptyState ? (
-            <TableRow className="border-border-main hover:bg-background-main">
-              <TableCell
-                colSpan={4}
-                className="text-hint px-4 py-6 text-center text-[14px]"
-              >
-                No trading records yet.
-              </TableCell>
-            </TableRow>
-          ) : null}
+            {emptyState ? (
+              <TableRow className="border-border-main hover:bg-background-main">
+                <TableCell
+                  colSpan={4}
+                  className="text-hint px-4 py-6 text-center text-[14px]"
+                >
+                  No trading records yet.
+                </TableCell>
+              </TableRow>
+            ) : null}
 
-          {items.map((item) => {
-            return (
-              <FragmentRow
-                key={item.id}
-                item={item}
-                onShare={handleOpenShareSheet}
-              />
-            );
-          })}
-        </TableBody>
-      </Table>
+            {items.map((item) => {
+              return (
+                <FragmentRow
+                  key={item.id}
+                  item={item}
+                  onShare={handleOpenShareSheet}
+                />
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
 
       <Sheet
         isOpen={isShareSheetOpen}
@@ -506,6 +517,7 @@ interface FragmentRowProps {
 }
 
 const FragmentRow = ({ item, onShare }: FragmentRowProps) => {
+  console.log("item: ", item);
   const canShareWin = isWinRow(item);
 
   return (

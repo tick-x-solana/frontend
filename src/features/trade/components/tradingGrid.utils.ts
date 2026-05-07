@@ -3,8 +3,11 @@ import { extractFollowedOrderActivities } from "@/src/features/trade/orderFollow
 import type { CellData } from "@/src/features/trade/store";
 import type { StoreSnapshot } from "@/src/utils/gridLayout";
 import {
+  formatApproxUsd as formatApproxUsdValue,
+  formatWalletAddress,
+} from "@/src/utils/formatters";
+import {
   FAKE_WIN_USERNAME_PREFIXES,
-  approxUsdFormatter,
   percentageFormatter,
 } from "./tradingGrid.constants";
 
@@ -145,8 +148,12 @@ export function parseAddress(value: string | null | undefined): string | null {
 }
 
 export function formatWalletShort(address: string): string {
-  if (address.length <= 12) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  return formatWalletAddress(address, {
+    emptyLabel: "",
+    start: 6,
+    end: 4,
+    minLength: 13,
+  });
 }
 
 export function normalizeReferralCode(
@@ -434,10 +441,7 @@ export function buildFakeWinToastData(): FakeWinToastData {
 }
 
 export function formatApproxUsd(amountWld: number, wldUsdPrice: number | null) {
-  if (typeof wldUsdPrice !== "number" || !Number.isFinite(wldUsdPrice) || wldUsdPrice <= 0) {
-    return null;
-  }
-  return `$${approxUsdFormatter.format(amountWld * wldUsdPrice)}`;
+  return formatApproxUsdValue(amountWld, wldUsdPrice);
 }
 
 export function areBooleanMapsEqual(

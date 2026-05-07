@@ -63,8 +63,8 @@ export default async function Home({ searchParams }: HomePageProps) {
   const initialFollowRefCode = followRefCode ?? refCodeFromPath;
 
   return (
-    <div className="bg-background-main flex h-full flex-1 flex-col">
-      <div className="flex max-h-[calc(100dvh-72px)] min-h-[calc(100dvh-72px)] flex-1">
+    <div className="bg-background-main flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1">
         <div className="hidden md:block">
           <BetInfo />
         </div>
