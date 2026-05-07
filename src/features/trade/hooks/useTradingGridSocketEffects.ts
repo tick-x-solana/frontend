@@ -23,7 +23,6 @@ import {
   SUBSCRIBE_USER_EVENT,
   SUGGESTED_STRATEGY_UPDATE_EVENT,
   UNSUBSCRIBE_ORDER_FOLLOWS_EVENT,
-  WSS_KEY_REFRESH_BEFORE_EXPIRY_MS,
 } from "@/src/features/trade/components/tradingGrid.constants";
 import {
   extractBalanceAmount,
@@ -76,7 +75,6 @@ type UseTradingGridSocketEffectsParams = {
   updateOrder: (payload: unknown) => void;
   cancelPendingBet: (cellId: string) => void;
   pendingBets: Record<string, number>;
-  wssKeyExpiresAt: number | null;
   storeRef: React.MutableRefObject<{ cells: CellData[] }>;
 };
 
@@ -99,11 +97,9 @@ export function useTradingGridSocketEffects({
   updateOrder,
   cancelPendingBet,
   pendingBets,
-  wssKeyExpiresAt,
   storeRef,
 }: UseTradingGridSocketEffectsParams) {
   const socketRef = useRef<SocketLike | null>(null);
-  const scheduledWssExpiryRef = useRef<number | null>(null);
   // 1) Load initial price history (Binance 1s candles) to hydrate the chart.
   useEffect(() => {
     const abortController = new AbortController();
@@ -203,7 +199,7 @@ export function useTradingGridSocketEffects({
   }, []);
 
   // 4) When the user is authenticated: fetch wssKey + challenge + signature to subscribe to the user channel.
-  // Re-subscribe every time the socket reconnects.
+  // Re-subscribes on reconnect, before key expiry (3s early), and on "Invalid wss signature" errors.
   useEffect(() => {
     const socket = socketRef.current;
     if (!isSocketLike(socket)) return;
@@ -211,15 +207,24 @@ export function useTradingGridSocketEffects({
     if (!isAuthenticated || !userAddress) return;
 
     let isDisposed = false;
+    let expiryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearExpiryTimer = () => {
+      if (expiryTimer !== null) {
+        clearTimeout(expiryTimer);
+        expiryTimer = null;
+      }
+    };
 
     const subscribeUser = async () => {
+      clearExpiryTimer();
+
       const wssKeyResponse = await authControllerGetWssKey();
       const nextWssKey = extractWssKey(wssKeyResponse);
-      const nextExpiresAt = extractWssKeyExpiry(wssKeyResponse);
       if (!nextWssKey) throw new Error("Missing WSS key");
+      const expiresAt = extractWssKeyExpiry(wssKeyResponse);
 
       useGameStore.getState().setConnection(socketRef.current, nextWssKey);
-      useGameStore.getState().setWssKey(nextWssKey, nextExpiresAt);
 
       const challengeResponse = await authControllerGetChallenge({
         address: userAddress,
@@ -235,6 +240,20 @@ export function useTradingGridSocketEffects({
       if (isDisposed) return;
 
       socket.emit(SUBSCRIBE_USER_EVENT, { userId: userAddress, signature });
+
+      // Schedule a re-subscribe 5 seconds before the key expires.
+      if (expiresAt !== null) {
+        const msUntilRefresh = expiresAt - Date.now() - 5000;
+        if (msUntilRefresh > 0) {
+          expiryTimer = setTimeout(() => {
+            if (!isDisposed) {
+              void subscribeUser().catch((error) => {
+                console.error("Failed to refresh WSS key:", error);
+              });
+            }
+          }, msUntilRefresh);
+        }
+      }
     };
 
     const handleConnect = () => {
@@ -243,12 +262,29 @@ export function useTradingGridSocketEffects({
       });
     };
 
+    const handleError = (payload: unknown) => {
+      const msg =
+        payload && typeof payload === "object"
+          ? (payload as Record<string, unknown>).message
+          : payload;
+      if (typeof msg === "string" && msg.toLowerCase().includes("invalid wss signature")) {
+        void subscribeUser().catch((error) => {
+          console.error("Failed to re-subscribe after invalid WSS signature:", error);
+        });
+      }
+    };
+
     if (socket.connected) handleConnect();
     socket.on("connect", handleConnect);
+    socket.on("error", handleError);
+    socket.on("exception", handleError);
 
     return () => {
       isDisposed = true;
+      clearExpiryTimer();
       socket.off("connect", handleConnect);
+      socket.off("error", handleError);
+      socket.off("exception", handleError);
     };
   }, [isAuthenticated, resolvedUserAddress]);
 
@@ -497,69 +533,7 @@ export function useTradingGridSocketEffects({
     storeRef,
   ]);
 
-  // 14) Handle "Invalid wss signature" errors: re-fetch wssKey and re-subscribe the user channel.
-  useEffect(() => {
-    const socket = socketRef.current;
-    if (!isSocketLike(socket) || !isAuthenticated || !resolvedUserAddress)
-      return;
-
-    const userAddress = resolvedUserAddress;
-    let isDisposed = false;
-
-    const resubscribe = async () => {
-      const wssKeyResponse = await authControllerGetWssKey();
-      const nextWssKey = extractWssKey(wssKeyResponse);
-      const nextExpiresAt = extractWssKeyExpiry(wssKeyResponse);
-      if (!nextWssKey || isDisposed) return;
-
-      useGameStore.getState().setConnection(socketRef.current, nextWssKey);
-      useGameStore.getState().setWssKey(nextWssKey, nextExpiresAt);
-
-      const challengeResponse = await authControllerGetChallenge({
-        address: userAddress,
-      });
-      const challenge = extractChallenge(challengeResponse);
-      if (!challenge || isDisposed) return;
-
-      const signature = await signWssMessage(nextWssKey, userAddress, challenge);
-      if (isDisposed) return;
-
-      socket.emit(SUBSCRIBE_USER_EVENT, { userId: userAddress, signature });
-    };
-
-    const isInvalidWssSignature = (payload: unknown): boolean => {
-      if (typeof payload === "string") {
-        return payload.toLowerCase().includes("invalid wss signature");
-      }
-      if (payload && typeof payload === "object") {
-        const record = payload as Record<string, unknown>;
-        const msg = record.message ?? record.msg ?? record.error;
-        return typeof msg === "string" && msg.toLowerCase().includes("invalid wss signature");
-      }
-      return false;
-    };
-
-    const handleInvalidSignature = (payload: unknown) => {
-      if (!isInvalidWssSignature(payload)) return;
-      void resubscribe().catch((error) => {
-        console.error("[TradingGrid] Failed to re-subscribe after invalid wss signature:", error);
-      });
-    };
-
-    // The server sends "Invalid wss signature" as a named "message" event.
-    // Also guard "error" and "exception" for other transports.
-    socket.on("message", handleInvalidSignature);
-    socket.on("error", handleInvalidSignature);
-    socket.on("exception", handleInvalidSignature);
-    return () => {
-      isDisposed = true;
-      socket.off("message", handleInvalidSignature);
-      socket.off("error", handleInvalidSignature);
-      socket.off("exception", handleInvalidSignature);
-    };
-  }, [isAuthenticated, resolvedUserAddress]);
-
-  // 15) Cancel pending bets that have not been confirmed by socket within 3 seconds.
+  // 14) Cancel pending bets that have not been confirmed by socket within 3 seconds.
   useEffect(() => {
     const pendingCellIds = Object.keys(pendingBets);
     if (pendingCellIds.length === 0) return;
@@ -571,65 +545,4 @@ export function useTradingGridSocketEffects({
     return () => timers.forEach(clearTimeout);
   }, [cancelPendingBet, pendingBets]);
 
-  // 16) Proactively refresh the wssKey shortly before it expires so the connection
-  //     never goes invalid mid-session (complements the reactive socket message handler).
-  //     Guard with a ref so updating wssKeyExpiresAt after refresh doesn't re-trigger this effect.
-  useEffect(() => {
-    if (!isAuthenticated || !resolvedUserAddress || !wssKeyExpiresAt) return;
-
-    // Skip re-scheduling if we already have a timer for this exact expiry.
-    if (scheduledWssExpiryRef.current === wssKeyExpiresAt) return;
-    scheduledWssExpiryRef.current = wssKeyExpiresAt;
-
-    const msUntilExpiry = wssKeyExpiresAt - Date.now();
-    // If the key is already expired or expires within the configured refresh window, skip scheduling —
-    // the reactive handler (effect #14) covers the invalid-signature case.
-    if (msUntilExpiry <= WSS_KEY_REFRESH_BEFORE_EXPIRY_MS) return;
-    const refreshAfterMs =
-      msUntilExpiry - WSS_KEY_REFRESH_BEFORE_EXPIRY_MS;
-
-    const userAddress = resolvedUserAddress;
-    let isDisposed = false;
-
-    const timer = setTimeout(async () => {
-      if (isDisposed) return;
-      const socket = socketRef.current;
-      if (!isSocketLike(socket)) return;
-      try {
-        const wssKeyResponse = await authControllerGetWssKey();
-        const nextWssKey = extractWssKey(wssKeyResponse);
-        const nextExpiresAt = extractWssKeyExpiry(wssKeyResponse);
-        if (!nextWssKey || isDisposed) return;
-
-        // Only update the store if the new expiry is genuinely in the future
-        // to avoid scheduling another immediate refresh.
-        if (
-          nextExpiresAt !== null &&
-          nextExpiresAt - Date.now() > WSS_KEY_REFRESH_BEFORE_EXPIRY_MS
-        ) {
-          useGameStore.getState().setConnection(socketRef.current, nextWssKey);
-          useGameStore.getState().setWssKey(nextWssKey, nextExpiresAt);
-        } else {
-          useGameStore.getState().setConnection(socketRef.current, nextWssKey);
-          useGameStore.getState().setWssKey(nextWssKey, null);
-        }
-
-        const challengeResponse = await authControllerGetChallenge({ address: userAddress });
-        const challenge = extractChallenge(challengeResponse);
-        if (!challenge || isDisposed) return;
-
-        const signature = await signWssMessage(nextWssKey, userAddress, challenge);
-        if (isDisposed) return;
-
-        socket.emit(SUBSCRIBE_USER_EVENT, { userId: userAddress, signature });
-      } catch (error) {
-        console.error("[TradingGrid] Failed to proactively refresh wssKey:", error);
-      }
-    }, refreshAfterMs);
-
-    return () => {
-      isDisposed = true;
-      clearTimeout(timer);
-    };
-  }, [isAuthenticated, resolvedUserAddress, wssKeyExpiresAt]);
 }

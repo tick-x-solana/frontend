@@ -34,6 +34,7 @@ export const FAKE_WIN_TOAST_MAX_DELAY_MS = 20000;
 export const FAKE_WIN_TOAST_VISIBLE_MS = 1000;
 export const WIN_EFFECT_VISIBLE_MS = 2000;
 export const WIN_EFFECT_AMOUNTS_VISIBLE_MS = 1300;
+export const WIN_EFFECT_INIT_GRACE_MS = 5000;
 export const FAKE_WIN_USERNAME_PREFIXES = [
   "lion",
   "tiger",

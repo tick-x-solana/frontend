@@ -290,30 +290,34 @@ export const useGameStore = create<GameState>((set) => ({
 
       const incomingIds = new Set(incomingCells.map((c) => c.id));
 
-      // Retain old cells that are no longer in the new snapshot only when they
-      // carry local state (bet/outcome) to keep feedback visible.
-      const retainedCells = state.cells
-        .filter((cell) => {
-          if (incomingIds.has(cell.id)) return false;
+      // When the row height changes, every previous cell geometry becomes stale.
+      // Dropping the old snapshot entirely avoids mixing old/new price bands in
+      // the same frame, which otherwise renders overlapping cells.
+      const retainedCells = hasPriceStepChanged
+        ? []
+        : state.cells
+            .filter((cell) => {
+              if (incomingIds.has(cell.id)) return false;
 
-          const hasTrackedState =
-            (activeBets[cell.id] || 0) > 0 ||
-            (activePendingBets[cell.id] || 0) > 0 ||
-            activePendingWins[cell.id] !== undefined ||
-            activeSettledOutcomes[cell.id] !== undefined;
-          const settledOutcome = activeSettledOutcomes[cell.id];
-          const shouldKeepSettledWin = settledOutcome?.isWin === true || cell.status === "hit";
+              const hasTrackedState =
+                (activeBets[cell.id] || 0) > 0 ||
+                (activePendingBets[cell.id] || 0) > 0 ||
+                activePendingWins[cell.id] !== undefined ||
+                activeSettledOutcomes[cell.id] !== undefined;
+              const settledOutcome = activeSettledOutcomes[cell.id];
+              const shouldKeepSettledWin =
+                settledOutcome?.isWin === true || cell.status === "hit";
 
-          if (shouldKeepSettledWin) return true;
-          return hasTrackedState && cell.timeWindowEnd > hideThresholdTime;
-        })
-        .map((cell) => ({
-          ...cell,
-          status:
-            cell.status === "hit" || cell.status === "lose"
-              ? cell.status
-              : statusForWindow(now, cell.timeWindowStart, cell.timeWindowEnd),
-        }));
+              if (shouldKeepSettledWin) return true;
+              return hasTrackedState && cell.timeWindowEnd > hideThresholdTime;
+            })
+            .map((cell) => ({
+              ...cell,
+              status:
+                cell.status === "hit" || cell.status === "lose"
+                  ? cell.status
+                  : statusForWindow(now, cell.timeWindowStart, cell.timeWindowEnd),
+            }));
 
       return {
         cells: [...retainedCells, ...incomingCells].sort(sortGridCells),
@@ -447,6 +451,8 @@ export const useGameStore = create<GameState>((set) => ({
       const nextPendingWins = { ...state.pendingWins };
       const nextSettledOutcomes = { ...state.settledOutcomes };
       const now = getServerNow(state.serverTimeOffset);
+      const chartTime = getLatestChartTime(state.history, now);
+      const hideThresholdTime = getCellHideThresholdTime(chartTime);
       const existingCell = state.cells.find((cell) => cell.id === cellId) ?? null;
       const reconstructedCell = existingCell
         ? null
@@ -456,11 +462,18 @@ export const useGameStore = create<GameState>((set) => ({
             ),
             now,
           )[0] ?? null;
+      // Don't inject stale historical cells — they belong to a past session and
+      // would appear as ghost cells when backfilling orders on app load.
+      const isReconstructedCellStale =
+        reconstructedCell !== null &&
+        reconstructedCell.timeWindowEnd <= hideThresholdTime;
       const cellsWithRecoveredTarget =
-        reconstructedCell !== null ? [...state.cells, reconstructedCell] : state.cells;
+        reconstructedCell !== null && !isReconstructedCellStale
+          ? [...state.cells, reconstructedCell]
+          : state.cells;
       let changed = false;
 
-      if (reconstructedCell !== null) {
+      if (reconstructedCell !== null && !isReconstructedCellStale) {
         changed = true;
       }
 

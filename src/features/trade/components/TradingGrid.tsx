@@ -76,6 +76,7 @@ import {
   SUGGESTED_STRATEGY_MIN_HOLD_MS,
   TICK_CADENCE_SMOOTHING,
   WIN_EFFECT_AMOUNTS_VISIBLE_MS,
+  WIN_EFFECT_INIT_GRACE_MS,
   WIN_EFFECT_VISIBLE_MS,
 } from "./tradingGrid.constants";
 import { BalanceChip, WinBetBanner } from "./tradingGrid.ui";
@@ -165,7 +166,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const updateGrid = useGameStore((s) => s.updateGrid);
   const updateOrder = useGameStore((s) => s.updateOrder);
   const cancelPendingBet = useGameStore((s) => s.cancelPendingBet);
-  const wssKeyExpiresAt = useGameStore((s) => s.wssKeyExpiresAt);
   const resetGridData = useGameStore((s) => s.resetGridData);
   const betAmount = useGameStore((s) => s.betAmount);
   const balance = useGameStore((s) => s.balance);
@@ -197,7 +197,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   });
   const { mutateAsync: registerOrderFollow } =
     useOrderFollowControllerRegister();
-  const { data: userOrdersResponse } = useOrderControllerGetUserOrders(
+  const {
+    data: userOrdersResponse,
+    isFetched: isUserOrdersFetched,
+  } = useOrderControllerGetUserOrders(
     {
       limit: 200,
       offset: 0,
@@ -299,6 +302,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const drawRef = useRef<() => void>(() => {});
   const rafRef = useRef<number>(0);
   const previousWinningCellIdsRef = useRef<Set<string>>(new Set());
+  const hasInitializedWinEffectTrackingRef = useRef(false);
+  const componentMountedAtRef = useRef(Date.now());
   const previewCellIdRef = useRef<string | null>(null);
   // Keep backing store size in sync with DPR for sharp rendering on high-density screens.
   const syncCanvasSize = useCallback((canvas: HTMLCanvasElement | null) => {
@@ -350,6 +355,12 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   useEffect(() => {
     if (priceStepChangedAt === null) return;
     appToast.warning("Price range updated — your bets are cleared from view, but will still settle normally.");
+    // Absorb any currently-tracked winning cells into the baseline so that
+    // cells reconstructed after a price-step clear do not fire win animations.
+    previousWinningCellIdsRef.current = new Set(
+      cells.filter((c) => c.status === "hit").map((c) => c.id),
+    );
+    hasInitializedWinEffectTrackingRef.current = false;
   }, [priceStepChangedAt]);
   useLayoutEffect(() => {
     // Recompute dims only when cells change — avoids Map/sort allocation every frame.
@@ -488,6 +499,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     () => new Set(Object.keys(activeWinEffectByCellId)),
     [activeWinEffectByCellId],
   );
+  const canTrackWinEffects = !isAuthenticated || isUserOrdersFetched;
   // Follow-trade currently supports selecting exactly one target at a time.
   const ensureSingleFollowTargetConfig = useCallback(
     (source: Record<string, boolean>) => {
@@ -937,14 +949,12 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     updateOrder,
     cancelPendingBet,
     pendingBets,
-    wssKeyExpiresAt,
     storeRef,
   });
 
   // ── Track wins (fire once per hit transition, not once forever per id) ────
   useEffect(() => {
     const nextWinningCellIds = new Set<string>();
-    const newlyWinningCellIds: string[] = [];
 
     cells.forEach((cell) => {
       if (cell.status !== "hit") return;
@@ -956,9 +966,35 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       if (!hasTrackedStake) return;
 
       nextWinningCellIds.add(cell.id);
-      if (previousWinningCellIdsRef.current.has(cell.id)) return;
-      newlyWinningCellIds.push(cell.id);
     });
+
+    // Suppress win effects during initial data hydration:
+    // absorb all pre-existing wins into the baseline for the first few seconds
+    // after component mount, regardless of tracking/auth state.
+    const msSinceMount = Date.now() - componentMountedAtRef.current;
+    if (msSinceMount < WIN_EFFECT_INIT_GRACE_MS) {
+      previousWinningCellIdsRef.current = nextWinningCellIds;
+      return;
+    }
+
+    if (!canTrackWinEffects) {
+      previousWinningCellIdsRef.current = nextWinningCellIds;
+      hasInitializedWinEffectTrackingRef.current = false;
+      return;
+    }
+
+    if (!hasInitializedWinEffectTrackingRef.current) {
+      previousWinningCellIdsRef.current = nextWinningCellIds;
+      hasInitializedWinEffectTrackingRef.current = true;
+      return;
+    }
+
+    const visibleWinCellIds = new Set(shareOverlayTargets.map((t) => t.cellId));
+    const newlyWinningCellIds = [...nextWinningCellIds].filter(
+      (cellId) =>
+        !previousWinningCellIdsRef.current.has(cellId) &&
+        visibleWinCellIds.has(cellId),
+    );
 
     if (newlyWinningCellIds.length > 0) {
       const effectStartedAt = Date.now();
@@ -975,7 +1011,15 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     }
 
     previousWinningCellIdsRef.current = nextWinningCellIds;
-  }, [cells, bets, pendingBets, pendingWins, settledOutcomes]);
+  }, [
+    bets,
+    canTrackWinEffects,
+    cells,
+    pendingBets,
+    pendingWins,
+    settledOutcomes,
+    shareOverlayTargets,
+  ]);
 
   // Win-effect lifecycle:
   // track newly hit bet cells and start one visual pulse per transition.
@@ -1620,9 +1664,12 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       priceMotionRef.current = null;
       lastHistoryPointRef.current = null;
       tickCadenceMsRef.current = 1000;
+      previousWinningCellIdsRef.current = new Set();
+      hasInitializedWinEffectTrackingRef.current = false;
       isReadyRef.current = false;
       dataReadyAtRef.current = null;
       previewCellIdRef.current = null;
+      setActiveWinEffectByCellId({});
       setSuggestedStrategyCellIds([]);
       setIsReady(false);
       setCanvasInstanceKey((k) => k + 1);
