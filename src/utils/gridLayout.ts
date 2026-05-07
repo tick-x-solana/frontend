@@ -243,6 +243,46 @@ export function computeLayout(
   };
 }
 
+/**
+ * Prevent horizontal panning past the last data column. Once the final cell
+ * is fully visible, its right edge should stay attached to the price axis.
+ */
+export function clampTransformToDataBounds(
+  tf: Transform,
+  size: { w: number; h: number },
+  now: number,
+  cam: number,
+  store: StoreSnapshot,
+): Transform {
+  const dims =
+    store.dims ??
+    computeGridDimensions(
+      store.cells.map((c) => ({
+        ...c.original,
+        startTs: c.timeWindowStart,
+        endTs: c.timeWindowEnd,
+      })),
+    );
+  const lastColumn = dims.columns[dims.columns.length - 1];
+
+  if (!lastColumn) {
+    return tf;
+  }
+
+  const layout = computeLayout(tf, size, now, cam, store);
+  const lastColumnRightEdge = layout.toCanvasX(lastColumn.endTs);
+  const minOffsetX = tf.offsetX + (layout.plotRight - lastColumnRightEdge);
+
+  if (tf.offsetX >= minOffsetX) {
+    return tf;
+  }
+
+  return {
+    ...tf,
+    offsetX: minOffsetX,
+  };
+}
+
 // ─── Hit-test ─────────────────────────────────────────────────────────────────
 
 /**

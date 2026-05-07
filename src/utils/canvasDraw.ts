@@ -51,6 +51,7 @@ const PRICE_AXIS_MIN_LABEL_GAP_PX = 18;
 const TIME_AXIS_MIN_LABEL_GAP_PX = 56;
 const REWARD_RATE_LABEL_HIDE_ZOOM = 0.39;
 const CELL_DETAIL_COMPACT_ZOOM = 0.5;
+const PRICE_AXIS_ZOOMED_OUT_LABEL_GAP_MULTIPLIER_CAP = 3;
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,56 @@ function formatPriceLabel(value: number, marketId: string): string {
   return isEthUsdMarket
     ? priceLabelFormatterTwoDecimals.format(value)
     : priceLabelFormatterOneDecimal.format(value);
+}
+
+function getPriceAxisMinLabelGapPx(layout: GridLayout) {
+  if (layout.zoom >= 1) return PRICE_AXIS_MIN_LABEL_GAP_PX;
+
+  const zoomedOutGapMultiplier = clamp(
+    1 / Math.max(layout.zoom, 0.01),
+    1,
+    PRICE_AXIS_ZOOMED_OUT_LABEL_GAP_MULTIPLIER_CAP,
+  );
+
+  return PRICE_AXIS_MIN_LABEL_GAP_PX * zoomedOutGapMultiplier;
+}
+
+interface VisiblePriceRow {
+  rowIdx: number;
+  priceLevel: number;
+  cellTop: number;
+  lineY: number;
+}
+
+function getVisiblePriceRows(layout: GridLayout): VisiblePriceRow[] {
+  const {
+    plotBottom,
+    toCellY,
+    toPrice,
+    effectivePriceStep,
+    gridAnchorPrice,
+  } = layout;
+
+  const priceAtTop = toPrice(0);
+  const priceAtBot = toPrice(plotBottom);
+  const rowAtTop = (priceAtTop - gridAnchorPrice) / effectivePriceStep;
+  const rowAtBot = (priceAtBot - gridAnchorPrice) / effectivePriceStep;
+  const rowStartIdx = Math.floor(Math.min(rowAtTop, rowAtBot)) - 2;
+  const rowEndIdx = Math.ceil(Math.max(rowAtTop, rowAtBot)) + 2;
+
+  const rows: VisiblePriceRow[] = [];
+  for (let rowIdx = rowStartIdx; rowIdx <= rowEndIdx; rowIdx += 1) {
+    const priceLevel = gridAnchorPrice + rowIdx * effectivePriceStep;
+    const cellTop = toCellY(priceLevel + effectivePriceStep / 2);
+    rows.push({
+      rowIdx,
+      priceLevel,
+      cellTop,
+      lineY: cellTop + 0.5,
+    });
+  }
+
+  return rows;
 }
 
 function hasChartPassedColumn(
@@ -190,13 +241,9 @@ export function drawBackgroundGrid(
     plotRight,
     plotBottom,
     toCanvasX,
-    toCellY,
     toTime,
-    toPrice,
     cellW,
     cellH,
-    effectivePriceStep,
-    gridAnchorPrice,
     gridAnchorTime,
   } = layout;
   const intervalMs = store.modeIntervalSeconds * 1000;
@@ -208,13 +255,6 @@ export function drawBackgroundGrid(
   // Determine the visible price / time range in logical units
   const visibleT0 = toTime(0);
   const visibleT1 = toTime(plotRight);
-  const priceAtTop = toPrice(0);
-  const priceAtBot = toPrice(plotBottom);
-  const rowAtTop = (priceAtTop - gridAnchorPrice) / effectivePriceStep;
-  const rowAtBot = (priceAtBot - gridAnchorPrice) / effectivePriceStep;
-  const rowStartIdx = Math.floor(Math.min(rowAtTop, rowAtBot)) - 2;
-  const rowEndIdx = Math.ceil(Math.max(rowAtTop, rowAtBot)) + 2;
-
   const colStartTs =
     gridAnchorTime +
     Math.floor((visibleT0 - gridAnchorTime) / intervalMs) * intervalMs -
@@ -224,17 +264,12 @@ export function drawBackgroundGrid(
     Math.ceil((visibleT1 - gridAnchorTime) / intervalMs) * intervalMs +
     intervalMs;
 
-  const anchorPrice = gridAnchorPrice;
-  const anchorRowIdx = 0;
-
   ctx.fillStyle = COLOR_BG;
   ctx.strokeStyle = COLOR_GRID;
   ctx.lineWidth = 0.4;
 
-  for (let rowIdx = rowStartIdx; rowIdx <= rowEndIdx; rowIdx++) {
-    const priceLevel =
-      anchorPrice + (rowIdx - anchorRowIdx) * effectivePriceStep;
-    const cellTop = toCellY(priceLevel + effectivePriceStep / 2);
+  for (const row of getVisiblePriceRows(layout)) {
+    const cellTop = row.cellTop;
     if (cellTop > plotBottom + cellH || cellTop + cellH < 0) continue;
 
     for (let ts = colStartTs; ts <= colEndTs; ts += intervalMs) {
@@ -1373,17 +1408,8 @@ export function drawPriceAxis(
   store: StoreSnapshot,
   isMobile: boolean,
 ) {
-  const { w, plotBottom, toCellY, effectivePriceStep, basePrice } = layout;
-  const anchorPrice = basePrice;
-  const anchorRowIdx = 0;
-
-  // Compute visible row range
-  const priceAtTop = layout.toPrice(0);
-  const priceAtBot = layout.toPrice(plotBottom);
-  const rowAtTop = (priceAtTop - basePrice) / effectivePriceStep;
-  const rowAtBot = (priceAtBot - basePrice) / effectivePriceStep;
-  const rowStartIdx = Math.floor(Math.min(rowAtTop, rowAtBot)) - 2;
-  const rowEndIdx = Math.ceil(Math.max(rowAtTop, rowAtBot)) + 2;
+  const { w, plotBottom } = layout;
+  const visibleRows = getVisiblePriceRows(layout);
 
   const { axisWidth, axisX } = getPriceAxisMetrics(ctx, layout, isMobile);
 
@@ -1405,14 +1431,21 @@ export function drawPriceAxis(
   ctx.fillStyle = COLOR_TEXT_DIM;
   const rowStep = Math.max(
     1,
-    Math.ceil(PRICE_AXIS_MIN_LABEL_GAP_PX / Math.max(layout.cellH, 1)),
+    Math.ceil(getPriceAxisMinLabelGapPx(layout) / Math.max(layout.cellH, 1)),
   );
-  const firstLabeledRow = Math.ceil(rowStartIdx / rowStep) * rowStep;
-  for (let i = firstLabeledRow; i <= rowEndIdx; i += rowStep) {
-    const p = anchorPrice + (i - anchorRowIdx) * effectivePriceStep;
-    const cy = toCellY(p);
-    if (cy < -10 || cy > plotBottom + 10) continue;
-    ctx.fillText(formatPriceLabel(p, store.marketId), w - 4, cy);
+  const firstVisibleRowIdx = visibleRows[0]?.rowIdx ?? 0;
+  const firstLabeledRowIdx = Math.ceil(firstVisibleRowIdx / rowStep) * rowStep;
+
+  for (const row of visibleRows) {
+    if (row.rowIdx < firstLabeledRowIdx) continue;
+    if ((row.rowIdx - firstLabeledRowIdx) % rowStep !== 0) continue;
+    if (row.lineY < -10 || row.lineY > plotBottom + 10) continue;
+
+    ctx.fillText(
+      formatPriceLabel(row.priceLevel, store.marketId),
+      w - 4,
+      row.lineY,
+    );
   }
 
   const focusPrice = layout.cam;

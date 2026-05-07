@@ -5,7 +5,9 @@ import {
 } from "@/src/utils/formatters";
 
 export const DESKTOP_ZOOM_MIN = 0.1;
-export const MOBILE_ZOOM_MIN = 1;
+export const DEFAULT_DESKTOP_ZOOM = 0.4;
+export const DEFAULT_MOBILE_ZOOM = DEFAULT_DESKTOP_ZOOM;
+export const MOBILE_ZOOM_MIN = 0.2;
 export const MIN_PRICE_MOTION_MS = 250;
 export const MAX_PRICE_MOTION_MS = 5000;
 export const TICK_CADENCE_SMOOTHING = 0.2;

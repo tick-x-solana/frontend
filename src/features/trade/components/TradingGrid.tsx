@@ -34,6 +34,7 @@ import {
   useOrderFollowControllerRegister,
 } from "@/src/services/queries";
 import {
+  clampTransformToDataBounds,
   computeLayout,
   hitTestAnyCell,
   hitTestCell,
@@ -53,6 +54,7 @@ import { useGridInteraction } from "@/src/hooks/useGridInteraction";
 import useWinShareActions from "@/src/hooks/useWinShareActions";
 import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
 import {
+  DEFAULT_DESKTOP_ZOOM,
   DESKTOP_ZOOM_MIN,
   FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS,
   FOLLOW_REFERRAL_STATS,
@@ -257,11 +259,17 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   // Live values in refs keep the animation loop stable without hook dependency churn.
   const initialIsMobile =
     typeof window !== "undefined" ? window.innerWidth < 640 : false;
-  const initialMinZoom = initialIsMobile ? MOBILE_ZOOM_MIN : DESKTOP_ZOOM_MIN;
+  const initialDefaultZoom = initialIsMobile
+    ? MOBILE_ZOOM_MIN
+    : DEFAULT_DESKTOP_ZOOM;
   const nowRef = useRef(0);
   const cameraPriceRef = useRef(currentPrice || 0);
   const isMobileRef = useRef(initialIsMobile);
   const sizeRef = useRef({ w: 0, h: 0 });
+  const getDefaultZoom = useCallback(
+    () => (isMobileRef.current ? MOBILE_ZOOM_MIN : DEFAULT_DESKTOP_ZOOM),
+    [],
+  );
   const getMinZoom = useCallback(
     () => (isMobileRef.current ? MOBILE_ZOOM_MIN : DESKTOP_ZOOM_MIN),
     [],
@@ -269,7 +277,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const transformRef = useRef<Transform>({
     offsetX: 0,
     offsetY: 0,
-    zoom: initialMinZoom,
+    zoom: initialDefaultZoom,
   });
   const priceMotionRef = useRef<{
     startPrice: number;
@@ -1048,6 +1056,13 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       if (transformRef.current.zoom < minZoom) {
         transformRef.current = { ...transformRef.current, zoom: minZoom };
       }
+      transformRef.current = clampTransformToDataBounds(
+        transformRef.current,
+        sizeRef.current,
+        nowRef.current,
+        cameraPriceRef.current,
+        storeRef.current,
+      );
       const cv = canvasRef.current;
       if (cv) syncCanvasSize(cv);
     };
@@ -1094,8 +1109,15 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   // Strict hit-test for betting: only returns a currently valid/interactive cell.
   // This is used by click/tap handlers before calling placeBet.
   const hitTest = useCallback((cx: number, cy: number) => {
-    const layout = computeLayout(
+    const boundedTransform = clampTransformToDataBounds(
       transformRef.current,
+      sizeRef.current,
+      nowRef.current,
+      cameraPriceRef.current,
+      storeRef.current,
+    );
+    const layout = computeLayout(
+      boundedTransform,
       sizeRef.current,
       nowRef.current,
       cameraPriceRef.current,
@@ -1107,8 +1129,15 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   // Broad hit-test for hover/preview UX: returns any cell under pointer
   // (even when it cannot be bet right now).
   const hitTestAny = useCallback((cx: number, cy: number) => {
-    const layout = computeLayout(
+    const boundedTransform = clampTransformToDataBounds(
       transformRef.current,
+      sizeRef.current,
+      nowRef.current,
+      cameraPriceRef.current,
+      storeRef.current,
+    );
+    const layout = computeLayout(
+      boundedTransform,
       sizeRef.current,
       nowRef.current,
       cameraPriceRef.current,
@@ -1125,7 +1154,16 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const tf = transformRef.current;
+    const tf = clampTransformToDataBounds(
+      transformRef.current,
+      sizeRef.current,
+      nowRef.current,
+      cameraPriceRef.current,
+      storeRef.current,
+    );
+    if (tf !== transformRef.current) {
+      transformRef.current = tf;
+    }
     const layout = computeLayout(
       tf,
       sizeRef.current,
@@ -1424,6 +1462,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     hitTest,
     hitTestAnyCell: hitTestAny,
     placeBet,
+    getDefaultZoom,
     getMinZoom,
   });
 

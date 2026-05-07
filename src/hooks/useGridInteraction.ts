@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { appToast } from "@/src/features/trade/toast";
 import { signWssMessage } from "@/src/features/trade/socketSignature";
 import type { CellData } from "@/src/features/trade/store";
-import { clamp } from "@/src/utils/gridLayout";
+import { clamp, clampTransformToDataBounds } from "@/src/utils/gridLayout";
 import type { StoreSnapshot, Transform } from "@/src/utils/gridLayout";
 import { getAddress } from "viem";
 
@@ -41,6 +41,7 @@ interface UseGridInteractionOptions {
   hitTest: (cx: number, cy: number) => CellData | null;
   hitTestAnyCell: (cx: number, cy: number) => CellData | null;
   placeBet: (cellId: string, amount: number) => void;
+  getDefaultZoom: () => number;
   getMinZoom: () => number;
 }
 
@@ -69,6 +70,7 @@ export function useGridInteraction({
   hitTest,
   hitTestAnyCell,
   placeBet,
+  getDefaultZoom,
   getMinZoom,
 }: UseGridInteractionOptions) {
   const dragRef = useRef<DragState>({
@@ -101,6 +103,18 @@ export function useGridInteraction({
     previewCellIdRef.current = null;
   }, [previewCellIdRef]);
 
+  const clampTransform = useCallback(
+    (next: Transform) =>
+      clampTransformToDataBounds(
+        next,
+        sizeRef.current,
+        nowRef.current,
+        0,
+        storeRef.current,
+      ),
+    [nowRef, sizeRef, storeRef],
+  );
+
   const cancelResetAnimation = useCallback(() => {
     if (resetAnimationFrameRef.current === null) return;
     cancelAnimationFrame(resetAnimationFrameRef.current);
@@ -127,9 +141,9 @@ export function useGridInteraction({
         offsetX: mx - pivotX - (mx - pivotX - tf.offsetX) * ratio,
         offsetY: my - pivotY - (my - pivotY - tf.offsetY) * ratio,
       };
-      transformRef.current = next;
+      transformRef.current = clampTransform(next);
     },
-    [cancelResetAnimation, getMinZoom, sizeRef, transformRef],
+    [cancelResetAnimation, clampTransform, getMinZoom, sizeRef, transformRef],
   );
 
   // ── Wheel (desktop zoom) ─────────────────────────────────────────────────────
@@ -175,9 +189,9 @@ export function useGridInteraction({
         offsetX: d.lastOffX + (e.clientX - d.startX),
         offsetY: d.lastOffY + (e.clientY - d.startY),
       };
-      transformRef.current = next;
+      transformRef.current = clampTransform(next);
     },
-    [transformRef, updatePreviewCell],
+    [clampTransform, transformRef, updatePreviewCell],
   );
 
   const endDrag = useCallback(() => {
@@ -229,7 +243,7 @@ export function useGridInteraction({
             dragRef.current.lastOffY +
             (e.touches[0].clientY - dragRef.current.startY),
         };
-        transformRef.current = next;
+        transformRef.current = clampTransform(next);
       } else if (
         e.touches.length === 2 &&
         lastTouchDistRef.current !== null &&
@@ -252,7 +266,7 @@ export function useGridInteraction({
         lastTouchMidRef.current = mid;
       }
     },
-    [canvasRef, clearPreviewCell, transformRef, applyZoom],
+    [applyZoom, canvasRef, clampTransform, clearPreviewCell, transformRef],
   );
 
   const handleTouchEnd = useCallback(() => {
@@ -415,16 +429,17 @@ export function useGridInteraction({
     const target: Transform = {
       offsetX: 0,
       offsetY: 0,
-      zoom: getMinZoom(),
+      zoom: getDefaultZoom(),
     };
+    const boundedTarget = clampTransform(target);
 
     const isAlreadyReset =
-      Math.abs(start.offsetX - target.offsetX) < 0.5 &&
-      Math.abs(start.offsetY - target.offsetY) < 0.5 &&
-      Math.abs(start.zoom - target.zoom) < 0.001;
+      Math.abs(start.offsetX - boundedTarget.offsetX) < 0.5 &&
+      Math.abs(start.offsetY - boundedTarget.offsetY) < 0.5 &&
+      Math.abs(start.zoom - boundedTarget.zoom) < 0.001;
 
     if (isAlreadyReset) {
-      transformRef.current = target;
+      transformRef.current = boundedTarget;
       return;
     }
 
@@ -439,11 +454,15 @@ export function useGridInteraction({
       const easedProgress = easeInOutCubic(progress);
 
       transformRef.current = {
-        offsetX:
-          start.offsetX + (target.offsetX - start.offsetX) * easedProgress,
-        offsetY:
-          start.offsetY + (target.offsetY - start.offsetY) * easedProgress,
-        zoom: start.zoom + (target.zoom - start.zoom) * easedProgress,
+        ...clampTransform({
+          offsetX:
+            start.offsetX +
+            (boundedTarget.offsetX - start.offsetX) * easedProgress,
+          offsetY:
+            start.offsetY +
+            (boundedTarget.offsetY - start.offsetY) * easedProgress,
+          zoom: start.zoom + (boundedTarget.zoom - start.zoom) * easedProgress,
+        }),
       };
 
       if (progress < 1) {
@@ -451,12 +470,12 @@ export function useGridInteraction({
         return;
       }
 
-      transformRef.current = target;
+      transformRef.current = boundedTarget;
       resetAnimationFrameRef.current = null;
     };
 
     resetAnimationFrameRef.current = requestAnimationFrame(step);
-  }, [cancelResetAnimation, getMinZoom, transformRef]);
+  }, [cancelResetAnimation, clampTransform, getDefaultZoom, transformRef]);
 
   return {
     dragRef,
