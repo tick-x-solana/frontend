@@ -107,7 +107,7 @@ export function useTradingGridSocketEffects({
     const loadHistory = async () => {
       try {
         const response = await fetch(
-          `https://api.binance.com/api/v3/klines?symbol=${marketId}&interval=1s&limit=600`,
+          `https://api.binance.com/api/v3/klines?symbol=${marketId}&interval=1s&limit=1200`,
           {
             method: "GET",
             cache: "no-store",
@@ -267,9 +267,15 @@ export function useTradingGridSocketEffects({
         payload && typeof payload === "object"
           ? (payload as Record<string, unknown>).message
           : payload;
-      if (typeof msg === "string" && msg.toLowerCase().includes("invalid wss signature")) {
+      if (
+        typeof msg === "string" &&
+        msg.toLowerCase().includes("invalid wss signature")
+      ) {
         void subscribeUser().catch((error) => {
-          console.error("Failed to re-subscribe after invalid WSS signature:", error);
+          console.error(
+            "Failed to re-subscribe after invalid WSS signature:",
+            error,
+          );
         });
       }
     };
@@ -427,11 +433,7 @@ export function useTradingGridSocketEffects({
         SUGGESTED_STRATEGY_UPDATE_EVENT,
         handleSuggestedStrategyUpdate,
       );
-  }, [
-    isSuggestedStrategyVisible,
-    queueSuggestedStrategyCellIds,
-    storeRef,
-  ]);
+  }, [isSuggestedStrategyVisible, queueSuggestedStrategyCellIds, storeRef]);
 
   // 9) Sync the initial balance from the query response into the store.
   useEffect(() => {
@@ -544,5 +546,4 @@ export function useTradingGridSocketEffects({
 
     return () => timers.forEach(clearTimeout);
   }, [cancelPendingBet, pendingBets]);
-
 }

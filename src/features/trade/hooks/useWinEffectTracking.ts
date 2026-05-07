@@ -11,10 +11,7 @@ import {
   WIN_EFFECT_VISIBLE_MS,
   WIN_EFFECT_AMOUNTS_VISIBLE_MS,
 } from "../components/tradingGrid.constants";
-import type {
-  ActiveWinEffectState,
-  ShareOverlayTarget,
-} from "../components/tradingGrid.utils";
+import type { ActiveWinEffectState } from "../components/tradingGrid.utils";
 
 type SettledOutcomes = Record<string, SettledOutcome>;
 
@@ -24,7 +21,6 @@ export function useWinEffectTracking({
   pendingBets,
   pendingWins,
   settledOutcomes,
-  shareOverlayTargets,
   canTrackWinEffects,
   priceStepChangedAt,
 }: {
@@ -33,7 +29,6 @@ export function useWinEffectTracking({
   pendingBets: Record<string, number>;
   pendingWins: Record<string, number>;
   settledOutcomes: SettledOutcomes;
-  shareOverlayTargets: ShareOverlayTarget[];
   canTrackWinEffects: boolean;
   priceStepChangedAt: number | null;
 }) {
@@ -93,11 +88,8 @@ export function useWinEffectTracking({
       return;
     }
 
-    const visibleWinCellIds = new Set(shareOverlayTargets.map((t) => t.cellId));
     const newlyWinningCellIds = [...nextWinningCellIds].filter(
-      (cellId) =>
-        !previousWinningCellIdsRef.current.has(cellId) &&
-        visibleWinCellIds.has(cellId),
+      (cellId) => !previousWinningCellIdsRef.current.has(cellId),
     );
 
     if (newlyWinningCellIds.length > 0) {
@@ -122,7 +114,6 @@ export function useWinEffectTracking({
     pendingBets,
     pendingWins,
     settledOutcomes,
-    shareOverlayTargets,
     componentMountedAt,
   ]);
 

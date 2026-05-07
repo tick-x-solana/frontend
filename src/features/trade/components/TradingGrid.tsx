@@ -22,23 +22,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { useAuth } from "@/src/components/providers/AuthProvider";
-import {
-  extractFollowedOrderActivities,
-  extractOrderFollowings,
-} from "@/src/features/trade/orderFollow";
+import { extractOrderFollowings } from "@/src/features/trade/orderFollow";
 import { getLatestChartTime } from "@/src/features/trade/gridTiming";
-import type { RemoteCell } from "@/src/features/trade/store";
 import { useGameStore } from "@/src/features/trade/store";
 import { appToast } from "@/src/features/trade/toast";
 import {
-  authControllerGetChallenge,
   getOrderFollowControllerListFollowingQueryKey,
   useAccountControllerGetBalance,
   useOrderControllerGetUserOrders,
   useOrderFollowControllerListFollowing,
   useOrderFollowControllerRegister,
 } from "@/src/services/queries";
-import { signWssMessage } from "@/src/features/trade/socketSignature";
 import {
   computeLayout,
   hitTestAnyCell,
@@ -66,18 +60,12 @@ import {
   LARGE_MOVE_STEPS_FULL,
   LARGE_MOVE_STEPS_START,
   livePriceFormatter,
-  MARKET_SYMBOL,
   MAX_PRICE_MOTION_MS,
   MIN_PRICE_MOTION_MS,
   MOBILE_ZOOM_MIN,
-  ORDER_UPDATE_EVENT,
   RESIZE_COMMIT_DEBOUNCE_MS,
-  shareTimeFormatter,
   SUGGESTED_STRATEGY_MIN_HOLD_MS,
   TICK_CADENCE_SMOOTHING,
-  WIN_EFFECT_AMOUNTS_VISIBLE_MS,
-  WIN_EFFECT_INIT_GRACE_MS,
-  WIN_EFFECT_VISIBLE_MS,
 } from "./tradingGrid.constants";
 import { BalanceChip, WinBetBanner } from "./tradingGrid.ui";
 import {
@@ -94,24 +82,13 @@ import {
 import {
   areBooleanMapsEqual,
   buildDisplayHistory,
-  buildFakeWinToastData,
   easeOutCubic,
-  extractBalanceAmount,
   FollowOverlayActivity,
-  formatApproxUsd,
-  formatPercent,
   formatWalletShort,
   isCellIdStillAheadOfChart,
   normalizeReferralCode,
   parseAddress,
-  resolveGridCellIdFromActivityCellId,
   ShareOverlayTarget,
-  ActiveWinEffectState,
-  FakeWinToastData,
-  SuggestedStrategyMessage,
-  toFiniteNumber,
-  toMarketId,
-  toMarketSocketSegment,
 } from "./tradingGrid.utils";
 import { useTradingGridSocketEffects } from "@/src/features/trade/hooks/useTradingGridSocketEffects";
 import useFakeWinToast from "@/src/features/trade/hooks/useFakeWinToast";
@@ -123,6 +100,8 @@ import { useWinEffectTracking } from "@/src/features/trade/hooks/useWinEffectTra
 type TradingGridProps = {
   initialFollowRefCode?: string | null;
 };
+
+const SHARE_BUTTON_HIDE_ZOOM_THRESHOLD = 0.3;
 
 export const TradingGrid: React.FC<TradingGridProps> = ({
   initialFollowRefCode = null,
@@ -273,6 +252,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [canvasInstanceKey, setCanvasInstanceKey] = useState(0);
+  const [isCompactZoomForShare, setIsCompactZoomForShare] = useState(false);
 
   // Live values in refs keep the animation loop stable without hook dependency churn.
   const initialIsMobile =
@@ -304,6 +284,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   } | null>(null);
   const drawRef = useRef<() => void>(() => {});
   const rafRef = useRef<number>(0);
+  const compactZoomForShareRef = useRef(false);
   const previewCellIdRef = useRef<string | null>(null);
   // Keep backing store size in sync with DPR for sharp rendering on high-density screens.
   const syncCanvasSize = useCallback((canvas: HTMLCanvasElement | null) => {
@@ -530,7 +511,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     pendingBets,
     pendingWins,
     settledOutcomes,
-    shareOverlayTargets,
     canTrackWinEffects,
     priceStepChangedAt,
   });
@@ -1176,6 +1156,11 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         ? store.suggestedStrategyCellIds
         : [],
     };
+    const shouldHideShareButtons = tf.zoom < SHARE_BUTTON_HIDE_ZOOM_THRESHOLD;
+    if (compactZoomForShareRef.current !== shouldHideShareButtons) {
+      compactZoomForShareRef.current = shouldHideShareButtons;
+      setIsCompactZoomForShare(shouldHideShareButtons);
+    }
     // Compute share/win overlay anchor positions from currently visible winning cells.
     const nextShareTargets: ShareOverlayTarget[] = [];
     for (const cell of store.cells) {
@@ -1604,11 +1589,13 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
           setWinEffectIconRef={setWinEffectIconRef}
           wldUsdPrice={wldUsdPrice}
         />
-        <ShareButtonsLayer
-          shareOverlayTargets={shareOverlayTargets}
-          setShareOverlayButtonRef={setShareOverlayButtonRef}
-          handleOpenShareSheet={handleOpenShareSheet}
-        />
+        {!isCompactZoomForShare ? (
+          <ShareButtonsLayer
+            shareOverlayTargets={shareOverlayTargets}
+            setShareOverlayButtonRef={setShareOverlayButtonRef}
+            handleOpenShareSheet={handleOpenShareSheet}
+          />
+        ) : null}
 
         {fakeWinToastData ? (
           <div className="pointer-events-none absolute top-11 left-3 z-20 sm:top-12 sm:left-4">

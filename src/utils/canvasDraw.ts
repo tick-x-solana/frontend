@@ -47,6 +47,11 @@ export const COLOR_WARNING = "#FD7F26";
 export const COLOR_WARNING_SURFACE = "rgba(253,127,38,0.10)";
 export const COLOR_RED_SOFT = "#FF5A6E";
 
+const PRICE_AXIS_MIN_LABEL_GAP_PX = 18;
+const TIME_AXIS_MIN_LABEL_GAP_PX = 56;
+const REWARD_RATE_LABEL_HIDE_ZOOM = 0.39;
+const CELL_DETAIL_COMPACT_ZOOM = 0.5;
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 /** Draws a rounded rectangle path (no fill/stroke — caller decides). */
@@ -89,7 +94,11 @@ function formatPriceLabel(value: number, marketId: string): string {
     : priceLabelFormatterOneDecimal.format(value);
 }
 
-function hasChartPassedColumn(chartX: number, columnStartX: number, columnWidth: number) {
+function hasChartPassedColumn(
+  chartX: number,
+  columnStartX: number,
+  columnWidth: number,
+) {
   return chartX >= columnStartX + columnWidth - 0.5;
 }
 
@@ -114,31 +123,55 @@ function getClosingPulseAlpha(
   return clamp(fade * pulse, 0.2, 1);
 }
 
+function getCompactRateColor(multColor: string, rate: number): string {
+  const safeRate = Number.isFinite(rate) ? Math.max(rate, 0) : 0;
+  // Normalize to [0,1] around the common reward-rate span.
+  const strength = clamp((safeRate - 1) / 24, 0, 1);
+  const alpha = 0.42 + strength * 0.36;
+
+  if (multColor === COLOR_GREEN) {
+    const green = Math.round(178 - strength * 44);
+    const blue = Math.round(170 - strength * 28);
+    return `rgba(92, ${green}, ${blue}, ${alpha.toFixed(3)})`;
+  }
+
+  if (multColor === COLOR_RED || multColor === COLOR_RED_SOFT) {
+    const red = Math.round(156 - strength * 24);
+    const green = Math.round(112 - strength * 28);
+    const blue = Math.round(124 - strength * 26);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha.toFixed(3)})`;
+  }
+
+  if (multColor === COLOR_BLUE || multColor === COLOR_BLUE_SOFT) {
+    const red = Math.round(82 - strength * 22);
+    const green = Math.round(132 - strength * 24);
+    const blue = Math.round(194 - strength * 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha.toFixed(3)})`;
+  }
+
+  // Neutral cells still follow rate intensity but remain less saturated.
+  const red = Math.round(86 - strength * 20);
+  const green = Math.round(124 - strength * 20);
+  const blue = Math.round(176 - strength * 14);
+  return `rgba(${red}, ${green}, ${blue}, ${(alpha - 0.04).toFixed(3)})`;
+}
+
 function getPriceAxisMetrics(
   ctx: CanvasRenderingContext2D,
   layout: GridLayout,
   isMobile: boolean,
-  marketId = "",
 ) {
-  const { w, h, effectivePriceStep, basePrice } = layout;
-  const priceAtTop = layout.toPrice(0);
-  const priceAtBot = layout.toPrice(h);
-  const rowAtTop = (priceAtTop - basePrice) / effectivePriceStep;
-  const rowAtBot = (priceAtBot - basePrice) / effectivePriceStep;
-  const rowEndIdx = Math.ceil(Math.max(rowAtTop, rowAtBot)) + 2;
+  const { plotRight, priceAxisWidth } = layout;
   const fontSize = isMobile ? 8 : 9;
 
   ctx.font = `bold ${fontSize}px monospace`;
 
-  const sampleLabel = formatPriceLabel(
-    basePrice + rowEndIdx * effectivePriceStep,
-    marketId,
-  );
-  const axisWidth = ctx.measureText(sampleLabel).width + 10;
+  const axisWidth = priceAxisWidth;
 
   return {
     axisWidth,
-    axisX: w - axisWidth,
+    axisX: plotRight,
+    axisRight: plotRight + axisWidth,
   };
 }
 
@@ -154,8 +187,8 @@ export function drawBackgroundGrid(
   store: StoreSnapshot,
 ) {
   const {
-    w,
-    h,
+    plotRight,
+    plotBottom,
     toCanvasX,
     toCellY,
     toTime,
@@ -167,12 +200,16 @@ export function drawBackgroundGrid(
     gridAnchorTime,
   } = layout;
   const intervalMs = store.modeIntervalSeconds * 1000;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, plotRight, plotBottom);
+  ctx.clip();
 
   // Determine the visible price / time range in logical units
   const visibleT0 = toTime(0);
-  const visibleT1 = toTime(w);
+  const visibleT1 = toTime(plotRight);
   const priceAtTop = toPrice(0);
-  const priceAtBot = toPrice(h);
+  const priceAtBot = toPrice(plotBottom);
   const rowAtTop = (priceAtTop - gridAnchorPrice) / effectivePriceStep;
   const rowAtBot = (priceAtBot - gridAnchorPrice) / effectivePriceStep;
   const rowStartIdx = Math.floor(Math.min(rowAtTop, rowAtBot)) - 2;
@@ -198,29 +235,30 @@ export function drawBackgroundGrid(
     const priceLevel =
       anchorPrice + (rowIdx - anchorRowIdx) * effectivePriceStep;
     const cellTop = toCellY(priceLevel + effectivePriceStep / 2);
-    if (cellTop > h + cellH || cellTop + cellH < 0) continue;
+    if (cellTop > plotBottom + cellH || cellTop + cellH < 0) continue;
 
     for (let ts = colStartTs; ts <= colEndTs; ts += intervalMs) {
       const cx = toCanvasX(ts);
-      if (cx + cellW < 0 || cx > w) continue;
+      if (cx + cellW < 0 || cx > plotRight) continue;
 
       ctx.fillRect(cx, cellTop, cellW, cellH);
       // Inset 0.5 px so adjacent cells share the same pixel — one crisp line, no doubling
       ctx.strokeRect(cx + 0.5, cellTop + 0.5, cellW - 1, cellH - 1);
     }
   }
+  ctx.restore();
 }
 
 // ─── Current-time indicator ───────────────────────────────────────────────────
 
 export function drawNowLine(ctx: CanvasRenderingContext2D, layout: GridLayout) {
-  const { h, toCanvasX, chartHeadTime } = layout;
+  const { plotBottom, toCanvasX, chartHeadTime } = layout;
   const nowX = toCanvasX(chartHeadTime);
   ctx.strokeStyle = COLOR_NOW;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(nowX, 0);
-  ctx.lineTo(nowX, h);
+  ctx.lineTo(nowX, plotBottom);
   ctx.stroke();
 }
 
@@ -238,8 +276,8 @@ export function drawBetCells(
   activeWinEffectCellIds: Set<string> = new Set(),
 ) {
   const {
-    w,
-    h,
+    plotRight,
+    plotBottom,
     now,
     firstTime,
     lastTime,
@@ -274,7 +312,11 @@ export function drawBetCells(
     cells
       .filter(
         (cell) =>
-          !hasChartPassedColumn(chartHeadX, toCanvasX(cell.timeWindowStart), cellW),
+          !hasChartPassedColumn(
+            chartHeadX,
+            toCanvasX(cell.timeWindowStart),
+            cellW,
+          ),
       )
       .reduce<
         number | null
@@ -283,11 +325,20 @@ export function drawBetCells(
 
   // Closing window: cells whose window starts within this many ms cannot be bet on
   const CLOSING_MS = 5000;
+  const shouldHideRewardRateLabel = layout.zoom < REWARD_RATE_LABEL_HIDE_ZOOM;
+  const shouldUseCompactCellDetail = layout.zoom < CELL_DETAIL_COMPACT_ZOOM;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, plotRight, plotBottom);
+  ctx.clip();
   for (const cell of cells) {
     const isHit = cell.status === "hit";
     // Win cells are drawn even if they've scrolled past the left viewport edge
     // so the green state remains visible until the cell is completely off-canvas.
-    if (!isHit && (cell.timeWindowEnd < firstTime || cell.timeWindowStart > lastTime))
+    if (
+      !isHit &&
+      (cell.timeWindowEnd < firstTime || cell.timeWindowStart > lastTime)
+    )
       continue;
     if (cell.timeWindowStart > lastTime) continue;
 
@@ -344,21 +395,90 @@ export function drawBetCells(
     const cw = cellW;
     const ch = cellH;
 
-    if (cx + cw < 0 || cx > w || cellTop + ch < 0 || cellTop > h) continue;
+    if (
+      cx + cw < 0 ||
+      cx > plotRight ||
+      cellTop + ch < 0 ||
+      cellTop > plotBottom
+    )
+      continue;
 
     // Clip to canvas edge so cells that extend past any viewport edge shrink correctly
     const rx = Math.max(0, cx);
     const ry = Math.max(0, cellTop);
-    const rw = Math.min(cx + cw, w) - rx;
-    const rh = Math.min(cellTop + ch, h) - ry;
+    const rw = Math.min(cx + cw, plotRight) - rx;
+    const rh = Math.min(cellTop + ch, plotBottom) - ry;
     if (rw <= 0 || rh <= 0) continue;
     if (shouldHideLosingBet) continue;
-    const needsClip = cx < 0 || cx + cw > w || cellTop < 0 || cellTop + ch > h;
+    const needsClip =
+      cx < 0 || cx + cw > plotRight || cellTop < 0 || cellTop + ch > plotBottom;
     if (needsClip) {
       ctx.save();
       ctx.beginPath();
       ctx.rect(rx, ry, rw, rh);
       ctx.clip();
+    }
+
+    const multColor =
+      hasAnyBet && !isHit
+        ? COLOR_BLUE
+        : isLose && hasAnyBet
+          ? COLOR_RED_SOFT
+          : isHit && hasAnyBet
+            ? COLOR_GREEN
+            : isNext && !hasAnyBet
+              ? `rgba(83,117,155,${0.24 + nextCellVisualAlpha * 0.5})`
+              : cell.multiplier >= 100
+                ? COLOR_RED
+                : isSelectedColumn
+                  ? COLOR_BLUE_SOFT
+                  : cell.multiplier >= 10
+                    ? COLOR_BLUE
+                    : COLOR_TEXT_DIM;
+
+    if (shouldHideRewardRateLabel) {
+      if (isNext && !hasAnyBet) {
+        ctx.globalAlpha = plainCellVisualAlpha;
+      } else if (!hasAnyBet && !hasVisibleOverlayActivity) {
+        ctx.globalAlpha = plainCellVisualAlpha;
+      } else if (!hasAnyBet && hasVisibleOverlayActivity) {
+        ctx.globalAlpha = overlayVisualAlpha;
+      }
+
+      // Compact mode for deep zoom: show only color blocks, no labels/details.
+      const compactRate =
+        hasAnyBet || isHit
+          ? cell.multiplier
+          : Number(cell.original.rewardRate || cell.multiplier);
+      const shouldForceWinBetGreen = hasAnyBet || isHit;
+      ctx.fillStyle = shouldForceWinBetGreen
+        ? getCompactRateColor(
+            COLOR_GREEN,
+            Number.isFinite(compactRate) && compactRate > 0 ? compactRate : 1,
+          )
+        : getCompactRateColor(
+            multColor,
+            Number.isFinite(compactRate) && compactRate > 0 ? compactRate : 1,
+          );
+      ctx.fillRect(
+        rx + 0.5,
+        ry + 0.5,
+        Math.max(0, rw - 1),
+        Math.max(0, rh - 1),
+      );
+      ctx.globalAlpha = 1;
+
+      ctx.strokeStyle = COLOR_GRID;
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(
+        rx + 0.5,
+        ry + 0.5,
+        Math.max(0, rw - 1),
+        Math.max(0, rh - 1),
+      );
+
+      if (needsClip) ctx.restore();
+      continue;
     }
 
     const textX = cx + cw - clamp(cellSize * 0.13, 6, 10);
@@ -394,10 +514,9 @@ export function drawBetCells(
       });
       ctx.restore();
     } else if (isHit) {
-      const rewardRate =
-        hasAnyBet
-          ? cell.multiplier
-          : Number(cell.original.rewardRate || cell.multiplier);
+      const rewardRate = hasAnyBet
+        ? cell.multiplier
+        : Number(cell.original.rewardRate || cell.multiplier);
       const settledOutcome = settledOutcomes[cell.id];
       const hasSettledBreakdown =
         settledOutcome?.basePayout !== null ||
@@ -432,6 +551,7 @@ export function drawBetCells(
               : "$--"
           : "",
         isMobile,
+        compact: shouldUseCompactCellDetail,
       });
     } else if (isLose && !shouldHideLosingBet) {
       const betApproxUsd = formatApproxUsd(displayBetAmount, wldUsdPrice);
@@ -446,10 +566,9 @@ export function drawBetCells(
         cellRight: cx + cw,
         cellSize,
         multiplier: cell.multiplier,
-        detailTxt: hasAnyBet
-          ? betApproxUsd ?? "$--"
-          : "Settled",
+        detailTxt: hasAnyBet ? (betApproxUsd ?? "$--") : "Settled",
         isMobile,
+        compact: shouldUseCompactCellDetail,
       });
     } else if (!isPast && hasAnyBet && !shouldHideLosingBet) {
       const betApproxUsd = formatApproxUsd(displayBetAmount, wldUsdPrice);
@@ -479,7 +598,12 @@ export function drawBetCells(
           ? `rgba(22,46,71,${0.2 + plainCellVisualAlpha * 0.4})`
           : COLOR_GRID;
       ctx.lineWidth = 0.5;
-      ctx.strokeRect(rx + 0.5, ry + 0.5, Math.max(0, rw - 1), Math.max(0, rh - 1));
+      ctx.strokeRect(
+        rx + 0.5,
+        ry + 0.5,
+        Math.max(0, rw - 1),
+        Math.max(0, rh - 1),
+      );
     }
 
     // ── Text ──
@@ -489,23 +613,6 @@ export function drawBetCells(
     ctx.font = `${cell.multiplier >= 100 ? "bold" : cell.multiplier >= 10 ? "600" : "normal"} ${fontSize}px monospace`;
     ctx.textAlign = "right";
     ctx.textBaseline = "alphabetic";
-
-    const multColor =
-      hasAnyBet && !isHit
-        ? COLOR_BLUE
-        : isLose && hasAnyBet
-          ? COLOR_RED_SOFT
-          : isHit && hasAnyBet
-            ? COLOR_GREEN
-            : isNext && !hasAnyBet
-              ? `rgba(83,117,155,${0.24 + nextCellVisualAlpha * 0.5})`
-              : cell.multiplier >= 100
-                ? COLOR_RED
-                : isSelectedColumn
-                  ? COLOR_BLUE_SOFT
-                  : cell.multiplier >= 10
-                    ? COLOR_BLUE
-                    : COLOR_TEXT_DIM;
 
     ctx.fillStyle = multColor;
 
@@ -568,7 +675,8 @@ export function drawBetCells(
           [cx + cw, cellTop + ch],
         ];
         for (const [dx, dy] of corners) {
-          if (dx < -2 || dx > w + 2 || dy < -2 || dy > h + 2) continue;
+          if (dx < -2 || dx > plotRight + 2 || dy < -2 || dy > plotBottom + 2)
+            continue;
           ctx.beginPath();
           ctx.arc(dx, dy, dotR, 0, Math.PI * 2);
           ctx.fill();
@@ -580,6 +688,7 @@ export function drawBetCells(
     ctx.shadowBlur = 0;
     if (needsClip) ctx.restore();
   }
+  ctx.restore();
 }
 
 // ── Badge helpers (private) ───────────────────────────────────────────────────
@@ -780,6 +889,7 @@ interface WinCellParams {
   multiplier: number;
   detailTxt: string;
   isMobile: boolean;
+  compact: boolean;
 }
 
 function _drawWinCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
@@ -796,16 +906,18 @@ function _drawWinCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
     multiplier,
     detailTxt,
     isMobile,
+    compact,
   } = p;
   const radius = clamp(cellSize * 0.16, 6, 8);
   const innerInset = 0.75;
-  const titleSize = clamp(Math.round(cellSize * 0.3), 12, 16);
-  const detailSize = clamp(Math.round(cellSize * 0.18), 9, 12);
+  const titleSizeBase = clamp(Math.round(cellSize * 0.24), 8, 16);
+  const detailSizeBase = clamp(Math.round(cellSize * 0.17), 7, 12);
   const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
-  const titleY = y + height * 0.44;
-  const detailY = y + height * 0.68;
+  const titleY = compact ? y + height * 0.52 : y + height * 0.44;
+  const detailY = compact ? y + height * 0.56 : y + height * 0.68;
   const safeMultiplier = Number.isFinite(multiplier) ? multiplier : 0;
   const receivedAmountText = detailTxt.trim();
+  const maxTextWidth = Math.max(6, width - innerInset * 6);
 
   ctx.save();
   ctx.shadowColor = "rgba(17,211,68,0.18)";
@@ -848,14 +960,33 @@ function _drawWinCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  if (receivedAmountText.length > 0) {
+  if (!compact && receivedAmountText.length > 0) {
     ctx.fillStyle = "#11D344";
+    let titleSize = titleSizeBase;
     ctx.font = `${isMobile ? 600 : 700} ${titleSize}px sans-serif`;
+    const titleWidth = ctx.measureText(receivedAmountText).width;
+    if (titleWidth > maxTextWidth) {
+      titleSize = Math.max(
+        7,
+        Math.floor((titleSize * maxTextWidth) / Math.max(titleWidth, 1)),
+      );
+      ctx.font = `${isMobile ? 600 : 700} ${titleSize}px sans-serif`;
+    }
     ctx.fillText(receivedAmountText, x + width / 2, titleY);
   }
 
   ctx.fillStyle = "#7A9BB5";
+  const multiplierText = formatMultiplier(safeMultiplier);
+  let detailSize = compact ? Math.max(8, detailSizeBase) : detailSizeBase;
   ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
+  const detailWidth = ctx.measureText(multiplierText).width;
+  if (detailWidth > maxTextWidth) {
+    detailSize = Math.max(
+      7,
+      Math.floor((detailSize * maxTextWidth) / Math.max(detailWidth, 1)),
+    );
+    ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
+  }
   ctx.fillText(formatMultiplier(safeMultiplier), x + width / 2, detailY);
 
   ctx.fillStyle = "#12DDFF";
@@ -887,15 +1018,17 @@ function _drawLoseCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
     multiplier,
     detailTxt,
     isMobile,
+    compact,
   } = p;
   const radius = clamp(cellSize * 0.16, 6, 8);
   const innerInset = 0.75;
-  const titleSize = clamp(Math.round(cellSize * 0.25), 10, 12);
-  const detailSize = clamp(Math.round(cellSize * 0.22), 10, 14);
+  const titleSizeBase = clamp(Math.round(cellSize * 0.22), 8, 12);
+  const detailSizeBase = clamp(Math.round(cellSize * 0.2), 7, 14);
   const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
   const titleY = y + height * 0.44;
-  const detailY = y + height * 0.68;
+  const detailY = compact ? y + height * 0.56 : y + height * 0.68;
   const safeMultiplier = Number.isFinite(multiplier) ? multiplier : 0;
+  const maxTextWidth = Math.max(6, width - innerInset * 6);
 
   ctx.save();
   ctx.shadowColor = "rgba(246,70,93,0.16)";
@@ -939,12 +1072,33 @@ function _drawLoseCell(ctx: CanvasRenderingContext2D, p: WinCellParams) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = COLOR_RED_SOFT;
+  const multiplierText = formatMultiplier(safeMultiplier);
+  let titleSize = titleSizeBase;
   ctx.font = `${isMobile ? 600 : 700} ${titleSize}px sans-serif`;
-  ctx.fillText(formatMultiplier(safeMultiplier), x + width / 2, titleY);
+  const titleWidth = ctx.measureText(multiplierText).width;
+  if (titleWidth > maxTextWidth) {
+    titleSize = Math.max(
+      7,
+      Math.floor((titleSize * maxTextWidth) / Math.max(titleWidth, 1)),
+    );
+    ctx.font = `${isMobile ? 600 : 700} ${titleSize}px sans-serif`;
+  }
+  ctx.fillText(multiplierText, x + width / 2, titleY);
 
-  ctx.fillStyle = "#E6A0AA";
-  ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
-  ctx.fillText(detailTxt, x + width / 2, detailY);
+  if (!compact) {
+    ctx.fillStyle = "#E6A0AA";
+    let detailSize = detailSizeBase;
+    ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
+    const detailWidth = ctx.measureText(detailTxt).width;
+    if (detailWidth > maxTextWidth) {
+      detailSize = Math.max(
+        7,
+        Math.floor((detailSize * maxTextWidth) / Math.max(detailWidth, 1)),
+      );
+      ctx.font = `${isMobile ? 500 : 600} ${detailSize}px sans-serif`;
+    }
+    ctx.fillText(detailTxt, x + width / 2, detailY);
+  }
 
   ctx.fillStyle = COLOR_RED_SOFT;
   const corners = [
@@ -977,10 +1131,22 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
   } = p;
   const inset = 0.75;
   const radius = clamp(cellSize * 0.18, Math.min(8, cellSize * 0.15), 12);
-  const multiplierSize = clamp(Math.round(cellSize * 0.2), Math.max(6, Math.round(cellSize * 0.14)), 16);
-  const badgeBaseFontSize = clamp(Math.round(cellSize * 0.22), Math.max(7, Math.round(cellSize * 0.16)), 20);
+  const multiplierSize = clamp(
+    Math.round(cellSize * 0.2),
+    Math.max(6, Math.round(cellSize * 0.14)),
+    16,
+  );
+  const badgeBaseFontSize = clamp(
+    Math.round(cellSize * 0.22),
+    Math.max(7, Math.round(cellSize * 0.16)),
+    20,
+  );
   const badgeWidth = clamp(width * 0.46, Math.min(38, width * 0.7), width - 4);
-  const badgeHeight = clamp(height * 0.28, Math.min(18, height * 0.22), Math.min(28, height * 0.32));
+  const badgeHeight = clamp(
+    height * 0.28,
+    Math.min(18, height * 0.22),
+    Math.min(28, height * 0.32),
+  );
   const badgeRadius = clamp(cellSize * 0.14, Math.min(6, cellSize * 0.1), 10);
   const centerX = x + width / 2;
   const multiplierY = y + height * 0.33;
@@ -988,6 +1154,7 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
   const badgeY = y + height * 0.56;
   const badgeText = betAmountUsdText;
   const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
+  const compact = cellSize < 30;
 
   ctx.save();
 
@@ -1035,8 +1202,28 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#00E5FF";
-  ctx.font = `700 ${multiplierSize}px Inter, sans-serif`;
+  const fittedMultiplierSize = compact
+    ? Math.max(7, Math.floor(multiplierSize * 0.86))
+    : multiplierSize;
+  ctx.font = `700 ${fittedMultiplierSize}px Inter, sans-serif`;
   ctx.fillText(multTxt, centerX, multiplierY);
+
+  if (compact) {
+    ctx.fillStyle = "#00E5FF";
+    const corners = [
+      [cellLeft, cellTop],
+      [cellRight, cellTop],
+      [cellLeft, cellBottom],
+      [cellRight, cellBottom],
+    ];
+    for (const [dx, dy] of corners) {
+      ctx.beginPath();
+      ctx.arc(dx, dy, cornerDotRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
 
   const badgeGradient = ctx.createLinearGradient(
     badgeX,
@@ -1093,13 +1280,19 @@ export function drawPriceLine(
   layout: GridLayout,
   store: StoreSnapshot,
 ) {
-  const { w, h, toCanvasX, toCanvasY, toTime } = layout;
+  const { plotRight, plotBottom, toCanvasX, toCanvasY, toTime } = layout;
   const { history } = store;
   if (history.length < 2) return;
 
   const clipPaddingPx = 80;
-  const minTime = Math.min(toTime(-clipPaddingPx), toTime(w + clipPaddingPx));
-  const maxTime = Math.max(toTime(-clipPaddingPx), toTime(w + clipPaddingPx));
+  const minTime = Math.min(
+    toTime(-clipPaddingPx),
+    toTime(plotRight + clipPaddingPx),
+  );
+  const maxTime = Math.max(
+    toTime(-clipPaddingPx),
+    toTime(plotRight + clipPaddingPx),
+  );
 
   const lowerBoundByTime = (value: number) => {
     let lo = 0;
@@ -1128,28 +1321,15 @@ export function drawPriceLine(
   if (endIndex - startIndex < 2) return;
 
   const points: Array<{ x: number; y: number }> = [];
-  const minPxStep = 0.8;
   for (let index = startIndex; index < endIndex; index += 1) {
     const pt = history[index];
-    const x = toCanvasX(pt.time);
-    const y = toCanvasY(pt.price);
-    const prev = points[points.length - 1];
-
-    if (!prev) {
-      points.push({ x, y });
-      continue;
-    }
-    if (x - prev.x >= minPxStep) {
-      points.push({ x, y });
-      continue;
-    }
-    points[points.length - 1] = { x, y };
+    points.push({ x: toCanvasX(pt.time), y: toCanvasY(pt.price) });
   }
   if (points.length < 2) return;
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 0, w, h);
+  ctx.rect(0, 0, plotRight, plotBottom);
   ctx.clip();
 
   ctx.strokeStyle = COLOR_LINE;
@@ -1193,54 +1373,54 @@ export function drawPriceAxis(
   store: StoreSnapshot,
   isMobile: boolean,
 ) {
-  const { w, h, toCellY, effectivePriceStep, basePrice } = layout;
+  const { w, plotBottom, toCellY, effectivePriceStep, basePrice } = layout;
   const anchorPrice = basePrice;
   const anchorRowIdx = 0;
 
   // Compute visible row range
   const priceAtTop = layout.toPrice(0);
-  const priceAtBot = layout.toPrice(h);
+  const priceAtBot = layout.toPrice(plotBottom);
   const rowAtTop = (priceAtTop - basePrice) / effectivePriceStep;
   const rowAtBot = (priceAtBot - basePrice) / effectivePriceStep;
   const rowStartIdx = Math.floor(Math.min(rowAtTop, rowAtBot)) - 2;
   const rowEndIdx = Math.ceil(Math.max(rowAtTop, rowAtBot)) + 2;
 
-  const { axisWidth, axisX } = getPriceAxisMetrics(
-    ctx,
-    layout,
-    isMobile,
-    store.marketId,
-  );
+  const { axisWidth, axisX } = getPriceAxisMetrics(ctx, layout, isMobile);
 
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
 
   // Background strip
   ctx.fillStyle = COLOR_BG;
-  ctx.fillRect(axisX, 0, axisWidth, h);
+  ctx.fillRect(axisX, 0, axisWidth, plotBottom);
 
   // Separator line
   ctx.strokeStyle = COLOR_GRID_STRONG;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(axisX, 0);
-  ctx.lineTo(axisX, h);
+  ctx.lineTo(axisX, plotBottom);
   ctx.stroke();
 
   ctx.fillStyle = COLOR_TEXT_DIM;
-  for (let i = rowStartIdx; i <= rowEndIdx; i++) {
+  const rowStep = Math.max(
+    1,
+    Math.ceil(PRICE_AXIS_MIN_LABEL_GAP_PX / Math.max(layout.cellH, 1)),
+  );
+  const firstLabeledRow = Math.ceil(rowStartIdx / rowStep) * rowStep;
+  for (let i = firstLabeledRow; i <= rowEndIdx; i += rowStep) {
     const p = anchorPrice + (i - anchorRowIdx) * effectivePriceStep;
     const cy = toCellY(p);
-    if (cy < -10 || cy > h + 10) continue;
-    ctx.fillText(formatPriceLabel(p, store.marketId), w - 2, cy);
+    if (cy < -10 || cy > plotBottom + 10) continue;
+    ctx.fillText(formatPriceLabel(p, store.marketId), w - 4, cy);
   }
 
   const focusPrice = layout.cam;
   const focusY = layout.toCanvasY(focusPrice);
-  if (focusY > 8 && focusY < h - 8) {
+  if (focusY > 8 && focusY < plotBottom - 8) {
     const focusText = formatPriceLabel(focusPrice, store.marketId);
     const textWidth = ctx.measureText(focusText).width + 10;
-    const boxX = w - textWidth - 2;
+    const boxX = axisX + Math.max(2, axisWidth - textWidth - 2);
     const boxY = focusY - 8;
     ctx.fillStyle = "#dce7f5";
     ctx.fillRect(boxX, boxY, textWidth, 16);
@@ -1256,12 +1436,12 @@ export function drawTimeAxis(
   layout: GridLayout,
   isMobile: boolean,
 ) {
-  const { w, h, toCanvasX, toTime } = layout;
+  const { plotBottom, plotRight, timeAxisHeight, toCanvasX, toTime } = layout;
   const labelInterval = isMobile ? 30_000 : 15_000;
   const labelColor = isMobile ? "#7A9BB5" : "#79afd5";
-  const stripHeight = 24;
-  const { axisX } = getPriceAxisMetrics(ctx, layout, isMobile);
-  const maxLabelX = isMobile ? axisX : w;
+  const stripHeight = timeAxisHeight;
+  const stripTop = plotBottom;
+  const maxLabelX = plotRight;
 
   // Use the full visible canvas range so labels are distributed across the
   // entire bottom strip, not only the data-grid core.
@@ -1278,37 +1458,36 @@ export function drawTimeAxis(
     tLabel += labelInterval;
   }
 
-  if (isMobile) {
-    ctx.fillStyle = COLOR_BG;
-    ctx.fillRect(0, h - stripHeight, axisX, stripHeight);
+  ctx.fillStyle = COLOR_BG;
+  ctx.fillRect(0, stripTop, plotRight, stripHeight);
 
-    ctx.strokeStyle = COLOR_BORDER_MAIN;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, h - stripHeight + 0.5);
-    ctx.lineTo(axisX, h - stripHeight + 0.5);
-    ctx.stroke();
-  }
+  ctx.strokeStyle = COLOR_BORDER_MAIN;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, stripTop + 0.5);
+  ctx.lineTo(plotRight, stripTop + 0.5);
+  ctx.stroke();
 
   ctx.save();
-  if (isMobile) {
-    ctx.beginPath();
-    ctx.rect(0, h - stripHeight, axisX, stripHeight);
-    ctx.clip();
-  }
+  ctx.beginPath();
+  ctx.rect(0, stripTop, plotRight, stripHeight);
+  ctx.clip();
 
   ctx.font = isMobile ? "500 10px monospace" : "bold 11px monospace";
   ctx.textAlign = "center";
-  ctx.textBaseline = isMobile ? "middle" : "bottom";
+  ctx.textBaseline = "middle";
+  let lastLabelX = -Infinity;
 
   for (const t of timeLabels) {
     const cx = toCanvasX(t);
     if (cx < 0 || cx > maxLabelX) continue;
+    if (cx - lastLabelX < TIME_AXIS_MIN_LABEL_GAP_PX) continue;
 
     const label = timeLabelFormatter.format(new Date(t));
 
     ctx.fillStyle = labelColor;
-    ctx.fillText(label, cx, isMobile ? h - stripHeight / 2 : h - 4);
+    ctx.fillText(label, cx, stripTop + stripHeight / 2);
+    lastLabelX = cx;
   }
 
   ctx.restore();
@@ -1322,10 +1501,10 @@ export function drawZoomIndicator(
   zoom: number,
 ) {
   if (zoom === 1) return;
-  const { w } = layout;
+  const { plotRight } = layout;
   ctx.font = "bold 11px monospace";
   ctx.textAlign = "right";
   ctx.textBaseline = "top";
   ctx.fillStyle = "rgba(18,221,255,0.75)";
-  ctx.fillText(`${zoom.toFixed(2)}x`, w - 6, 6);
+  ctx.fillText(`${zoom.toFixed(2)}x`, plotRight - 6, 6);
 }

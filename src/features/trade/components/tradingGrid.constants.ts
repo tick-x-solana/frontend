@@ -4,7 +4,7 @@ import {
   oneDecimalFormatter,
 } from "@/src/utils/formatters";
 
-export const DESKTOP_ZOOM_MIN = 0.5;
+export const DESKTOP_ZOOM_MIN = 0.1;
 export const MOBILE_ZOOM_MIN = 1;
 export const MIN_PRICE_MOTION_MS = 250;
 export const MAX_PRICE_MOTION_MS = 5000;

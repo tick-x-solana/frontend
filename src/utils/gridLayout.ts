@@ -22,7 +22,14 @@ export interface Transform {
 export interface GridLayout {
   w: number;
   h: number;
+  plotWidth: number;
+  plotHeight: number;
+  plotRight: number;
+  plotBottom: number;
+  priceAxisWidth: number;
+  timeAxisHeight: number;
   now: number;
+  zoom: number;
   chartHeadTime: number;
   firstTime: number;
   lastTime: number;
@@ -76,6 +83,24 @@ export function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+const MOBILE_BREAKPOINT_PX = 640;
+const MOBILE_PRICE_AXIS_WIDTH_PX = 56;
+const DESKTOP_PRICE_AXIS_WIDTH_PX = 64;
+const TIME_AXIS_HEIGHT_PX = 24;
+
+export function getGridViewportChrome(viewportWidth: number) {
+  const isMobile = viewportWidth < MOBILE_BREAKPOINT_PX;
+  const priceAxisWidth = isMobile
+    ? MOBILE_PRICE_AXIS_WIDTH_PX
+    : DESKTOP_PRICE_AXIS_WIDTH_PX;
+
+  return {
+    isMobile,
+    priceAxisWidth,
+    timeAxisHeight: TIME_AXIS_HEIGHT_PX,
+  };
+}
+
 // ─── Layout computation ───────────────────────────────────────────────────────
 
 /**
@@ -98,10 +123,13 @@ export function computeLayout(
 
   const { w, h } = size;
   const { modeIntervalSeconds, modePriceStep, cells: rawCells, basePrice } = store;
-  const viewportPaddingCols = w < 640
+  const { isMobile, priceAxisWidth, timeAxisHeight } = getGridViewportChrome(w);
+  const plotWidth = Math.max(1, w - priceAxisWidth);
+  const plotHeight = Math.max(1, h - timeAxisHeight);
+  const viewportPaddingCols = isMobile
     ? MOBILE_VIEWPORT_PADDING_COLS
     : DESKTOP_VIEWPORT_PADDING_COLS;
-  const leadingPaddingCols = w < 640
+  const leadingPaddingCols = isMobile
     ? MOBILE_LEADING_PADDING_COLS
     : DESKTOP_LEADING_PADDING_COLS;
 
@@ -141,10 +169,10 @@ export function computeLayout(
   const totalCols = visibleCols;
 
   // Square cells: take the smaller of the two fitted dimensions
-  const cellSize = Math.min(w / totalCols, (h * 0.92) / dataRows);
+  const cellSize = Math.min(plotWidth / totalCols, (plotHeight * 0.92) / dataRows);
 
   // Price axis: derive min/max from camera + visible rows
-  const visibleRows = h / cellSize;
+  const visibleRows = plotHeight / cellSize;
   const priceSpan = visibleRows;
   const halfSpan = (visibleRows / 2) * effectivePriceStep;
   const maxPrice = cam + halfSpan;
@@ -152,12 +180,12 @@ export function computeLayout(
   const totalPriceSpan = maxPrice - minPrice;
 
   // Left edge of the first column at zoom = 1
-  const originX = w / 2 - (totalCols / 2) * cellSize;
+  const originX = plotWidth / 2 - (totalCols / 2) * cellSize;
 
   // Camera maps to vertical centre
-  const camY = h / 2;
-  const pivotX = w / 2;
-  const pivotY = h / 2;
+  const camY = plotHeight / 2;
+  const pivotX = plotWidth / 2;
+  const pivotY = plotHeight / 2;
 
   // Pre-compute linear transform coefficients so the 5 transform functions
   // capture only plain numbers — no allocations per call.
@@ -182,7 +210,14 @@ export function computeLayout(
   return {
     w,
     h,
+    plotWidth,
+    plotHeight,
+    plotRight: plotWidth,
+    plotBottom: plotHeight,
+    priceAxisWidth,
+    timeAxisHeight,
     now,
+    zoom: tf.zoom,
     chartHeadTime,
     firstTime,
     lastTime,
@@ -222,6 +257,9 @@ export function hitTestCell(
   now: number,
 ): CellData | null {
   const { toTime, toPrice, effectivePriceStep } = layout;
+  if (cx < 0 || cy < 0 || cx > layout.plotRight || cy > layout.plotBottom) {
+    return null;
+  }
   const t = toTime(cx);
   const p = toPrice(cy);
   const { cells, pendingBets, bets } = store;
@@ -256,6 +294,9 @@ export function hitTestAnyCell(
   layout: GridLayout,
   store: StoreSnapshot,
 ): CellData | null {
+  if (cx < 0 || cy < 0 || cx > layout.plotRight || cy > layout.plotBottom) {
+    return null;
+  }
   const { toTime, toPrice, effectivePriceStep } = layout;
   const t = toTime(cx);
   const p = toPrice(cy);
