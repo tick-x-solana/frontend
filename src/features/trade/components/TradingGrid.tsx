@@ -202,22 +202,20 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   });
   const { mutateAsync: registerOrderFollow } =
     useOrderFollowControllerRegister();
-  const {
-    data: userOrdersResponse,
-    isFetched: isUserOrdersFetched,
-  } = useOrderControllerGetUserOrders(
-    {
-      limit: 200,
-      offset: 0,
-    },
-    {
-      query: {
-        enabled: isAuthenticated && !isLoggingIn,
-        staleTime: 10_000,
-        refetchOnWindowFocus: true,
+  const { data: userOrdersResponse, isFetched: isUserOrdersFetched } =
+    useOrderControllerGetUserOrders(
+      {
+        limit: 200,
+        offset: 0,
       },
-    },
-  );
+      {
+        query: {
+          enabled: isAuthenticated && !isLoggingIn,
+          staleTime: 10_000,
+          refetchOnWindowFocus: true,
+        },
+      },
+    );
   const { data: balanceResponse } = useAccountControllerGetBalance({
     query: {
       enabled: isAuthenticated && !isLoggingIn,
@@ -356,9 +354,12 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   });
   useEffect(() => {
     if (priceStepChangedAt === null) return;
-    appToast.warning("Price range updated — your bets are cleared from view, but will still settle normally.");
+    appToast.warning(
+      "Price range updated — your bets are cleared from view, but will still settle normally.",
+    );
     // Win-effect ref resets on price-step change are handled inside useWinEffectTracking.
   }, [priceStepChangedAt]);
+
   useLayoutEffect(() => {
     // Recompute dims only when cells change — avoids Map/sort allocation every frame.
     const prevCells = storeRef.current.cells;
@@ -1481,7 +1482,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     setSuggestedStrategyCellIds([]);
     setIsReady(false);
     setCanvasInstanceKey((k) => k + 1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     onMarketResetRef.current = doMarketReset;

@@ -38,3 +38,20 @@ When using Figma MCP to write component UI code:
 11. When implementing Figma MCP designs, prefer existing shadcn components (e.g. `Button`, `Input`, etc.) over raw HTML elements whenever they can represent the same UI.
 12. When implementing Figma MCP designs, do not use Tailwind `leading-*` classes. Remove any `leading-*` classes from generated `className` strings unless the user explicitly requests exact line-height parity.
 <!-- END:figma-mcp-color-token-rules -->
+
+<!-- BEGIN:project-code-rules -->
+
+# Project Code Rules
+
+1. Always write code, code comments, toaster messages, and user-facing developer strings in English, even when the user prompt is written in Vietnamese.
+2. Centralize shared constants in [src/constants/index.ts](/Users/0xtravis/Documents/AnyAxis/Project/hackathon/tickX/tickX-FE/src/constants/index.ts) instead of hardcoding unclear numeric or string literals in feature code.
+3. Add a short English comment for each newly introduced shared constant to explain its purpose.
+4. Reuse or extend existing constants before creating new ones, and keep constant names semantic and easy to understand.
+5. Split components into sensible files and responsibilities. Do not place multiple unrelated components in one file.
+6. When making changes, scope edits strictly to the requested behavior. Do not alter unrelated logic or UI unless it is required to keep the app working correctly.
+7. If a requested change causes necessary side effects in nearby code, apply the minimal supporting fix needed to preserve normal app behavior.
+8. Keep code clean, readable, and maintainable. Prefer straightforward control flow, clear naming, and low-complexity component structure.
+9. Avoid unnecessary rerenders, memory leaks, and crash-prone patterns. Clean up effects correctly and preserve stable behavior during updates.
+10. Before adding a new component, continue following the existing reuse rule above and check whether an existing project component can be reused or extended.
+
+<!-- END:project-code-rules -->
