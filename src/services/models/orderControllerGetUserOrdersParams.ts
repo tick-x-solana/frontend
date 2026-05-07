@@ -19,4 +19,12 @@ limit?: number;
  * Number of orders to skip (min: 0)
  */
 offset?: number;
+/**
+ * Only return orders with placedAt >= fromTime (unix ms)
+ */
+fromTime?: number;
+/**
+ * Only return orders with placedAt <= toTime (unix ms)
+ */
+toTime?: number;
 };

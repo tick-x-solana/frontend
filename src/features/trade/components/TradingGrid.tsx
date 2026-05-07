@@ -115,6 +115,10 @@ import {
 } from "./tradingGrid.utils";
 import { useTradingGridSocketEffects } from "@/src/features/trade/hooks/useTradingGridSocketEffects";
 import useFakeWinToast from "@/src/features/trade/hooks/useFakeWinToast";
+import { useMarketSelector } from "@/src/features/trade/hooks/useMarketSelector";
+import { useShareSheetData } from "@/src/features/trade/hooks/useShareSheetData";
+import { useShareOverlayPositioning } from "@/src/features/trade/hooks/useShareOverlayPositioning";
+import { useWinEffectTracking } from "@/src/features/trade/hooks/useWinEffectTracking";
 
 type TradingGridProps = {
   initialFollowRefCode?: string | null;
@@ -123,21 +127,6 @@ type TradingGridProps = {
 export const TradingGrid: React.FC<TradingGridProps> = ({
   initialFollowRefCode = null,
 }) => {
-  // Market selector drives REST/socket endpoints and resets grid state on change.
-  const [selectedMarketSymbol, setSelectedMarketSymbol] = useState(MARKET_SYMBOL);
-  const selectedMarketId = useMemo(
-    () => toMarketId(selectedMarketSymbol),
-    [selectedMarketSymbol],
-  );
-  const marketSocketSegment = useMemo(
-    () => toMarketSocketSegment(selectedMarketSymbol),
-    [selectedMarketSymbol],
-  );
-  const marketSocketPath = useMemo(
-    () => `/market/${marketSocketSegment}/socket.io`,
-    [marketSocketSegment],
-  );
-
   const queryClient = useQueryClient();
   const { data: wldUsdPrice } = useWldUsdPrice();
   // ── Store selectors ────────────────────────────────────────────────────────
@@ -167,6 +156,22 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const updateOrder = useGameStore((s) => s.updateOrder);
   const cancelPendingBet = useGameStore((s) => s.cancelPendingBet);
   const resetGridData = useGameStore((s) => s.resetGridData);
+
+  // Market selector drives REST/socket endpoints and resets grid state on change.
+  // onMarketReset is wired after refs/setters are declared (see useCallback below).
+  // We use a stable ref so useMarketSelector's useCallback dep doesn't need the full
+  // closure — the ref is updated each render.
+  const onMarketResetRef = useRef<() => void>(() => {});
+  const {
+    selectedMarketSymbol,
+    selectedMarketId,
+    marketSocketPath,
+    handleMarketChange,
+  } = useMarketSelector({
+    resetGridData,
+    onMarketReset: useCallback(() => onMarketResetRef.current(), []),
+  });
+
   const betAmount = useGameStore((s) => s.betAmount);
   const balance = useGameStore((s) => s.balance);
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
@@ -301,9 +306,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   } | null>(null);
   const drawRef = useRef<() => void>(() => {});
   const rafRef = useRef<number>(0);
-  const previousWinningCellIdsRef = useRef<Set<string>>(new Set());
-  const hasInitializedWinEffectTrackingRef = useRef(false);
-  const componentMountedAtRef = useRef(Date.now());
   const previewCellIdRef = useRef<string | null>(null);
   // Keep backing store size in sync with DPR for sharp rendering on high-density screens.
   const syncCanvasSize = useCallback((canvas: HTMLCanvasElement | null) => {
@@ -355,12 +357,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   useEffect(() => {
     if (priceStepChangedAt === null) return;
     appToast.warning("Price range updated — your bets are cleared from view, but will still settle normally.");
-    // Absorb any currently-tracked winning cells into the baseline so that
-    // cells reconstructed after a price-step clear do not fire win animations.
-    previousWinningCellIdsRef.current = new Set(
-      cells.filter((c) => c.status === "hit").map((c) => c.id),
-    );
-    hasInitializedWinEffectTrackingRef.current = false;
+    // Win-effect ref resets on price-step change are handled inside useWinEffectTracking.
   }, [priceStepChangedAt]);
   useLayoutEffect(() => {
     // Recompute dims only when cells change — avoids Map/sort allocation every frame.
@@ -429,14 +426,42 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   >([]);
   const [isOverlaySheetOpen, setIsOverlaySheetOpen] = useState(false);
   const [isInfoSheetOpen, setIsInfoSheetOpen] = useState(false);
-  const [shareOverlayTargets, setShareOverlayTargets] = useState<
-    ShareOverlayTarget[]
-  >([]);
-  const [activeWinEffectByCellId, setActiveWinEffectByCellId] = useState<
-    Record<string, ActiveWinEffectState>
-  >({});
-  const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
-  const [shareCellId, setShareCellId] = useState<string | null>(null);
+  // ── Share sheet data (amounts / profit / ROI / win-rate) ──────────────────
+  const {
+    shareCellId,
+    setShareCellId,
+    isShareSheetOpen,
+    setIsShareSheetOpen,
+    handleOpenShareSheet,
+    selectedShareCell,
+    selectedShareAmount,
+    selectedShareAmountUsd,
+    selectedShareProfit,
+    selectedShareProfitUsd,
+    selectedShareTime,
+    selectedShareRoi,
+    shareWinRate,
+    selectedShareProfitApproxUsd: _selectedShareProfitApproxUsd,
+  } = useShareSheetData({
+    cells,
+    bets,
+    pendingBets,
+    betAmount,
+    settledOutcomes,
+    wldUsdPrice: typeof wldUsdPrice === "number" ? wldUsdPrice : null,
+  });
+
+  // ── Share overlay positioning (button + win-effect icon refs / positions) ──
+  const {
+    shareOverlayTargets,
+    setShareOverlayTargets,
+    shareTargetsRef,
+    shareTargetIdsHashRef,
+    setShareOverlayButtonRef,
+    setWinEffectIconRef,
+    syncShareOverlayPositions,
+  } = useShareOverlayPositioning(wrapRef);
+
   const [dismissedFollowReferralCode, setDismissedFollowReferralCode] =
     useState<string | null>(null);
   const [resolvedFollowTarget, setResolvedFollowTarget] = useState<{
@@ -451,9 +476,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       walletAddress,
       resolvedUserAddress,
     });
-  // Derived overlay anchors for share/win elements, updated from draw() each frame.
-  const shareTargetsRef = useRef<ShareOverlayTarget[]>([]);
-  const shareTargetIdsHashRef = useRef("");
+  // Throttle refs for follow overlay and suggested strategy updates.
   const lastFollowOverlayUpdateAtRef = useRef(0);
   const lastSuggestedStrategyUpdateAtRef = useRef(0);
   const followOverlayPendingActivitiesRef = useRef<
@@ -467,10 +490,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     typeof setTimeout
   > | null>(null);
   const suggestedStrategyCellIdsRef = useRef<string[]>([]);
-  const shareOverlayButtonRefs = useRef(
-    new Map<string, HTMLButtonElement | null>(),
-  );
-  const winEffectIconRefs = useRef(new Map<string, HTMLDivElement | null>());
   const isReadyRef = useRef(false);
   const dataReadyAtRef = useRef<number | null>(null);
 
@@ -495,11 +514,25 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     () => new Set(enabledFollowTargetIds),
     [enabledFollowTargetIds],
   );
-  const activeWinEffectCellIdSet = useMemo(
-    () => new Set(Object.keys(activeWinEffectByCellId)),
-    [activeWinEffectByCellId],
-  );
   const canTrackWinEffects = !isAuthenticated || isUserOrdersFetched;
+
+  // ── Win-effect tracking ───────────────────────────────────────────────────
+  const {
+    activeWinEffectByCellId,
+    setActiveWinEffectByCellId,
+    activeWinEffectCellIdSet,
+    previousWinningCellIdsRef,
+    hasInitializedWinEffectTrackingRef,
+  } = useWinEffectTracking({
+    cells,
+    bets,
+    pendingBets,
+    pendingWins,
+    settledOutcomes,
+    shareOverlayTargets,
+    canTrackWinEffects,
+    priceStepChangedAt,
+  });
   // Follow-trade currently supports selecting exactly one target at a time.
   const ensureSingleFollowTargetConfig = useCallback(
     (source: Record<string, boolean>) => {
@@ -952,114 +985,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     storeRef,
   });
 
-  // ── Track wins (fire once per hit transition, not once forever per id) ────
-  useEffect(() => {
-    const nextWinningCellIds = new Set<string>();
-
-    cells.forEach((cell) => {
-      if (cell.status !== "hit") return;
-      const hasTrackedStake =
-        (bets[cell.id] || 0) > 0 ||
-        (pendingBets[cell.id] || 0) > 0 ||
-        pendingWins[cell.id] !== undefined ||
-        settledOutcomes[cell.id] !== undefined;
-      if (!hasTrackedStake) return;
-
-      nextWinningCellIds.add(cell.id);
-    });
-
-    // Suppress win effects during initial data hydration:
-    // absorb all pre-existing wins into the baseline for the first few seconds
-    // after component mount, regardless of tracking/auth state.
-    const msSinceMount = Date.now() - componentMountedAtRef.current;
-    if (msSinceMount < WIN_EFFECT_INIT_GRACE_MS) {
-      previousWinningCellIdsRef.current = nextWinningCellIds;
-      return;
-    }
-
-    if (!canTrackWinEffects) {
-      previousWinningCellIdsRef.current = nextWinningCellIds;
-      hasInitializedWinEffectTrackingRef.current = false;
-      return;
-    }
-
-    if (!hasInitializedWinEffectTrackingRef.current) {
-      previousWinningCellIdsRef.current = nextWinningCellIds;
-      hasInitializedWinEffectTrackingRef.current = true;
-      return;
-    }
-
-    const visibleWinCellIds = new Set(shareOverlayTargets.map((t) => t.cellId));
-    const newlyWinningCellIds = [...nextWinningCellIds].filter(
-      (cellId) =>
-        !previousWinningCellIdsRef.current.has(cellId) &&
-        visibleWinCellIds.has(cellId),
-    );
-
-    if (newlyWinningCellIds.length > 0) {
-      const effectStartedAt = Date.now();
-      setActiveWinEffectByCellId((currentValue) => {
-        const nextValue = { ...currentValue };
-        for (const cellId of newlyWinningCellIds) {
-          nextValue[cellId] = {
-            startedAt: effectStartedAt,
-            showTotal: false,
-          };
-        }
-        return nextValue;
-      });
-    }
-
-    previousWinningCellIdsRef.current = nextWinningCellIds;
-  }, [
-    bets,
-    canTrackWinEffects,
-    cells,
-    pendingBets,
-    pendingWins,
-    settledOutcomes,
-    shareOverlayTargets,
-  ]);
-
-  // Win-effect lifecycle:
-  // track newly hit bet cells and start one visual pulse per transition.
-  useEffect(
-    () => {
-      if (Object.keys(activeWinEffectByCellId).length === 0) return;
-
-      const intervalId = setInterval(() => {
-        const tickNow = Date.now();
-        setActiveWinEffectByCellId((currentValue) => {
-          let changed = false;
-          const nextValue: Record<string, ActiveWinEffectState> = {};
-
-          for (const [cellId, cellState] of Object.entries(currentValue)) {
-            const elapsed = tickNow - cellState.startedAt;
-            if (elapsed >= WIN_EFFECT_VISIBLE_MS) {
-              changed = true;
-              continue;
-            }
-
-            const shouldShowTotal = elapsed >= WIN_EFFECT_AMOUNTS_VISIBLE_MS;
-            const nextCellState =
-              shouldShowTotal && !cellState.showTotal
-                ? { ...cellState, showTotal: true }
-                : cellState;
-            if (nextCellState !== cellState) {
-              changed = true;
-            }
-            nextValue[cellId] = nextCellState;
-          }
-
-          return changed ? nextValue : currentValue;
-        });
-      }, 100);
-
-      return () => clearInterval(intervalId);
-    },
-    [activeWinEffectByCellId],
-  );
-
   // Convert incoming history ticks into smooth price-motion segments for the line renderer.
   useEffect(() => {
     if (history.length === 0) return;
@@ -1210,121 +1135,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     );
     return hitTestAnyCell(cx, cy, layout, storeRef.current);
   }, []);
-
-  // Share sheet derived state for selected cell (amount/profit/ROI/time + USD approximations).
-  const selectedShareCell = useMemo(
-    () => cells.find((cell) => cell.id === shareCellId) ?? null,
-    [cells, shareCellId],
-  );
-  const selectedShareAmountWld = selectedShareCell
-    ? bets[selectedShareCell.id] ||
-      pendingBets[selectedShareCell.id] ||
-      betAmount
-    : betAmount;
-  const selectedShareAmount = toFiniteNumber(selectedShareAmountWld);
-  const selectedShareProfit = useMemo(() => {
-    if (!selectedShareCell) return 0;
-    const settledPayout = settledOutcomes[selectedShareCell.id]?.payout;
-    if (typeof settledPayout === "number" && Number.isFinite(settledPayout)) {
-      return Math.max(settledPayout, 0);
-    }
-    return toFiniteNumber(
-      selectedShareAmount *
-        Math.max((selectedShareCell.multiplier ?? 0) - 1, 0),
-    );
-  }, [selectedShareAmount, selectedShareCell, settledOutcomes]);
-  const shareWinRate = useMemo(() => {
-    const settled = Object.values(settledOutcomes);
-    if (settled.length === 0) return null;
-    const wins = settled.filter((item) => item.isWin).length;
-    return formatPercent((wins / settled.length) * 100);
-  }, [settledOutcomes]);
-  const selectedShareRoi = useMemo(() => {
-    if (!selectedShareCell || selectedShareAmount <= 0) return null;
-    return formatPercent((selectedShareProfit / selectedShareAmount) * 100);
-  }, [selectedShareAmount, selectedShareCell, selectedShareProfit]);
-  const selectedShareTime = useMemo(() => {
-    if (!selectedShareCell) return "--:--:--";
-    return shareTimeFormatter.format(
-      new Date(selectedShareCell.timeWindowStart),
-    );
-  }, [selectedShareCell]);
-  const selectedShareProfitApproxUsd = useMemo(() => {
-    if (typeof wldUsdPrice !== "number" || !Number.isFinite(wldUsdPrice))
-      return null;
-    return selectedShareProfit * wldUsdPrice;
-  }, [selectedShareProfit, wldUsdPrice]);
-  const selectedShareAmountUsd = useMemo(() => {
-    if (typeof wldUsdPrice !== "number" || !Number.isFinite(wldUsdPrice))
-      return 0;
-    return toFiniteNumber(selectedShareAmount * wldUsdPrice);
-  }, [selectedShareAmount, wldUsdPrice]);
-  const selectedShareProfitUsd = useMemo(() => {
-    if (selectedShareProfitApproxUsd === null) return 0;
-    return toFiniteNumber(selectedShareProfitApproxUsd);
-  }, [selectedShareProfitApproxUsd]);
-
-  const handleOpenShareSheet = useCallback((cellId: string) => {
-    setShareCellId(cellId);
-    setIsShareSheetOpen(true);
-  }, []);
-
-  const setShareOverlayButtonRef = useCallback(
-    (cellId: string, node: HTMLButtonElement | null) => {
-      if (!node) {
-        shareOverlayButtonRefs.current.delete(cellId);
-        return;
-      }
-      shareOverlayButtonRefs.current.set(cellId, node);
-    },
-    [],
-  );
-
-  const setWinEffectIconRef = useCallback(
-    (cellId: string, node: HTMLDivElement | null) => {
-      if (!node) {
-        winEffectIconRefs.current.delete(cellId);
-        return;
-      }
-      winEffectIconRefs.current.set(cellId, node);
-    },
-    [],
-  );
-
-  // Position HTML overlay elements over canvas cells using latest per-frame target coordinates.
-  const syncShareOverlayPositions = useCallback(
-    (targets: ShareOverlayTarget[]) => {
-      const targetById = new Map(
-        targets.map((target) => [target.cellId, target]),
-      );
-      for (const [cellId, node] of shareOverlayButtonRefs.current.entries()) {
-        if (!node) continue;
-        const nextTarget = targetById.get(cellId);
-        if (!nextTarget) {
-          node.style.display = "none";
-          continue;
-        }
-        node.style.display = "";
-        node.style.transform = `translate3d(${nextTarget.left}px, ${nextTarget.top}px, 0)`;
-        node.style.width = `${nextTarget.buttonSize}px`;
-        node.style.height = `${nextTarget.buttonSize}px`;
-      }
-      const wrapRect = wrapRef.current?.getBoundingClientRect();
-      const offsetX = wrapRect?.left ?? 0;
-      const offsetY = wrapRect?.top ?? 0;
-      for (const [cellId, node] of winEffectIconRefs.current.entries()) {
-        if (!node) continue;
-        const nextTarget = targetById.get(cellId);
-        if (!nextTarget) {
-          node.style.display = "none";
-          continue;
-        }
-        node.style.display = "";
-        node.style.transform = `translate3d(${offsetX + nextTarget.centerLeft}px, ${offsetY + nextTarget.centerTop}px, 0) translate(-50%, -50%)`;
-      }
-    },
-    [wrapRef],
-  );
 
   // ── Draw ───────────────────────────────────────────────────────────────────
   const draw = useCallback(() => {
@@ -1654,28 +1464,28 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     clearPreviewCell();
     resetTransform();
   }, [clearPreviewCell, resetTransform]);
-  // Hard reset visual/runtime state when market changes to prevent stale carry-over.
-  const handleMarketChange = useCallback(
-    (nextMarketSymbol: string) => {
-      if (nextMarketSymbol === selectedMarketSymbol) return;
-      setSelectedMarketSymbol(nextMarketSymbol);
-      resetGridData();
-      cameraPriceRef.current = 0;
-      priceMotionRef.current = null;
-      lastHistoryPointRef.current = null;
-      tickCadenceMsRef.current = 1000;
-      previousWinningCellIdsRef.current = new Set();
-      hasInitializedWinEffectTrackingRef.current = false;
-      isReadyRef.current = false;
-      dataReadyAtRef.current = null;
-      previewCellIdRef.current = null;
-      setActiveWinEffectByCellId({});
-      setSuggestedStrategyCellIds([]);
-      setIsReady(false);
-      setCanvasInstanceKey((k) => k + 1);
-    },
-    [resetGridData, selectedMarketSymbol],
-  );
+  // Wire the market-reset callback so useMarketSelector can trigger it.
+  // Keep a stable ref so the hook's useCallback dep doesn't churn; the ref is
+  // updated via useEffect after each render so it always calls the latest closure.
+  const doMarketReset = useCallback(() => {
+    cameraPriceRef.current = 0;
+    priceMotionRef.current = null;
+    lastHistoryPointRef.current = null;
+    tickCadenceMsRef.current = 1000;
+    previousWinningCellIdsRef.current = new Set();
+    hasInitializedWinEffectTrackingRef.current = false;
+    isReadyRef.current = false;
+    dataReadyAtRef.current = null;
+    previewCellIdRef.current = null;
+    setActiveWinEffectByCellId({});
+    setSuggestedStrategyCellIds([]);
+    setIsReady(false);
+    setCanvasInstanceKey((k) => k + 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    onMarketResetRef.current = doMarketReset;
+  }, [doMarketReset]);
   // Open overlay sheet from current committed mode into editable draft state.
   const handleOpenOverlaySheet = useCallback(() => {
     const nextSuggestedStrategyEnabled = suggestedStrategyEnabled;
