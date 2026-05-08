@@ -3,6 +3,7 @@
 import { WalletMinimal, X } from "lucide-react";
 import WldMarketIcon from "@/src/assets/icons/wld-market.svg";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import TradingOrdersPanel from "@/src/features/trade/components/TradingOrdersPanel";
 import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
 import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
@@ -26,6 +27,7 @@ type TradeControlsPanelProps = {
   showMarketHeader?: boolean;
   showHandle?: boolean;
   showCloseButton?: boolean;
+  showInlineOrders?: boolean;
   closeLabel?: string;
   onClose?: () => void;
   onAddFunds?: () => void;
@@ -39,23 +41,31 @@ export default function TradeControlsPanel({
   showMarketHeader = false,
   showHandle = false,
   showCloseButton = true,
+  showInlineOrders = true,
   closeLabel = "Close trade controls",
   onClose,
-  onAddFunds,
 }: TradeControlsPanelProps) {
   const { walletAddress: rawAddress, username } = useAuth();
   const normalizedAddress = rawAddress?.trim().toLowerCase() ?? "";
   const balance = useGameStore((s) => s.balance);
   const betAmount = useGameStore((s) => s.betAmount);
   const setBetAmount = useGameStore((s) => s.setBetAmount);
+  const isDesktopOrdersVisible = useGameStore((s) => s.isDesktopOrdersVisible);
+  const desktopOrdersQueryAnchorTime = useGameStore(
+    (s) => s.desktopOrdersQueryAnchorTime,
+  );
   const { data: wldUsdPrice } = useWldUsdPrice();
   const { data: publicProfileResponse } = useAuthControllerGetPublicProfile(
     { address: normalizedAddress },
     { query: { enabled: Boolean(normalizedAddress) } },
   );
   const hasVerifiedBadge = useMemo(() => {
-    if (!publicProfileResponse || typeof publicProfileResponse !== "object") return false;
-    const r = publicProfileResponse as { data?: { humanVerified?: boolean }; humanVerified?: boolean };
+    if (!publicProfileResponse || typeof publicProfileResponse !== "object")
+      return false;
+    const r = publicProfileResponse as {
+      data?: { humanVerified?: boolean };
+      humanVerified?: boolean;
+    };
     return (r.data ?? r)?.humanVerified === true;
   }, [publicProfileResponse]);
 
@@ -192,15 +202,13 @@ export default function TradeControlsPanel({
           })}
         </section>
 
-        <section>
-          <Button
-            type="button"
-            onClick={onAddFunds}
-            className="bg-primary-light text-text-inverse hover:bg-primary-medium h-11 w-full rounded-[8px] px-4 text-sm font-medium tracking-[-0.01em] shadow-none max-md:hidden"
-          >
-            Add Funds
-          </Button>
-        </section>
+        {showInlineOrders && isDesktopOrdersVisible ? (
+          <TradingOrdersPanel
+            fallbackMarketLabel={marketSymbol}
+            inline
+            queryAnchorTime={desktopOrdersQueryAnchorTime}
+          />
+        ) : null}
       </div>
     </div>
   );

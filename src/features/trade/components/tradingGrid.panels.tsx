@@ -1,5 +1,13 @@
 import React from "react";
-import { Copy, Eye, Info, LocateFixed, Share2, Wallet } from "lucide-react";
+import {
+  Copy,
+  Eye,
+  Info,
+  LocateFixed,
+  Share2,
+  Wallet,
+} from "lucide-react";
+import HamburgerMenuIcon from "@/src/assets/icons/hamburger-menu.svg";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +25,7 @@ import {
 import { Sheet } from "react-modal-sheet";
 import { cn } from "@/lib/utils";
 import OverlayModePanel from "@/src/features/trade/components/OverlayModePanel";
+import TradingOrdersPanel from "@/src/features/trade/components/TradingOrdersPanel";
 import TradeControlsPanel from "@/src/features/trade/components/TradeControlsPanel";
 import { WinShareCard } from "@/src/features/trade/components/WinShareCard";
 import { GridActionButton } from "./tradingGrid.ui";
@@ -27,8 +36,10 @@ type TopBarProps = {
   displayMarketPrice: string;
   isSuggestedStrategyVisible: boolean;
   isFollowTradeVisible: boolean;
+  isOrdersVisible: boolean;
   onMarketChange: (marketSymbol: string) => void;
   onOpenInfo: () => void;
+  onOpenOrders: () => void;
   onOpenOverlay: () => void;
   onRecenter: () => void;
 };
@@ -38,8 +49,10 @@ export function TradingGridTopBar({
   displayMarketPrice,
   isSuggestedStrategyVisible,
   isFollowTradeVisible,
+  isOrdersVisible,
   onMarketChange,
   onOpenInfo,
+  onOpenOrders,
   onOpenOverlay,
   onRecenter,
 }: TopBarProps) {
@@ -111,6 +124,13 @@ export function TradingGridTopBar({
       <div className="flex shrink-0 items-center gap-1">
         <GridActionButton aria-label="Market info" onClick={onOpenInfo}>
           <Info className="size-4" strokeWidth={1.75} />
+        </GridActionButton>
+        <GridActionButton
+          aria-label="Open user bet orders"
+          active={isOrdersVisible}
+          onClick={onOpenOrders}
+        >
+          <HamburgerMenuIcon className="size-4" aria-hidden="true" />
         </GridActionButton>
         {false && (
           <GridActionButton
@@ -295,8 +315,49 @@ export function TradingInfoSheet({
             showMarketHeader
             showHandle
             showCloseButton={false}
+            showInlineOrders={false}
             onClose={onClose}
           />
+        </Sheet.Content>
+      </Sheet.Container>
+    </Sheet>
+  );
+}
+
+type OrdersSheetProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  marketSymbol: string;
+  queryAnchorTime: number | null;
+};
+
+export function TradingOrdersSheet({
+  isOpen,
+  onClose,
+  marketSymbol,
+  queryAnchorTime,
+}: OrdersSheetProps) {
+  return (
+    <Sheet isOpen={isOpen} onClose={onClose} detent="content" unstyled>
+      <Sheet.Backdrop
+        onTap={onClose}
+        className="bg-background-main/55 backdrop-blur-[2px]"
+      />
+      <Sheet.Container className="pointer-events-none">
+        <Sheet.Content
+          disableDrag={false}
+          className="border-border-main bg-background-main pointer-events-auto rounded-t-[16px] border-t px-5 pt-3 pb-5"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-center">
+              <span className="bg-grid-axis/70 h-1 w-20 rounded-full" aria-hidden />
+            </div>
+            <TradingOrdersPanel
+              className="border-0 bg-transparent p-0"
+              fallbackMarketLabel={marketSymbol}
+              queryAnchorTime={queryAnchorTime}
+            />
+          </div>
         </Sheet.Content>
       </Sheet.Container>
     </Sheet>

@@ -77,6 +77,7 @@ import {
   FollowReferralDialog,
   TradingGridTopBar,
   TradingInfoSheet,
+  TradingOrdersSheet,
   TradingOverlaySheet,
   TradingShareSheet,
 } from "./tradingGrid.panels";
@@ -148,6 +149,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const updateOrder = useGameStore((s) => s.updateOrder);
   const cancelPendingBet = useGameStore((s) => s.cancelPendingBet);
   const resetGridData = useGameStore((s) => s.resetGridData);
+  const isDesktopOrdersVisible = useGameStore((s) => s.isDesktopOrdersVisible);
+  const setDesktopOrdersPanel = useGameStore((s) => s.setDesktopOrdersPanel);
 
   // Market selector drives REST/socket endpoints and resets grid state on change.
   // onMarketReset is wired after refs/setters are declared (see useCallback below).
@@ -429,6 +432,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   >([]);
   const [isOverlaySheetOpen, setIsOverlaySheetOpen] = useState(false);
   const [isInfoSheetOpen, setIsInfoSheetOpen] = useState(false);
+  const [isOrdersSheetOpen, setIsOrdersSheetOpen] = useState(false);
+  const [ordersSheetQueryAnchorTime, setOrdersSheetQueryAnchorTime] =
+    useState<number | null>(null);
   // ── Share sheet data (amounts / profit / ROI / win-rate) ──────────────────
   const {
     shareCellId,
@@ -1511,10 +1517,28 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     currentPrice > 0 ? livePriceFormatter.format(currentPrice) : "--";
   const displayMarketPrice =
     displayPrice === "--" ? displayPrice : `~ ${displayPrice}`;
+  const latestGridTime = useMemo(
+    () => getLatestChartTime(history, Date.now()),
+    [history],
+  );
   const handleRecenterGrid = useCallback(() => {
     clearPreviewCell();
     resetTransform();
   }, [clearPreviewCell, resetTransform]);
+  const handleOpenOrders = useCallback(() => {
+    if (isMobileRef.current) {
+      setOrdersSheetQueryAnchorTime(latestGridTime);
+      setIsOrdersSheetOpen(true);
+      return;
+    }
+
+    if (isDesktopOrdersVisible) {
+      setDesktopOrdersPanel(false);
+      return;
+    }
+
+    setDesktopOrdersPanel(true, latestGridTime);
+  }, [isDesktopOrdersVisible, latestGridTime, setDesktopOrdersPanel]);
   // Wire the market-reset callback so useMarketSelector can trigger it.
   // Keep a stable ref so the hook's useCallback dep doesn't churn; the ref is
   // updated via useEffect after each render so it always calls the latest closure.
@@ -1616,8 +1640,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         displayMarketPrice={displayMarketPrice}
         isSuggestedStrategyVisible={isSuggestedStrategyVisible}
         isFollowTradeVisible={isFollowTradeVisible}
+        isOrdersVisible={isMobileRef.current ? isOrdersSheetOpen : isDesktopOrdersVisible}
         onMarketChange={handleMarketChange}
         onOpenInfo={() => setIsInfoSheetOpen(true)}
+        onOpenOrders={handleOpenOrders}
         onOpenOverlay={handleOpenOverlaySheet}
         onRecenter={handleRecenterGrid}
       />
@@ -1720,6 +1746,13 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         onFollowTradeDraftChange={handleFollowTradeDraftChange}
         onFollowTradeTargetDraftChange={handleFollowTradeTargetDraftChange}
         onApplyOverlayMode={handleApplyOverlayMode}
+      />
+
+      <TradingOrdersSheet
+        isOpen={isOrdersSheetOpen}
+        onClose={() => setIsOrdersSheetOpen(false)}
+        marketSymbol={selectedMarketSymbol}
+        queryAnchorTime={ordersSheetQueryAnchorTime}
       />
 
       <TradingShareSheet

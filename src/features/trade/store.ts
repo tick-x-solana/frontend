@@ -87,8 +87,14 @@ interface GameState {
   serverTimeOffset: number;
   serverTimeOffsetReady: boolean;
   priceStepChangedAt: number | null;
+  isDesktopOrdersVisible: boolean;
+  desktopOrdersQueryAnchorTime: number | null;
 
   setBetAmount: (amount: number) => void;
+  setDesktopOrdersPanel: (
+    isVisible: boolean,
+    queryAnchorTime?: number | null,
+  ) => void;
   placeBet: (cellId: string, amount: number) => void;
   cancelPendingBet: (cellId: string) => void;
   checkWinEffects: (now: number) => void;
@@ -125,11 +131,19 @@ export const useGameStore = create<GameState>((set) => ({
   serverTimeOffset: 0,
   serverTimeOffsetReady: false,
   priceStepChangedAt: null,
+  isDesktopOrdersVisible: false,
+  desktopOrdersQueryAnchorTime: null,
 
   resetGridData: () =>
     set({ cells: [], history: [], currentPrice: 0, basePrice: 0 }),
 
   setBetAmount: (amount) => set({ betAmount: amount }),
+
+  setDesktopOrdersPanel: (isVisible, queryAnchorTime = null) =>
+    set({
+      isDesktopOrdersVisible: isVisible,
+      desktopOrdersQueryAnchorTime: isVisible ? queryAnchorTime : null,
+    }),
 
   setConnection: (socket, wssKey = null) => set({ socket, wssKey }),
 
