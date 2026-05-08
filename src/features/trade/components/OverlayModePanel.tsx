@@ -76,10 +76,6 @@ export default function OverlayModePanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-center">
-        <span className="bg-grid-axis/70 h-1 w-20 rounded-full" aria-hidden />
-      </div>
-
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-text-heading text-base font-semibold tracking-[-0.01em]">

@@ -395,16 +395,21 @@ export function TradingOverlaySheet(props: OverlaySheetProps) {
   } = props;
 
   return (
-    <Sheet isOpen={isOpen} onClose={onClose} detent="content" unstyled>
-      <Sheet.Backdrop
-        onTap={onClose}
-        className="bg-background-main/55 backdrop-blur-[2px]"
-      />
-      <Sheet.Container className="pointer-events-none">
-        <Sheet.Content
-          disableDrag={false}
-          className="border-border-main bg-background-main pointer-events-auto rounded-t-[16px] border-t px-5 pt-3 pb-5"
-        >
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        showCloseButton
+        className="pointer-events-none inset-auto top-1/2 left-1/2 block w-auto max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 p-0"
+      >
+        <div className="border-border-main bg-background-main pointer-events-auto w-[min(720px,calc(100vw-2rem))] overflow-hidden rounded-[20px] border px-5 pt-3 pb-5 shadow-[0_24px_100px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <DialogTitle className="sr-only">Overlay settings</DialogTitle>
+          <DialogDescription className="sr-only">
+            Configure strategy and follow trade overlays.
+          </DialogDescription>
           <OverlayModePanel
             suggestedStrategyEnabled={suggestedStrategyEnabledDraft}
             followTradeEnabled={followTradeEnabledDraft}
@@ -415,9 +420,9 @@ export function TradingOverlaySheet(props: OverlaySheetProps) {
             onFollowTradeTargetEnabledChange={onFollowTradeTargetDraftChange}
             onApply={onApplyOverlayMode}
           />
-        </Sheet.Content>
-      </Sheet.Container>
-    </Sheet>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
