@@ -4,12 +4,10 @@
  * onto its canvas-derived target coordinate each animation frame.
  */
 
-import React, { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback } from "react";
 import type { ShareOverlayTarget } from "../components/tradingGrid.utils";
 
-export function useShareOverlayPositioning(
-  wrapRef: React.RefObject<HTMLDivElement | null>,
-) {
+export function useShareOverlayPositioning() {
   const shareOverlayButtonRefs = useRef(
     new Map<string, HTMLButtonElement | null>(),
   );
@@ -62,9 +60,6 @@ export function useShareOverlayPositioning(
         node.style.width = `${nextTarget.buttonSize}px`;
         node.style.height = `${nextTarget.buttonSize}px`;
       }
-      const wrapRect = wrapRef.current?.getBoundingClientRect();
-      const offsetX = wrapRect?.left ?? 0;
-      const offsetY = wrapRect?.top ?? 0;
       for (const [cellId, node] of winEffectIconRefs.current.entries()) {
         if (!node) continue;
         const nextTarget = targetById.get(cellId);
@@ -73,10 +68,10 @@ export function useShareOverlayPositioning(
           continue;
         }
         node.style.display = "";
-        node.style.transform = `translate3d(${offsetX + nextTarget.centerLeft}px, ${offsetY + nextTarget.centerTop}px, 0) translate(-50%, -50%)`;
+        node.style.transform = `translate3d(${nextTarget.centerLeft}px, ${nextTarget.centerTop}px, 0) translate(-50%, -50%)`;
       }
     },
-    [wrapRef],
+    [],
   );
 
   return {

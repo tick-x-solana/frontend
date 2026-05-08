@@ -6,10 +6,7 @@ import {
   formatApproxUsd as formatApproxUsdValue,
   formatWalletAddress,
 } from "@/src/utils/formatters";
-import {
-  FAKE_WIN_USERNAME_PREFIXES,
-  percentageFormatter,
-} from "./tradingGrid.constants";
+import { percentageFormatter } from "./tradingGrid.constants";
 
 export type ShareOverlayTarget = {
   cellId: string;
@@ -30,9 +27,10 @@ export type ActiveWinEffectState = {
   showTotal: boolean;
 };
 
-export type FakeWinToastData = {
+export type WinBetBannerData = {
   username: string;
   amount: number;
+  humanVerified: boolean;
 };
 
 export type FollowOverlayActivity = ReturnType<
@@ -413,31 +411,6 @@ export function extractBinanceKlineHistory(value: unknown): StoreSnapshot["histo
   if (points.length < 2) return points;
   points.sort((a, b) => a.time - b.time);
   return points;
-}
-
-export function randomInt(minInclusive: number, maxInclusive: number): number {
-  const min = Math.ceil(minInclusive);
-  const max = Math.floor(maxInclusive);
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function buildRandomFakeUsername(): string {
-  const prefix =
-    FAKE_WIN_USERNAME_PREFIXES[randomInt(0, FAKE_WIN_USERNAME_PREFIXES.length - 1)];
-  const suffix = randomInt(10, 99);
-  return `${prefix}${suffix}`;
-}
-
-export function buildFakeWinToastData(): FakeWinToastData {
-  const isLowerRange = Math.random() < 0.8;
-  const minAmount = isLowerRange ? 2 : 50;
-  const maxAmount = isLowerRange ? 50 : 70;
-  const amount = Number((Math.random() * (maxAmount - minAmount) + minAmount).toFixed(2));
-
-  return {
-    username: buildRandomFakeUsername(),
-    amount,
-  };
 }
 
 export function formatApproxUsd(amountWld: number, wldUsdPrice: number | null) {

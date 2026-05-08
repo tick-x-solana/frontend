@@ -36,6 +36,7 @@ import {
 import {
   clampTransformToDataBounds,
   computeLayout,
+  getGridViewportChrome,
   hitTestAnyCell,
   hitTestCell,
 } from "@/src/utils/gridLayout";
@@ -94,11 +95,11 @@ import {
   ShareOverlayTarget,
 } from "./tradingGrid.utils";
 import { useTradingGridSocketEffects } from "@/src/features/trade/hooks/useTradingGridSocketEffects";
-import useFakeWinToast from "@/src/features/trade/hooks/useFakeWinToast";
 import { useMarketSelector } from "@/src/features/trade/hooks/useMarketSelector";
 import { useShareSheetData } from "@/src/features/trade/hooks/useShareSheetData";
 import { useShareOverlayPositioning } from "@/src/features/trade/hooks/useShareOverlayPositioning";
 import { useWinEffectTracking } from "@/src/features/trade/hooks/useWinEffectTracking";
+import useWinNotificationToast from "@/src/features/trade/hooks/useWinNotificationToast";
 
 type TradingGridProps = {
   initialFollowRefCode?: string | null;
@@ -265,6 +266,10 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const wrapRef = useRef<HTMLDivElement>(null);
   const [canvasInstanceKey, setCanvasInstanceKey] = useState(0);
   const [isCompactZoomForShare, setIsCompactZoomForShare] = useState(false);
+  const [overlayPlotBounds, setOverlayPlotBounds] = useState({
+    width: 0,
+    height: 0,
+  });
 
   // Live values in refs keep the animation loop stable without hook dependency churn.
   const initialIsMobile =
@@ -458,7 +463,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     setShareOverlayButtonRef,
     setWinEffectIconRef,
     syncShareOverlayPositions,
-  } = useShareOverlayPositioning(wrapRef);
+  } = useShareOverlayPositioning();
 
   const [dismissedFollowReferralCode, setDismissedFollowReferralCode] =
     useState<string | null>(null);
@@ -495,7 +500,14 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const isSuggestedStrategyVisible = suggestedStrategyEnabled;
   const isFollowTradeConfigVisibleDraft =
     isOverlaySheetOpen && followTradeEnabledDraft;
-  const fakeWinToastData = useFakeWinToast();
+  const winToastData = useWinNotificationToast({
+    socket,
+    marketId: selectedMarketId,
+    wldUsdPrice:
+      typeof wldUsdPrice === "number" && Number.isFinite(wldUsdPrice)
+        ? wldUsdPrice
+        : null,
+  });
 
   const enabledFollowTargetIds = useMemo(
     () =>
@@ -1060,6 +1072,11 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     const applySize = (w: number, h: number) => {
       sizeRef.current = { w, h };
       isMobileRef.current = isMobileViewport(window.innerWidth);
+      const chrome = getGridViewportChrome(w);
+      setOverlayPlotBounds({
+        width: Math.max(0, w - chrome.priceAxisWidth),
+        height: Math.max(0, h - chrome.timeAxisHeight),
+      });
       const minZoom = getMinZoom();
       if (transformRef.current.zoom < minZoom) {
         transformRef.current = { ...transformRef.current, zoom: minZoom };
@@ -1222,10 +1239,14 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       const y = layout.toCellY(cell.priceLevel + layout.effectivePriceStep / 2);
       const w = layout.cellW;
       const h = layout.cellH;
-      if (xRaw > layout.w || y + h < 0 || y > layout.h) continue;
-      // Pin win cells that have scrolled past the left edge so the share button
-      // remains reachable until the user scrolls back or navigates away.
-      const x = Math.max(0, xRaw);
+      if (
+        xRaw > layout.plotRight ||
+        xRaw + w < 0 ||
+        y + h < 0 ||
+        y > layout.plotBottom
+      ) {
+        continue;
+      }
       const settled = store.settledOutcomes[cell.id];
       const hasSettledBreakdown =
         settled?.basePayout !== null || settled?.bonusPayout !== null;
@@ -1251,12 +1272,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
 
       nextShareTargets.push({
         cellId: cell.id,
-        left: Math.max(
-          0,
-          Math.min(layout.w - buttonSize, x + w - buttonSize - inset),
-        ),
-        top: Math.max(0, Math.min(layout.h - buttonSize, y + inset)),
-        centerLeft: x + w / 2,
+        left: xRaw + w - buttonSize - inset,
+        top: Math.max(0, Math.min(layout.plotBottom - buttonSize, y + inset)),
+        centerLeft: xRaw + w / 2,
         centerTop: y + h / 2,
         cellEdge: minEdge,
         buttonSize,
@@ -1635,18 +1653,22 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
           activeWinEffectByCellId={activeWinEffectByCellId}
           setWinEffectIconRef={setWinEffectIconRef}
           wldUsdPrice={wldUsdPrice}
+          plotWidth={overlayPlotBounds.width}
+          plotHeight={overlayPlotBounds.height}
         />
         {!isCompactZoomForShare ? (
           <ShareButtonsLayer
             shareOverlayTargets={shareOverlayTargets}
             setShareOverlayButtonRef={setShareOverlayButtonRef}
             handleOpenShareSheet={handleOpenShareSheet}
+            plotWidth={overlayPlotBounds.width}
+            plotHeight={overlayPlotBounds.height}
           />
         ) : null}
 
-        {fakeWinToastData ? (
+        {winToastData ? (
           <div className="pointer-events-none absolute top-11 left-3 z-20 sm:top-12 sm:left-4">
-            <WinBetBanner data={fakeWinToastData} />
+            <WinBetBanner data={winToastData} />
           </div>
         ) : null}
 

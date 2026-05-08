@@ -11,6 +11,8 @@ type WinEffectsLayerProps = {
   activeWinEffectByCellId: Record<string, ActiveWinEffectState>;
   setWinEffectIconRef: (cellId: string, node: HTMLDivElement | null) => void;
   wldUsdPrice: number | null | undefined;
+  plotWidth: number;
+  plotHeight: number;
 };
 
 export function WinEffectsLayer(props: WinEffectsLayerProps) {
@@ -20,10 +22,15 @@ export function WinEffectsLayer(props: WinEffectsLayerProps) {
     activeWinEffectByCellId,
     setWinEffectIconRef,
     wldUsdPrice,
+    plotWidth,
+    plotHeight,
   } = props;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[9999]">
+    <div
+      className="pointer-events-none absolute top-0 left-0 z-20 overflow-hidden"
+      style={{ width: `${plotWidth}px`, height: `${plotHeight}px` }}
+    >
       {shareOverlayTargets
         .filter((target) => activeWinEffectCellIdSet.has(target.cellId))
         .map((target) => (
@@ -102,15 +109,22 @@ type ShareButtonsLayerProps = {
   shareOverlayTargets: ShareOverlayTarget[];
   setShareOverlayButtonRef: (cellId: string, node: HTMLButtonElement | null) => void;
   handleOpenShareSheet: (cellId: string) => void;
+  plotWidth: number;
+  plotHeight: number;
 };
 
 export function ShareButtonsLayer({
   shareOverlayTargets,
   setShareOverlayButtonRef,
   handleOpenShareSheet,
+  plotWidth,
+  plotHeight,
 }: ShareButtonsLayerProps) {
   return (
-    <div className="pointer-events-none absolute inset-0 z-20">
+    <div
+      className="pointer-events-none absolute top-0 left-0 z-20 overflow-hidden"
+      style={{ width: `${plotWidth}px`, height: `${plotHeight}px` }}
+    >
       {shareOverlayTargets.map((target) => (
         <button
           key={target.cellId}

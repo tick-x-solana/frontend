@@ -36,25 +36,13 @@ export const UNSUBSCRIBE_ORDER_FOLLOWS_EVENT = "unsubscribe_order_follows";
 export const SUBSCRIBE_SUGGESTED_STRATEGY_EVENT =
   "subscribe_suggested_strategy";
 export const SUGGESTED_STRATEGY_UPDATE_EVENT = "suggested_strategy_update";
-
-export const FAKE_WIN_TOAST_MIN_DELAY_MS = 5000;
-export const FAKE_WIN_TOAST_MAX_DELAY_MS = 20000;
-export const FAKE_WIN_TOAST_VISIBLE_MS = 1000;
+// Realtime socket event that announces a user's winning payout.
+export const WIN_NOTIFICATION_EVENT = "win_notification";
+// Keep the win banner visible briefly so users can read the payout.
+export const WIN_BET_BANNER_VISIBLE_MS = 1000;
 export const WIN_EFFECT_VISIBLE_MS = 2000;
 export const WIN_EFFECT_AMOUNTS_VISIBLE_MS = 1300;
 export const WIN_EFFECT_INIT_GRACE_MS = 5000;
-export const FAKE_WIN_USERNAME_PREFIXES = [
-  "lion",
-  "tiger",
-  "eagle",
-  "wolf",
-  "shark",
-  "falcon",
-  "phoenix",
-  "panther",
-  "cobra",
-  "rhino",
-] as const;
 
 export const MARKET_SYMBOL = "BTC/USD";
 export const CORE_SOCKET_PATH = "/socket.io";
