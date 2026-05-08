@@ -2,8 +2,8 @@
 
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import {
+  Connection,
   PublicKey,
   SystemProgram,
   Transaction,
@@ -11,53 +11,25 @@ import {
   LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
 import { toast } from "sonner";
-import { SOLANA_PROGRAM_ID } from "@/src/constants";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import { useSolanaWallet } from "@/src/lib/solana-wallet";
 import {
   getAccountControllerGetBalanceQueryKey,
   paymentControllerDebugDeposit,
   paymentControllerDebugFinalizeWithdrawal,
   paymentControllerRequestWithdrawal,
 } from "@/src/services/queries";
+import { SOLANA_RPC_ENDPOINT, TICKX_SOLANA_PROGRAM_ID } from "@/src/constants/solana";
 
-const PROGRAM_ID = new PublicKey(SOLANA_PROGRAM_ID);
+type DepositSolParams = {
+  amountSol: string;
+};
 
-function getConfigPda(): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("pool-reserve-config")],
-    PROGRAM_ID,
-  );
-}
+type WithdrawSolParams = {
+  amountSol: string;
+};
 
-function getVaultPda(): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("pool-reserve-vault")],
-    PROGRAM_ID,
-  );
-}
-
-function getTraderPositionPda(trader: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("trader-position"), trader.toBuffer()],
-    PROGRAM_ID,
-  );
-}
-
-// Encode a Borsh instruction: 1-byte discriminant + 8-byte u64 LE amount
-// Uses DataView for browser compatibility (Buffer.writeBigUInt64LE is Node-only)
-function encodeInstruction(discriminant: number, amount: bigint): Buffer {
-  const ab = new ArrayBuffer(9);
-  const view = new DataView(ab);
-  view.setUint8(0, discriminant);
-  view.setBigUint64(1, amount, true); // true = little-endian
-  return Buffer.from(ab);
-}
-
-function solToLamports(amountSol: number): bigint {
-  return BigInt(Math.round(amountSol * LAMPORTS_PER_SOL));
-}
-
-function parseSolAmount(value: string, label: string): number {
+function parsePositiveNumber(value: string, label: string): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new Error(`${label} must be a positive number`);
@@ -65,199 +37,229 @@ function parseSolAmount(value: string, label: string): number {
   return parsed;
 }
 
-function extractRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object") return {};
-  return value as Record<string, unknown>;
+function encodeInstructionData(discriminant: number, amountLamports: bigint) {
+  const ab = new ArrayBuffer(9);
+  const view = new DataView(ab);
+  view.setUint8(0, discriminant);
+  view.setBigUint64(1, amountLamports, true);
+  return Buffer.from(ab);
 }
 
-function asOptionalString(value: unknown): string | undefined {
-  if (typeof value === "string" && value.trim().length > 0) return value.trim();
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  return undefined;
+function extractSessionId(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const direct = record.sessionId ?? record.id;
+  if (typeof direct === "string" && direct.trim().length > 0) {
+    return direct.trim();
+  }
+
+  if (record.data && typeof record.data === "object") {
+    return extractSessionId(record.data);
+  }
+
+  return null;
 }
 
-function isUserCancelledRequest(error: unknown): boolean {
-  const msg = String(
-    error instanceof Error ? error.message : error,
-  ).toLowerCase();
-  return (
-    msg.includes("user rejected") ||
-    msg.includes("user denied") ||
-    msg.includes("cancelled") ||
-    msg.includes("canceled")
+function getConnection() {
+  return new Connection(SOLANA_RPC_ENDPOINT, "confirmed");
+}
+
+function toLamports(amountSol: number): bigint {
+  return BigInt(Math.round(amountSol * LAMPORTS_PER_SOL));
+}
+
+async function sendProgramTx({
+  wallet,
+  amountLamports,
+  instructionDiscriminant,
+}: {
+  wallet: ReturnType<typeof useSolanaWallet>;
+  amountLamports: bigint;
+  instructionDiscriminant: number;
+}) {
+  if (!wallet.publicKey) {
+    throw new Error("Wallet not connected");
+  }
+
+  const connection = getConnection();
+  const trader = new PublicKey(wallet.publicKey);
+  const programId = new PublicKey(TICKX_SOLANA_PROGRAM_ID);
+
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("pool-reserve-config")],
+    programId,
   );
-}
+  const [vaultPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("pool-reserve-vault")],
+    programId,
+  );
+  const [traderPositionPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("trader-position"), trader.toBuffer()],
+    programId,
+  );
 
-function buildAuthHeaders(): HeadersInit | undefined {
-  if (typeof window === "undefined") return undefined;
-  const token = window.localStorage.getItem("token");
-  if (!token) return undefined;
-  return { Authorization: `Bearer ${token}` };
+  const instruction = new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: trader, isSigner: true, isWritable: true },
+      { pubkey: configPda, isSigner: false, isWritable: true },
+      { pubkey: traderPositionPda, isSigner: false, isWritable: true },
+      { pubkey: vaultPda, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: encodeInstructionData(instructionDiscriminant, amountLamports),
+  });
+
+  const latest = await connection.getLatestBlockhash("confirmed");
+  const tx = new Transaction({
+    feePayer: trader,
+    blockhash: latest.blockhash,
+    lastValidBlockHeight: latest.lastValidBlockHeight,
+  }).add(instruction);
+
+  if (!wallet.signTransaction) {
+    throw new Error("Wallet does not support signTransaction");
+  }
+  const signedTx = await wallet.signTransaction(tx);
+  const signature = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+
+  await connection.confirmTransaction(
+    {
+      signature,
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: latest.lastValidBlockHeight,
+    },
+    "confirmed",
+  );
+
+  return signature;
 }
 
 const useDepositWithdraw = () => {
   const queryClient = useQueryClient();
   const { walletAddress } = useAuth();
-  const { publicKey, sendTransaction } = useWallet();
-  const { connection } = useConnection();
+  const wallet = useSolanaWallet();
   const [isDepositing, setIsDepositing] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   const getAvailableSolBalance = useCallback(async () => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const lamports = await connection.getBalance(publicKey);
-    const sol = lamports / LAMPORTS_PER_SOL;
-    return { lamports, sol, formatted: sol.toFixed(6) };
-  }, [connection, publicKey]);
+    if (!walletAddress) {
+      throw new Error("Wallet not connected");
+    }
+
+    const connection = getConnection();
+    const rawBalance = await connection.getBalance(new PublicKey(walletAddress));
+    return {
+      raw: BigInt(rawBalance),
+      formatted: (rawBalance / LAMPORTS_PER_SOL).toString(),
+    };
+  }, [walletAddress]);
 
   const depositSol = useCallback(
-    async ({ amountSol }: { amountSol: string }) => {
-      if (!publicKey) throw new Error("Wallet not connected");
-
-      const parsedAmount = parseSolAmount(amountSol, "SOL amount");
-      const lamports = solToLamports(parsedAmount);
+    async ({ amountSol }: DepositSolParams) => {
+      if (!walletAddress) {
+        throw new Error("Wallet not connected");
+      }
 
       setIsDepositing(true);
-
       try {
-        const [configPda] = getConfigPda();
-        const [vaultPda] = getVaultPda();
-        const [traderPositionPda] = getTraderPositionPda(publicKey);
+        const parsedAmount = parsePositiveNumber(amountSol, "SOL amount");
+        const amountLamports = toLamports(parsedAmount);
 
-        const data = encodeInstruction(1, lamports);
-
-        const ix = new TransactionInstruction({
-          programId: PROGRAM_ID,
-          keys: [
-            { pubkey: publicKey, isSigner: true, isWritable: true },
-            { pubkey: configPda, isSigner: false, isWritable: true },
-            { pubkey: traderPositionPda, isSigner: false, isWritable: true },
-            { pubkey: vaultPda, isSigner: false, isWritable: true },
-            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-          ],
-          data,
+        const signature = await sendProgramTx({
+          wallet,
+          amountLamports,
+          instructionDiscriminant: 1,
         });
 
-        const tx = new Transaction().add(ix);
-        const { blockhash } = await connection.getLatestBlockhash();
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = publicKey;
-
-        const signature = await sendTransaction(tx, connection);
-        await connection.confirmTransaction(signature, "confirmed");
-
-        await paymentControllerDebugDeposit({
-          amount: parsedAmount.toString(),
-          txHash: signature,
-          logIndex: 0,
-        });
+        await paymentControllerDebugDeposit(
+          {
+            amount: amountSol,
+            txHash: signature,
+            logIndex: 0,
+          },
+          {
+            headers: { Authorization: `Bearer ${window.localStorage.getItem("token") ?? ""}` },
+          },
+        );
 
         await queryClient.invalidateQueries({
           queryKey: getAccountControllerGetBalanceQueryKey(),
         });
 
-        toast.success("Deposit confirmed and balance synced");
-
-        return { signature, amountSol: parsedAmount.toString() };
+        toast.success("Deposit completed");
       } catch (error) {
-        if (isUserCancelledRequest(error)) {
-          toast.info("You canceled the request");
-        } else {
-          console.error("Deposit flow failed", error);
-          toast.error("Deposit failed");
-        }
+        const message =
+          error instanceof Error ? error.message : "Failed to complete deposit";
+        toast.error(message);
         throw error;
       } finally {
         setIsDepositing(false);
       }
     },
-    [connection, publicKey, queryClient, sendTransaction, walletAddress],
+    [queryClient, wallet, walletAddress],
   );
 
   const withdrawSol = useCallback(
-    async ({ amountSol }: { amountSol: string }) => {
-      if (!publicKey) throw new Error("Wallet not connected");
+    async ({ amountSol }: WithdrawSolParams) => {
+      if (!walletAddress) {
+        throw new Error("Wallet not connected");
+      }
 
-      const parsedAmount = parseSolAmount(amountSol, "SOL amount");
       setIsWithdrawing(true);
-
       try {
-        const authHeaders = buildAuthHeaders();
+        parsePositiveNumber(amountSol, "SOL amount");
 
         const withdrawalResponse = await paymentControllerRequestWithdrawal(
-          { amount: parsedAmount.toString() },
-          authHeaders
-            ? { headers: { ...authHeaders, "Content-Type": "application/json" } }
-            : undefined,
+          { amount: amountSol },
+          {
+            headers: { Authorization: `Bearer ${window.localStorage.getItem("token") ?? ""}` },
+          },
         );
-
-        const responseData = extractRecord(withdrawalResponse);
-        const nestedData = extractRecord(responseData.data);
-        const sessionId =
-          asOptionalString(responseData.sessionId) ??
-          asOptionalString(nestedData.sessionId);
-        const claimAmount =
-          asOptionalString(responseData.claimAmount) ??
-          asOptionalString(nestedData.claimAmount);
-
-        if (!sessionId || !claimAmount) {
-          throw new Error(
-            "Withdrawal response missing required parameters (sessionId, claimAmount)",
-          );
+        const sessionId = extractSessionId(withdrawalResponse);
+        if (!sessionId) {
+          throw new Error("Missing sessionId in withdrawal response");
         }
 
-        const lamports = BigInt(claimAmount);
-        const [configPda] = getConfigPda();
-        const [vaultPda] = getVaultPda();
-        const [traderPositionPda] = getTraderPositionPda(publicKey);
-
-        const data = encodeInstruction(2, lamports);
-        const ix = new TransactionInstruction({
-          programId: PROGRAM_ID,
-          keys: [
-            { pubkey: publicKey, isSigner: true, isWritable: true },
-            { pubkey: configPda, isSigner: false, isWritable: true },
-            { pubkey: traderPositionPda, isSigner: false, isWritable: true },
-            { pubkey: vaultPda, isSigner: false, isWritable: true },
-          ],
-          data,
+        const signature = await sendProgramTx({
+          wallet,
+          amountLamports: toLamports(Number(amountSol)),
+          instructionDiscriminant: 2,
         });
 
-        const tx = new Transaction().add(ix);
-        const { blockhash } = await connection.getLatestBlockhash();
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = publicKey;
-
-        const signature = await sendTransaction(tx, connection);
-        await connection.confirmTransaction(signature, "confirmed");
-
         await paymentControllerDebugFinalizeWithdrawal(
-          { sessionId, txHash: signature, logIndex: 0 },
-          authHeaders
-            ? { headers: { ...authHeaders, "Content-Type": "application/json" } }
-            : undefined,
+          {
+            sessionId,
+            txHash: signature,
+            logIndex: 0,
+          },
+          {
+            headers: { Authorization: `Bearer ${window.localStorage.getItem("token") ?? ""}` },
+          },
         );
 
         await queryClient.invalidateQueries({
           queryKey: getAccountControllerGetBalanceQueryKey(),
         });
 
-        toast.success("Withdrawal completed and balance synced");
-
-        return { signature, sessionId, amountSol: parsedAmount.toString() };
+        toast.success("Withdrawal completed");
       } catch (error) {
-        if (isUserCancelledRequest(error)) {
-          toast.info("You canceled the request");
-        } else {
-          console.error("Withdrawal flow failed", error);
-          toast.error("Withdrawal failed");
-        }
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to complete withdrawal";
+        toast.error(message);
         throw error;
       } finally {
         setIsWithdrawing(false);
       }
     },
-    [connection, publicKey, queryClient, sendTransaction, walletAddress],
+    [queryClient, wallet, walletAddress],
   );
 
   return {
@@ -266,6 +268,12 @@ const useDepositWithdraw = () => {
     getAvailableSolBalance,
     depositSol,
     withdrawSol,
+    // backward-compatible aliases during migration
+    getAvailableWldBalance: getAvailableSolBalance,
+    depositWld: ({ amountWld }: { amountWld: string }) =>
+      depositSol({ amountSol: amountWld }),
+    withdrawWld: ({ amountWld }: { amountWld: string }) =>
+      withdrawSol({ amountSol: amountWld }),
   };
 };
 

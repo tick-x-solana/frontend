@@ -7,14 +7,12 @@ import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
 import useSolUsdPrice from "@/src/hooks/useSolUsdPrice";
 import { cn } from "@/lib/utils";
-import { useAuthControllerGetPublicProfile } from "@/src/services/queries";
 import {
   formatApproxUsd,
   formatCompactNumber,
   formatWalletAddress,
 } from "@/src/utils/formatters";
 import Image from "next/image";
-import { useMemo } from "react";
 
 const BID_OPTIONS_SOL = [0.01, 0.03, 0.05, 0.1];
 
@@ -45,7 +43,6 @@ export default function TradeControlsPanel({
   onClose,
 }: TradeControlsPanelProps) {
   const { walletAddress: rawAddress, username } = useAuth();
-  const normalizedAddress = rawAddress?.trim().toLowerCase() ?? "";
   const balance = useGameStore((s) => s.balance);
   const betAmount = useGameStore((s) => s.betAmount);
   const setBetAmount = useGameStore((s) => s.setBetAmount);
@@ -54,20 +51,6 @@ export default function TradeControlsPanel({
     (s) => s.desktopOrdersQueryAnchorTime,
   );
   const { data: solUsdPrice } = useSolUsdPrice();
-  const { data: publicProfileResponse } = useAuthControllerGetPublicProfile(
-    { address: normalizedAddress },
-    { query: { enabled: Boolean(normalizedAddress) } },
-  );
-  const hasVerifiedBadge = useMemo(() => {
-    if (!publicProfileResponse || typeof publicProfileResponse !== "object")
-      return false;
-    const r = publicProfileResponse as {
-      data?: { humanVerified?: boolean };
-      humanVerified?: boolean;
-    };
-    return (r.data ?? r)?.humanVerified === true;
-  }, [publicProfileResponse]);
-
   const selectedBid =
     BID_OPTIONS_SOL.find((amount) => Math.abs(amount - betAmount) < 1e-9) ??
     BID_OPTIONS_SOL[0];
@@ -139,15 +122,6 @@ export default function TradeControlsPanel({
               <p className="text-text-main truncate text-sm font-medium tracking-[-0.01em]">
                 {displayIdentity}
               </p>
-              {hasVerifiedBadge && (
-                <Image
-                  src="/onboarding/verified-badge.svg"
-                  alt="Verified"
-                  width={16}
-                  height={16}
-                  className="size-4 shrink-0"
-                />
-              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <p className="text-hint text-xs font-semibold tracking-[-0.01em]">

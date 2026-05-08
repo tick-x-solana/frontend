@@ -5,9 +5,7 @@ import { useAuth } from "@/src/components/providers/AuthProvider";
 import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
 import useDepositWithdraw from "@/src/hooks/useDepositWithdraw";
-import {
-  useAccountControllerGetBalance,
-} from "@/src/services/queries";
+import { useAccountControllerGetBalance } from "@/src/services/queries";
 import { formatWalletAddress } from "@/src/utils/formatters";
 import { Eye, EyeOff, LogOut, X } from "lucide-react";
 import Image from "next/image";
@@ -48,10 +46,14 @@ function normalizeDecimalInput(value: string): string {
 }
 
 const WalletActionPanel = () => {
-  const [activeAction, setActiveAction] = useState<PortfolioAction | null>(null);
+  const [activeAction, setActiveAction] = useState<PortfolioAction | null>(
+    null,
+  );
   const [amountInput, setAmountInput] = useState("");
   const [isBalanceVisible, setIsBalanceVisible] = useState(true);
-  const [availableSolBalance, setAvailableSolBalance] = useState<string | null>(null);
+  const [availableSolBalance, setAvailableSolBalance] = useState<string | null>(
+    null,
+  );
   const { walletAddress, logout, isAuthenticated } = useAuth();
   const { publicKey } = useWallet();
   const storeBalance = useGameStore((state) => state.balance);
@@ -108,7 +110,10 @@ const WalletActionPanel = () => {
     if (availableSolBalance === null) return "Loading...";
     const numeric = Number(availableSolBalance);
     return Number.isFinite(numeric)
-      ? numeric.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })
+      ? numeric.toLocaleString(undefined, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 4,
+        })
       : availableSolBalance;
   }, [availableSolBalance]);
 
@@ -169,7 +174,8 @@ const WalletActionPanel = () => {
       return;
     }
 
-    const walletSol = availableSolBalance !== null ? Number(availableSolBalance) : null;
+    const walletSol =
+      availableSolBalance !== null ? Number(availableSolBalance) : null;
     if (walletSol !== null && numericAmount > walletSol) {
       toast.error(
         `Insufficient wallet balance. Available: ${walletSol.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`,
@@ -257,12 +263,22 @@ const WalletActionPanel = () => {
               <p className="text-primary-light flex items-center gap-1 font-mono text-[13px] font-bold tracking-[-0.01em]">
                 {visibleBalance}
                 {isBalanceVisible && (
-                  <Image src="/sol.png" alt="SOL" width={12} height={12} className="size-3" />
+                  <Image
+                    src="/sol.png"
+                    alt="SOL"
+                    width={12}
+                    height={12}
+                    className="size-3"
+                  />
                 )}
               </p>
               <button
                 type="button"
-                aria-label={isBalanceVisible ? "Hide wallet balance" : "Show wallet balance"}
+                aria-label={
+                  isBalanceVisible
+                    ? "Hide wallet balance"
+                    : "Show wallet balance"
+                }
                 onClick={toggleBalanceVisibility}
                 className="text-hint hover:text-text-sub transition-colors"
               >
@@ -343,16 +359,26 @@ const WalletActionPanel = () => {
               {/* Balance info */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-hint text-xs font-medium">App Balance:</span>
+                  <span className="text-hint text-xs font-medium">
+                    App Balance:
+                  </span>
                   <span className="text-text-main flex items-center gap-1 font-mono text-sm font-bold">
                     {visibleBalance}
                     {isBalanceVisible && (
-                      <Image src="/sol.png" alt="SOL" width={13} height={13} className="size-[13px]" />
+                      <Image
+                        src="/sol.png"
+                        alt="SOL"
+                        width={13}
+                        height={13}
+                        className="size-[13px]"
+                      />
                     )}
                   </span>
                   <button
                     type="button"
-                    aria-label={isBalanceVisible ? "Hide balance" : "Show balance"}
+                    aria-label={
+                      isBalanceVisible ? "Hide balance" : "Show balance"
+                    }
                     onClick={toggleBalanceVisibility}
                     className="text-hint hover:text-text-sub transition-colors"
                   >
@@ -365,14 +391,19 @@ const WalletActionPanel = () => {
                 </div>
                 {!isWithdraw && availableSolBalance !== null && (
                   <span className="text-hint text-xs font-medium">
-                    Wallet: <span className="text-text-sub font-semibold">{displaySolBalance} SOL</span>
+                    Wallet:{" "}
+                    <span className="text-text-sub font-semibold">
+                      {displaySolBalance} SOL
+                    </span>
                   </span>
                 )}
               </div>
 
               {/* Amount input box */}
               <div className="border-border-main bg-background-main rounded-[14px] border px-4 py-4">
-                <p className="text-hint mb-2 text-[11px] font-medium uppercase tracking-[0.04em]">Amount</p>
+                <p className="text-hint mb-2 text-[11px] font-medium tracking-[0.04em] uppercase">
+                  Amount
+                </p>
                 <div className="flex items-center gap-3">
                   <input
                     value={amountInput}
@@ -384,30 +415,71 @@ const WalletActionPanel = () => {
                     autoFocus
                   />
                   <div className="flex shrink-0 items-center gap-1.5 rounded-[8px] bg-white/5 px-3 py-1.5">
-                    <Image src="/sol.png" alt="SOL" width={18} height={18} className="size-[18px]" />
-                    <span className="text-text-main text-sm font-semibold">SOL</span>
+                    <Image
+                      src="/sol.png"
+                      alt="SOL"
+                      width={18}
+                      height={18}
+                      className="size-[18px]"
+                    />
+                    <span className="text-text-main text-sm font-semibold">
+                      SOL
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* Devnet notice */}
-              <p className="text-hint text-[11px] font-medium">
-                This demo uses Solana Devnet SOL. Use a devnet faucet to get test SOL before depositing.
-              </p>
+              {activeAction === "deposit" && (
+                <p className="text-hint text-[11px] font-medium">
+                  This demo uses Solana Devnet SOL. Use a devnet faucet to get
+                  test SOL before depositing.
+                </p>
+              )}
 
               {/* Action button */}
-              <Button
-                type="button"
-                disabled={isDepositing || isWithdrawing}
-                onClick={handlePrimaryAction}
-                className="bg-primary-light text-background-main hover:bg-primary-light/90 h-11 w-full rounded-[10px] border-none text-sm font-semibold"
-              >
-                {isDepositing
+              {(() => {
+                const isInsufficientDeposit =
+                  activeAction === "deposit" &&
+                  availableSolBalance !== null &&
+                  numericAmount > 0 &&
+                  numericAmount > Number(availableSolBalance);
+                const isInsufficientWithdraw =
+                  activeAction === "withdraw" &&
+                  numericAmount > 0 &&
+                  numericAmount > numericAppBalance;
+                const isDisabled =
+                  isDepositing ||
+                  isWithdrawing ||
+                  numericAmount <= 0 ||
+                  isInsufficientDeposit ||
+                  isInsufficientWithdraw;
+
+                const label = isDepositing
                   ? "Depositing..."
                   : isWithdrawing
                     ? "Withdrawing..."
-                    : activeAction === "deposit" ? "Deposit SOL" : "Withdraw SOL"}
-              </Button>
+                    : isInsufficientDeposit || isInsufficientWithdraw
+                      ? "Insufficient Balance"
+                      : numericAmount <= 0
+                        ? activeAction === "deposit"
+                          ? "Enter Amount"
+                          : "Enter Amount"
+                        : activeAction === "deposit"
+                          ? "Deposit SOL"
+                          : "Withdraw SOL";
+
+                return (
+                  <Button
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={handlePrimaryAction}
+                    className="bg-primary-light text-background-main hover:bg-primary-light/90 h-11 w-full rounded-[10px] border-none text-sm font-semibold disabled:opacity-40"
+                  >
+                    {label}
+                  </Button>
+                );
+              })()}
             </div>
           </div>
         </div>

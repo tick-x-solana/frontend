@@ -21,10 +21,6 @@ const timeLabelFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: false,
 });
 
-const priceLabelFormatterOneDecimal = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
 const priceLabelFormatterTwoDecimals = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -87,13 +83,8 @@ function formatApproxUsd(amountWld: number, wldUsdPrice: number | null) {
   return formatApproxUsdValue(amountWld, wldUsdPrice);
 }
 
-function formatPriceLabel(value: number, marketId: string): string {
-  const normalizedMarketId = marketId.trim().toUpperCase();
-  const isEthUsdMarket =
-    normalizedMarketId === "ETHUSD" || normalizedMarketId === "ETHUSDT";
-  return isEthUsdMarket
-    ? priceLabelFormatterTwoDecimals.format(value)
-    : priceLabelFormatterOneDecimal.format(value);
+function formatPriceLabel(value: number): string {
+  return priceLabelFormatterTwoDecimals.format(value);
 }
 
 function getRewardRateLabelHideZoom(isMobile: boolean): number {
@@ -1502,17 +1493,13 @@ export function drawPriceAxis(
     if ((row.rowIdx - firstLabeledRowIdx) % rowStep !== 0) continue;
     if (row.lineY < -10 || row.lineY > plotBottom + 10) continue;
 
-    ctx.fillText(
-      formatPriceLabel(row.priceLevel, store.marketId),
-      w - 4,
-      row.lineY,
-    );
+    ctx.fillText(formatPriceLabel(row.priceLevel), w - 4, row.lineY);
   }
 
   const focusPrice = layout.cam;
   const focusY = layout.toCanvasY(focusPrice);
   if (focusY > 8 && focusY < plotBottom - 8) {
-    const focusText = formatPriceLabel(focusPrice, store.marketId);
+    const focusText = formatPriceLabel(focusPrice);
     const textWidth = ctx.measureText(focusText).width + 10;
     const boxX = axisX + Math.max(2, axisWidth - textWidth - 2);
     const boxY = focusY - 8;

@@ -19,7 +19,7 @@ const navItems: NavItem[] = [
   { label: "Trade", href: "/" },
   { label: "Portfolio", href: "/portfolio" },
   { label: "Leaderboard", href: "/leaderboard" },
-  { label: "More", href: "#", hasDropdown: true },
+  { label: "Explore", href: "/explore" },
 ];
 
 const Header = () => {

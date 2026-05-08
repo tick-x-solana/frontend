@@ -8,7 +8,6 @@ import {
   LeaderboardDot,
 } from "@/src/assets/icons";
 import { formatCurrency } from "@/src/lib/utils";
-import Image from "next/image";
 
 export type LeaderboardTopUser = {
   rank: number;
@@ -59,15 +58,6 @@ const PodiumUser = ({
         )}
       >
         {user.initials}
-        {user.isHumanVerified ? (
-          <Image
-            src="/onboarding/verified-badge.svg"
-            alt="Verified human"
-            width={28}
-            height={28}
-            className="absolute -right-3 -bottom-2 h-7 w-7"
-          />
-        ) : null}
       </div>
 
       <div
@@ -197,7 +187,7 @@ const LeaderboardRank = ({ topUsers }: { topUsers: LeaderboardTopUser[] }) => {
         />
       </div>
 
-      <LeaderboardBottom className="absolute -bottom-14 z-20 scale-x-120 scale-y-110" />
+      <LeaderboardBottom className="absolute -bottom-14 left-1/2 z-20 -translate-x-1/2 scale-x-120 scale-y-110" />
     </div>
   );
 };

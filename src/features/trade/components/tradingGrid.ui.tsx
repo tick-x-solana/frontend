@@ -69,15 +69,6 @@ export function WinBetBanner({ data }: { data: WinBetBannerData }) {
           <span className="text-text-heading truncate text-[14px] font-semibold tracking-[-0.01em]">
             {data.username}
           </span>
-          {data.humanVerified ? (
-            <Image
-              src="/onboarding/verified-badge.svg"
-              alt="Verified human"
-              width={16}
-              height={16}
-              className="h-4 w-4 shrink-0"
-            />
-          ) : null}
         </div>
         <span className="bg-success-background text-success-light border-success-border rounded-[9px] border px-1.5 py-0.5 text-xs font-bold tracking-[-0.01em]">
           WIN

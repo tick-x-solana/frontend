@@ -67,21 +67,6 @@ const WinEffectItem = memo(function WinEffectItem({
           >
             +{formatApproxUsd(target.basePayout, solUsdPrice ?? null) ?? "$--"}
           </span>
-          {target.isHumanVerified ? (
-            <Image
-              src="/onboarding/verified-badge.svg"
-              alt="Verified human"
-              width={20}
-              height={20}
-              unoptimized
-              loading="eager"
-              className="shrink-0"
-              style={{
-                width: `${Math.max(11, Math.min(16, Math.round(target.cellEdge * 0.18)))}px`,
-                height: `${Math.max(11, Math.min(16, Math.round(target.cellEdge * 0.18)))}px`,
-              }}
-            />
-          ) : null}
           {target.bonusPayout > 0 ? (
             <span
               className="text-grid-accent font-extrabold tracking-[-0.03em] drop-shadow-[0_0_12px_rgb(18_221_255_/_0.72)]"

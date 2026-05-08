@@ -1,12 +1,5 @@
 import React from "react";
-import {
-  Copy,
-  Eye,
-  Info,
-  LocateFixed,
-  Share2,
-  Wallet,
-} from "lucide-react";
+import { Copy, Eye, Info, LocateFixed, Share2, Wallet } from "lucide-react";
 import HamburgerMenuIcon from "@/src/assets/icons/hamburger-menu.svg";
 import {
   Dialog,
@@ -30,6 +23,7 @@ import TradeControlsPanel from "@/src/features/trade/components/TradeControlsPan
 import { WinShareCard } from "@/src/features/trade/components/WinShareCard";
 import { GridActionButton } from "./tradingGrid.ui";
 import { MARKET_OPTIONS } from "./tradingGrid.constants";
+import { formatWalletAddress } from "@/src/utils/formatters";
 
 type TopBarProps = {
   selectedMarketSymbol: string;
@@ -132,20 +126,18 @@ export function TradingGridTopBar({
         >
           <HamburgerMenuIcon className="size-4" aria-hidden="true" />
         </GridActionButton>
-        {false && (
-          <GridActionButton
-            aria-label={
-              isSuggestedStrategyVisible || isFollowTradeVisible
-                ? "Overlay filters enabled. Open overlay settings"
-                : "Open overlay settings"
-            }
-            aria-haspopup="dialog"
-            active={isSuggestedStrategyVisible || isFollowTradeVisible}
-            onClick={onOpenOverlay}
-          >
-            <Eye className="size-4" strokeWidth={1.75} />
-          </GridActionButton>
-        )}
+        <GridActionButton
+          aria-label={
+            isSuggestedStrategyVisible || isFollowTradeVisible
+              ? "Overlay filters enabled. Open overlay settings"
+              : "Open overlay settings"
+          }
+          aria-haspopup="dialog"
+          active={isSuggestedStrategyVisible || isFollowTradeVisible}
+          onClick={onOpenOverlay}
+        >
+          <Eye className="size-4" strokeWidth={1.75} />
+        </GridActionButton>
         <GridActionButton
           aria-label="Recenter trading grid"
           onClick={onRecenter}
@@ -200,7 +192,7 @@ export function FollowReferralDialog(props: FollowReferralDialogProps) {
             </DialogTitle>
             <DialogDescription className="text-text-sub text-sm font-medium tracking-[-0.01em]">
               {followReferralCode
-                ? `Follow ${followReferralHandle ? `@${followReferralHandle}` : "this trader"} directly from this shared link.`
+                ? `Follow ${followReferralHandle ? `${formatWalletAddress(followReferralHandle)}` : "this trader"} directly from this shared link.`
                 : "Follow this trader directly from the shared link."}
             </DialogDescription>
 
@@ -350,7 +342,10 @@ export function TradingOrdersSheet({
         >
           <div className="flex flex-col gap-4">
             <div className="flex justify-center">
-              <span className="bg-grid-axis/70 h-1 w-20 rounded-full" aria-hidden />
+              <span
+                className="bg-grid-axis/70 h-1 w-20 rounded-full"
+                aria-hidden
+              />
             </div>
             <TradingOrdersPanel
               className="border-0 bg-transparent p-0"
