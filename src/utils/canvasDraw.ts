@@ -1184,22 +1184,87 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
     Math.max(7, Math.round(cellSize * 0.16)),
     20,
   );
-  const badgeWidth = clamp(width * 0.46, Math.min(38, width * 0.7), width - 4);
+  const compactBadgeScale = clamp(Math.min(width / 56, height / 56), 0.72, 1);
+  const badgeMaxWidth = Math.max(16, width - 6);
+  const badgeMaxHeight = Math.max(12, height * 0.42);
+  const minBadgeFontSize = Math.max(5, Math.round(cellSize * 0.1 * compactBadgeScale));
+  const minBadgeHorizontalPadding = 2;
+  const badgeVerticalPadding = clamp(cellSize * 0.08 * compactBadgeScale, 1.5, 4);
+  const badgeText = betAmountUsdText;
+  let badgeFontSize = Math.max(
+    minBadgeFontSize,
+    Math.floor(badgeBaseFontSize * compactBadgeScale),
+  );
+  let badgeHorizontalPadding = clamp(cellSize * 0.08 * compactBadgeScale, 2, 6);
+  const badgeSafetyWidth = clamp(cellSize * 0.03 * compactBadgeScale, 0.5, 2);
+
+  ctx.save();
+  let badgeTextWidth = 0;
+  let badgeWidth = badgeMaxWidth;
+  let fitAttempts = 0;
+
+  while (fitAttempts < 8) {
+    ctx.font = `700 ${badgeFontSize}px Inter, sans-serif`;
+    const badgeMetrics = ctx.measureText(badgeText);
+    badgeTextWidth = Math.max(
+      badgeMetrics.width,
+      badgeMetrics.actualBoundingBoxLeft + badgeMetrics.actualBoundingBoxRight,
+    );
+    const desiredBadgeWidth =
+      badgeTextWidth + badgeHorizontalPadding * 2 + badgeSafetyWidth;
+    badgeWidth = Math.min(badgeMaxWidth, desiredBadgeWidth);
+    const availableTextWidth =
+      badgeWidth - badgeHorizontalPadding * 2 - badgeSafetyWidth;
+
+    if (badgeTextWidth <= availableTextWidth + 0.25) {
+      break;
+    }
+
+    if (badgeFontSize > minBadgeFontSize) {
+      badgeFontSize -= 1;
+    } else if (badgeHorizontalPadding > minBadgeHorizontalPadding) {
+      badgeHorizontalPadding -= 1;
+    } else {
+      break;
+    }
+    fitAttempts += 1;
+  }
+
+  if (badgeTextWidth > 0) {
+    const requiredWidth =
+      badgeTextWidth + badgeHorizontalPadding * 2 + badgeSafetyWidth;
+    badgeWidth = Math.min(badgeMaxWidth, Math.max(10, requiredWidth));
+  } else {
+    badgeWidth = badgeMaxWidth;
+  }
+
+  while (badgeWidth > badgeMaxWidth && badgeFontSize > minBadgeFontSize) {
+    badgeFontSize -= 1;
+    ctx.font = `700 ${badgeFontSize}px Inter, sans-serif`;
+    const badgeMetrics = ctx.measureText(badgeText);
+    badgeTextWidth = Math.max(
+      badgeMetrics.width,
+      badgeMetrics.actualBoundingBoxLeft + badgeMetrics.actualBoundingBoxRight,
+    );
+    badgeWidth = Math.min(
+      badgeMaxWidth,
+      badgeTextWidth + badgeHorizontalPadding * 2 + badgeSafetyWidth,
+    );
+  }
+
+  const textHeight = Math.max(badgeFontSize, Math.ceil(badgeFontSize + badgeVerticalPadding * 2));
   const badgeHeight = clamp(
-    height * 0.28,
-    Math.min(18, height * 0.22),
-    Math.min(28, height * 0.32),
+    textHeight,
+    Math.max(10, badgeVerticalPadding * 2 + minBadgeFontSize),
+    Math.min(badgeMaxHeight, height * 0.3),
   );
   const badgeRadius = clamp(cellSize * 0.14, Math.min(6, cellSize * 0.1), 10);
   const centerX = x + width / 2;
   const multiplierY = y + height * 0.33;
-  const badgeX = centerX - badgeWidth / 2;
+  const badgeX = clamp(centerX - badgeWidth / 2, x + 3, x + width - badgeWidth - 3);
   const badgeY = y + height * 0.56;
-  const badgeText = betAmountUsdText;
   const cornerDotRadius = clamp(cellSize * 0.032, 1.4, 1.9);
   const compact = cellSize < 30;
-
-  ctx.save();
 
   ctx.shadowColor = "rgba(0,229,255,0.12)";
   ctx.shadowBlur = clamp(cellSize * 0.14, 5, 8);
@@ -1280,25 +1345,13 @@ function _drawBetBadge(ctx: CanvasRenderingContext2D, p: BetBadgeParams) {
   roundRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, badgeRadius);
   ctx.fill();
 
-  const badgeMaxTextWidth = Math.max(6, badgeWidth - 8);
-  let badgeFontSize = badgeBaseFontSize;
-  ctx.font = `700 ${badgeFontSize}px Inter, sans-serif`;
-  const measuredBadgeTextWidth = ctx.measureText(badgeText).width;
-  if (measuredBadgeTextWidth > badgeMaxTextWidth) {
-    badgeFontSize = Math.max(
-      Math.max(6, Math.round(cellSize * 0.1)),
-      Math.floor((badgeFontSize * badgeMaxTextWidth) / measuredBadgeTextWidth),
-    );
-  }
-
   ctx.fillStyle = "#FFFFFF";
   ctx.font = `700 ${badgeFontSize}px Inter, sans-serif`;
-  ctx.shadowColor = "rgba(255,255,255,0.14)";
-  ctx.shadowBlur = 0.8;
-  ctx.shadowOffsetY = 0.4;
-  ctx.fillText(badgeText, centerX, badgeY + badgeHeight / 2);
+  // Keep text crisp so its visual bounds stay inside the badge at high zoom.
+  ctx.shadowColor = "transparent";
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
+  ctx.fillText(badgeText, centerX, badgeY + badgeHeight / 2);
 
   ctx.fillStyle = "#00E5FF";
   const corners = [

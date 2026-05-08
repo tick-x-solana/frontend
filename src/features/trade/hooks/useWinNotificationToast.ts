@@ -63,9 +63,10 @@ function extractWinNotificationMessage(
     return null;
   }
 
+  console.log("displayName: ", displayName);
   return {
     userId,
-    displayName: isAddress(getAddress(displayName))
+    displayName: isAddress(displayName)
       ? formatWalletShort(getAddress(displayName))
       : displayName,
     humanVerified,
