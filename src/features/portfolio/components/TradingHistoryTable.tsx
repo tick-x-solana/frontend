@@ -514,7 +514,7 @@ const FragmentRow = ({ item, onShare }: FragmentRowProps) => {
           {canShareWin ? (
             <button
               type="button"
-              className="bg-background-main/90 border-border-main text-grid-accent hover:bg-surface-overlay-subtle flex h-7 min-h-7 w-7 min-w-7 shrink-0 items-center justify-center rounded-full border p-0 opacity-0 transition-opacity group-hover:opacity-100"
+              className="bg-background-main/90 border-border-main text-grid-accent hover:bg-surface-overlay-subtle flex h-7 min-h-7 w-7 min-w-7 shrink-0 items-center justify-center rounded-full border p-0 opacity-100 transition-opacity"
               onClick={(event) => {
                 event.stopPropagation();
                 onShare(item.id);

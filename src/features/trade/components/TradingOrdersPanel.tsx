@@ -12,6 +12,7 @@ import {
   formatFixedTwoDecimal,
   formatUsdCurrencyFixedTwo,
 } from "@/src/utils/formatters";
+import useSolUsdPrice from "@/src/hooks/useSolUsdPrice";
 import { cn } from "@/lib/utils";
 
 type TradingOrdersPanelProps = {
@@ -29,7 +30,7 @@ type RecentUserOrderItem = {
   marketLabel: string;
   placedAtMs: number;
   bidAmountWld: number | null;
-  bidAmountUsd: number | null;
+  valueUsd: number | null;
   multiple: number | null;
   statusLabel: string;
   statusClassName: string;
@@ -149,25 +150,145 @@ function getStatusPresentation(order: UnknownRecord) {
   }
 
   return {
-    label: status ? `${status.charAt(0)}${status.slice(1).toLowerCase()}` : "Recent",
+    label: status
+      ? `${status.charAt(0)}${status.slice(1).toLowerCase()}`
+      : "Recent",
     className: "border-border-main bg-surface-overlay-subtle text-text-sub",
   };
+}
+
+function resolveAmountWld(record: UnknownRecord): number | null {
+  return (
+    asNumber(record.amount) ??
+    asNumber(record.amountSol) ??
+    asNumber(record.tokenAmount) ??
+    asNumber(record.size) ??
+    asNumber(record.quantity) ??
+    null
+  );
+}
+
+function resolveStakeAmountUsd(
+  record: UnknownRecord,
+  amountWld: number | null,
+): number | null {
+  const placedQuotePriceUsd = asNumber(record.placedQuotePriceUsd);
+  return (
+    asNumber(record.amountUsd) ??
+    asNumber(record.totalAmount) ??
+    asNumber(record.stakeAmount) ??
+    (amountWld !== null && placedQuotePriceUsd !== null
+      ? amountWld * placedQuotePriceUsd
+      : null) ??
+    null
+  );
+}
+
+function resolveMultiple(record: UnknownRecord): number | null {
+  const cell = asRecord(record.cell);
+  return (
+    asNumber(record.multiplier) ??
+    asNumber(record.rewardRate) ??
+    asNumber(record.settledRewardRate) ??
+    asNumber(cell?.rewardRate) ??
+    null
+  );
+}
+
+function resolveSettledWin(record: UnknownRecord): boolean | null {
+  const status = asString(record.status)?.toUpperCase() ?? null;
+  const inferredFromStatus =
+    status === "WIN" ||
+    status === "WON" ||
+    status === "SETTLED_WIN" ||
+    status === "CLOSED_WIN"
+      ? true
+      : status === "LOSE" ||
+          status === "LOST" ||
+          status === "FAILED" ||
+          status === "FAIL" ||
+          status === "LOSS"
+        ? false
+        : null;
+
+  return (
+    asBoolean(record.settledWin) ??
+    asBoolean(record.isWin) ??
+    asBoolean(record.win) ??
+    asBoolean(record.isWinning) ??
+    asBoolean(record.won) ??
+    inferredFromStatus
+  );
+}
+
+function resolveDirectPnl(record: UnknownRecord): number | null {
+  return (
+    asNumber(record.pnl) ??
+    asNumber(record.profit) ??
+    asNumber(record.rewardAmount) ??
+    asNumber(record.settledPnl) ??
+    null
+  );
+}
+
+function resolveValueUsd(params: {
+  record: UnknownRecord;
+  settledWin: boolean | null;
+  stakeAmountUsd: number | null;
+  multiple: number | null;
+  solUsdPrice: number | null;
+}): number | null {
+  const { record, settledWin, stakeAmountUsd, multiple, solUsdPrice } = params;
+  const directPnl = resolveDirectPnl(record);
+  const settledPayoutSol = asNumber(record.settledPayout);
+  const settledPayoutUsd =
+    settledPayoutSol !== null &&
+    solUsdPrice !== null &&
+    Number.isFinite(solUsdPrice) &&
+    solUsdPrice > 0
+      ? settledPayoutSol * solUsdPrice
+      : null;
+  const fallbackProfitUsd =
+    stakeAmountUsd !== null && multiple !== null
+      ? stakeAmountUsd * Math.max(multiple - 1, 0)
+      : null;
+  const settledPayoutSignedUsd =
+    settledPayoutUsd === null
+      ? null
+      : settledWin === false
+        ? -Math.abs(settledPayoutUsd)
+        : settledPayoutUsd;
+
+  return (
+    settledPayoutSignedUsd ??
+    directPnl ??
+    (settledWin === false && stakeAmountUsd !== null
+      ? -Math.abs(stakeAmountUsd)
+      : settledWin === true
+        ? fallbackProfitUsd
+        : null)
+  );
 }
 
 function toRecentUserOrderItem(
   value: unknown,
   fallbackMarketLabel: string,
+  solUsdPrice: number | null,
 ): RecentUserOrderItem | null {
   const record = asRecord(value);
   if (!record) return null;
 
-  const amountWld = asNumber(record.amount);
-  const placedQuotePriceUsd = asNumber(record.placedQuotePriceUsd);
-  const bidAmountUsd =
-    amountWld !== null && placedQuotePriceUsd !== null
-      ? amountWld * placedQuotePriceUsd
-      : null;
-  const multiple = asNumber(record.rewardRate) ?? asNumber(record.settledRewardRate);
+  const amountWld = resolveAmountWld(record);
+  const stakeAmountUsd = resolveStakeAmountUsd(record, amountWld);
+  const multiple = resolveMultiple(record);
+  const settledWin = resolveSettledWin(record);
+  const valueUsd = resolveValueUsd({
+    record,
+    settledWin,
+    stakeAmountUsd,
+    multiple,
+    solUsdPrice,
+  });
   const placedAtMs =
     readTimestampMs(record.placedAt) ??
     readTimestampMs(record.createdAt) ??
@@ -187,7 +308,7 @@ function toRecentUserOrderItem(
     marketLabel,
     placedAtMs,
     bidAmountWld: amountWld,
-    bidAmountUsd,
+    valueUsd,
     multiple,
     statusLabel: statusPresentation.label,
     statusClassName: statusPresentation.className,
@@ -196,12 +317,16 @@ function toRecentUserOrderItem(
 
 function formatBidAmountWld(value: number | null): string {
   if (value === null) return "-- SOL";
-  return `${formatCompactNumber(value)} SOL`;
+  return `${formatCompactNumber(value)}`;
 }
 
-function formatBidAmountUsd(value: number | null): string {
+function formatSignedUsd(value: number | null): string {
   if (value === null) return "--";
-  return formatUsdCurrencyFixedTwo(value);
+  const absValue = Math.abs(value);
+  const formattedAmount = formatUsdCurrencyFixedTwo(absValue);
+  if (value > 0) return `+${formattedAmount}`;
+  if (value < 0) return `-${formattedAmount}`;
+  return formattedAmount;
 }
 
 function formatMultiple(value: number | null): string {
@@ -217,6 +342,11 @@ export default function TradingOrdersPanel({
   showHeader = true,
 }: TradingOrdersPanelProps) {
   const { isAuthenticated, isLoggingIn } = useAuth();
+  const { data: solUsdPriceRaw } = useSolUsdPrice();
+  const solUsdPrice =
+    typeof solUsdPriceRaw === "number" && Number.isFinite(solUsdPriceRaw)
+      ? solUsdPriceRaw
+      : null;
   const queryParams = useMemo(
     () =>
       queryAnchorTime === null
@@ -247,10 +377,12 @@ export default function TradingOrdersPanel({
   const orders = useMemo(
     () =>
       extractOrders(data)
-        .map((item) => toRecentUserOrderItem(item, fallbackMarketLabel))
+        .map((item) =>
+          toRecentUserOrderItem(item, fallbackMarketLabel, solUsdPrice),
+        )
         .filter((item): item is RecentUserOrderItem => item !== null)
         .sort((a, b) => b.placedAtMs - a.placedAtMs),
-    [data, fallbackMarketLabel],
+    [data, fallbackMarketLabel, solUsdPrice],
   );
 
   const emptyMessage = !isAuthenticated
@@ -269,11 +401,11 @@ export default function TradingOrdersPanel({
     ? "text-destructive flex min-h-20 items-center justify-center rounded-[8px] bg-destructive/10 px-4 text-center text-sm font-medium tracking-[-0.01em]"
     : "text-destructive flex min-h-24 items-center justify-center rounded-[8px] border border-dashed border-destructive/30 px-4 text-center text-sm font-medium tracking-[-0.01em]";
   const listClassName = inline
-    ? "flex max-h-[280px] flex-col gap-2 overflow-y-auto pr-1"
-    : "flex max-h-[360px] flex-col gap-2 overflow-y-auto pr-1";
+    ? "flex max-h-[560px] flex-col gap-2 overflow-y-auto pr-1"
+    : "flex max-h-[420px] flex-col gap-3 overflow-y-auto pr-1";
   const cardClassName = inline
     ? "border-border-main/70 bg-surface-overlay-subtle rounded-[8px] border p-3"
-    : "border-border-main bg-background-main rounded-[8px] border p-3";
+    : "border-border-main bg-background-main rounded-[12px] border p-4";
 
   return (
     <section className={cn(containerClassName, className)}>
@@ -289,7 +421,8 @@ export default function TradingOrdersPanel({
                 inline && "max-w-[220px]",
               )}
             >
-              Showing up to {USER_ORDERS_FETCH_LIMIT} orders from the last 5 seconds.
+              Showing up to {USER_ORDERS_FETCH_LIMIT} orders from the last 5
+              seconds.
             </p>
           </div>
         </div>
@@ -300,23 +433,26 @@ export default function TradingOrdersPanel({
           Loading your recent orders...
         </div>
       ) : error ? (
-        <div className={errorStateClassName}>
-          Failed to load recent orders.
-        </div>
+        <div className={errorStateClassName}>Failed to load recent orders.</div>
       ) : orders.length === 0 ? (
-        <div className={emptyStateClassName}>
-          {emptyMessage}
-        </div>
+        <div className={emptyStateClassName}>{emptyMessage}</div>
       ) : (
         <div className={listClassName}>
           {orders.map((order) => (
-            <article
-              key={order.id}
-              className={cardClassName}
-            >
-              <div className="mb-3 flex items-start justify-between gap-3">
+            <article key={order.id} className={cardClassName}>
+              <div
+                className={cn(
+                  "mb-3 flex items-start justify-between gap-3",
+                  !inline && "mb-0 items-center",
+                )}
+              >
                 <div className="min-w-0">
-                  <p className="text-text-heading truncate text-sm font-semibold tracking-[-0.01em]">
+                  <p
+                    className={cn(
+                      "text-text-heading truncate text-sm font-semibold tracking-[-0.01em]",
+                      !inline && "text-base",
+                    )}
+                  >
                     {order.marketLabel}
                   </p>
                   <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
@@ -326,6 +462,7 @@ export default function TradingOrdersPanel({
                 <span
                   className={cn(
                     "rounded-full border px-2 py-1 text-[11px] font-semibold tracking-[-0.01em]",
+                    !inline && "px-3 py-1.5 text-xs",
                     order.statusClassName,
                   )}
                 >
@@ -333,30 +470,74 @@ export default function TradingOrdersPanel({
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-[8px] bg-surface-overlay-subtle px-2.5 py-2">
-                  <p className="text-hint text-[11px] font-semibold tracking-[-0.01em] uppercase">
-                    Bid Size
-                  </p>
-                  <p className="text-text-heading mt-1 text-sm font-semibold tracking-[-0.01em]">
-                    {formatBidAmountWld(order.bidAmountWld)}
-                  </p>
-                </div>
-                <div className="rounded-[8px] bg-surface-overlay-subtle px-2.5 py-2">
-                  <p className="text-hint text-[11px] font-semibold tracking-[-0.01em] uppercase">
-                    USD Value
-                  </p>
-                  <p className="text-text-heading mt-1 text-sm font-semibold tracking-[-0.01em]">
-                    {formatBidAmountUsd(order.bidAmountUsd)}
-                  </p>
-                </div>
-                <div className="rounded-[8px] bg-surface-overlay-subtle px-2.5 py-2">
-                  <p className="text-hint text-[11px] font-semibold tracking-[-0.01em] uppercase">
-                    Multiple
-                  </p>
-                  <p className="text-text-heading mt-1 text-sm font-semibold tracking-[-0.01em]">
-                    {formatMultiple(order.multiple)}
-                  </p>
+              <div
+                className={cn(
+                  !inline && "border-border-main/70 mt-3 border-t pt-3",
+                )}
+              >
+                <div
+                  className={cn("grid grid-cols-3 gap-2", !inline && "gap-2.5")}
+                >
+                  <div
+                    className={cn(
+                      "bg-surface-overlay-subtle rounded-[8px] px-2.5 py-2",
+                      !inline && "rounded-[10px] px-3 py-2.5",
+                    )}
+                  >
+                    <p className="text-hint text-[11px] font-semibold tracking-[-0.01em] uppercase">
+                      Bid Size
+                    </p>
+                    <p
+                      className={cn(
+                        "text-text-heading mt-1 text-sm font-semibold tracking-[-0.01em]",
+                        !inline && "text-[15px]",
+                      )}
+                    >
+                      {formatBidAmountWld(order.bidAmountWld)}
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "bg-surface-overlay-subtle rounded-[8px] px-2.5 py-2",
+                      !inline && "rounded-[10px] px-3 py-2.5",
+                    )}
+                  >
+                    <p className="text-hint text-[11px] font-semibold tracking-[-0.01em] uppercase">
+                      Value
+                    </p>
+                    <p
+                      className={cn(
+                        "text-text-heading mt-1 text-sm font-semibold tracking-[-0.01em]",
+                        !inline && "text-[15px]",
+                        order.valueUsd !== null &&
+                          order.valueUsd > 0 &&
+                          "text-success-medium",
+                        order.valueUsd !== null &&
+                          order.valueUsd < 0 &&
+                          "text-destructive",
+                      )}
+                    >
+                      {formatSignedUsd(order.valueUsd)}
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "bg-surface-overlay-subtle rounded-[8px] px-2.5 py-2",
+                      !inline && "rounded-[10px] px-3 py-2.5",
+                    )}
+                  >
+                    <p className="text-hint text-[11px] font-semibold tracking-[-0.01em] uppercase">
+                      Multiple
+                    </p>
+                    <p
+                      className={cn(
+                        "text-text-heading mt-1 text-sm font-semibold tracking-[-0.01em]",
+                        !inline && "text-[15px]",
+                      )}
+                    >
+                      {formatMultiple(order.multiple)}
+                    </p>
+                  </div>
                 </div>
               </div>
             </article>

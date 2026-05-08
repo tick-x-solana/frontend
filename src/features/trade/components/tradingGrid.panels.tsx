@@ -58,7 +58,7 @@ export function TradingGridTopBar({
     <div className="pointer-events-none absolute inset-x-2 top-2 z-20 flex items-center justify-between gap-3 sm:inset-x-3">
       <div className="flex min-w-0 items-center gap-1">
         <Select value={selectedMarketSymbol} onValueChange={onMarketChange}>
-          <SelectTrigger className="bg-surface-control border-border-main pointer-events-auto h-8 shrink-0 gap-1 rounded-[8px] px-1 text-white">
+          <SelectTrigger className="bg-surface-control border-border-main pointer-events-auto h-8 shrink-0 gap-1 rounded-[8px] px-1 text-white opacity-100">
             <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -71,44 +71,46 @@ export function TradingGridTopBar({
               {selectedMarketSymbol}
             </span>
           </SelectTrigger>
-          <SelectContent className="bg-surface-control border-border-main w-[150px] p-1">
-            {MARKET_OPTIONS.map((option) => (
-              <SelectItem
-                key={option.symbol}
-                value={option.symbol}
-                disabled={!option.enabled}
-                className={cn(
-                  "rounded-[8px] px-2 py-1.5 text-sm font-semibold tracking-[-0.01em]",
-                  option.enabled
-                    ? "focus:bg-surface-control-active text-white focus:text-white"
-                    : "text-text-sub opacity-60",
-                )}
-              >
-                <span className="inline-flex w-full items-center gap-2">
-                  {option.iconSrc ? (
-                    <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={option.iconSrc}
-                        alt=""
-                        className="h-full w-full object-contain"
-                      />
-                    </span>
-                  ) : (
-                    <span className="bg-surface-control-active text-text-sub flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold">
-                      {option.shortLabel}
-                    </span>
+          {false && (
+            <SelectContent className="bg-surface-control border-border-main w-[150px] p-1">
+              {MARKET_OPTIONS.map((option) => (
+                <SelectItem
+                  key={option.symbol}
+                  value={option.symbol}
+                  disabled={!option.enabled}
+                  className={cn(
+                    "rounded-[8px] px-2 py-1.5 text-sm font-semibold tracking-[-0.01em]",
+                    option.enabled
+                      ? "focus:bg-surface-control-active text-white focus:text-white"
+                      : "text-text-sub opacity-60",
                   )}
-                  <span>{option.symbol}</span>
-                  {!option.enabled ? (
-                    <span className="text-hint ml-auto text-[10px] uppercase">
-                      Soon
-                    </span>
-                  ) : null}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
+                >
+                  <span className="inline-flex w-full items-center gap-2">
+                    {option.iconSrc ? (
+                      <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={option.iconSrc}
+                          alt=""
+                          className="h-full w-full object-contain"
+                        />
+                      </span>
+                    ) : (
+                      <span className="bg-surface-control-active text-text-sub flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold">
+                        {option.shortLabel}
+                      </span>
+                    )}
+                    <span>{option.symbol}</span>
+                    {!option.enabled ? (
+                      <span className="text-hint ml-auto text-[10px] uppercase">
+                        Soon
+                      </span>
+                    ) : null}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          )}
         </Select>
         <span className="text-text-sub truncate text-xs font-semibold tracking-[-0.01em]">
           {displayMarketPrice}
