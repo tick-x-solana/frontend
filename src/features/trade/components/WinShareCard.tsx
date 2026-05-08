@@ -23,7 +23,14 @@ function toFiniteNumber(value: number): number {
 
 export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
   function WinShareCard(
-    { marketSymbol, multiplier, amount, openedAt, profit, currencySymbol = "$" },
+    {
+      marketSymbol,
+      multiplier,
+      amount,
+      openedAt,
+      profit,
+      currencySymbol = "$",
+    },
     ref,
   ) {
     const safeMultiplier = toFiniteNumber(multiplier);
@@ -45,7 +52,7 @@ export const WinShareCard = React.forwardRef<HTMLDivElement, WinShareCardProps>(
     return (
       <div
         ref={ref}
-        className="bg-background-main border-border-main w-full rounded-t-[16px] border-t px-5 pt-8 pb-5 font-mono"
+        className="bg-background-main border-border-main w-full border-t px-5 pt-8 pb-5 font-mono"
       >
         <div className="flex flex-col gap-6">
           <div className="flex items-start justify-between gap-2">

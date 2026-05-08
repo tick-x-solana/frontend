@@ -8,6 +8,7 @@
 
 import { computeGridDimensions } from "./gridDimensions";
 import type { GridDimensions } from "./gridDimensions";
+import { MOBILE_VIEWPORT_BREAKPOINT_PX } from "@/src/constants";
 import type { CellData, SettledOutcome } from "@/src/features/trade/store";
 import type { FollowedOrderActivity } from "@/src/features/trade/orderFollow";
 
@@ -83,13 +84,12 @@ export function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
-const MOBILE_BREAKPOINT_PX = 640;
 const MOBILE_PRICE_AXIS_WIDTH_PX = 56;
 const DESKTOP_PRICE_AXIS_WIDTH_PX = 64;
 const TIME_AXIS_HEIGHT_PX = 24;
 
 export function getGridViewportChrome(viewportWidth: number) {
-  const isMobile = viewportWidth < MOBILE_BREAKPOINT_PX;
+  const isMobile = viewportWidth < MOBILE_VIEWPORT_BREAKPOINT_PX;
   const priceAxisWidth = isMobile
     ? MOBILE_PRICE_AXIS_WIDTH_PX
     : DESKTOP_PRICE_AXIS_WIDTH_PX;

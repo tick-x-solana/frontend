@@ -22,6 +22,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import { MOBILE_VIEWPORT_BREAKPOINT_PX } from "@/src/constants";
 import { extractOrderFollowings } from "@/src/features/trade/orderFollow";
 import { getLatestChartTime } from "@/src/features/trade/gridTiming";
 import { useGameStore } from "@/src/features/trade/store";
@@ -106,10 +107,9 @@ type TradingGridProps = {
 };
 
 const SHARE_BUTTON_HIDE_ZOOM_THRESHOLD = 0.3;
-const MOBILE_BREAKPOINT_PX = 640;
 
 function isMobileViewport(width: number): boolean {
-  return width < MOBILE_BREAKPOINT_PX;
+  return width < MOBILE_VIEWPORT_BREAKPOINT_PX;
 }
 
 function getViewportDefaultZoom(isMobile: boolean): number {

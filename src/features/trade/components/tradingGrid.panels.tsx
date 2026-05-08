@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/src/components/shadcn/dialog";
 import { Button } from "@/src/components/shadcn/button";
+import { MOBILE_VIEWPORT_BREAKPOINT_PX } from "@/src/constants";
 import {
   Select,
   SelectContent,
@@ -400,6 +401,95 @@ export function TradingShareSheet(props: ShareSheetProps) {
     shareWinRate,
     selectedShareRoi,
   } = props;
+  const isDesktopViewport = React.useSyncExternalStore(
+    subscribeDesktopShareViewport,
+    getDesktopShareViewportSnapshot,
+    getDesktopShareViewportServerSnapshot,
+  );
+
+  const shareContent = selectedShareCell ? (
+    <div className="mx-auto w-full max-w-[400px]">
+      <WinShareCard
+        marketSymbol={marketSymbol}
+        multiplier={selectedShareCell.multiplier}
+        amount={selectedShareAmountUsd}
+        openedAt={selectedShareTime}
+        profit={selectedShareProfitUsd}
+      />
+      <div className="px-5 pb-5">
+        <div className="flex flex-col gap-4">
+          <p className="text-hint text-sm font-medium tracking-[-0.01em]">
+            Share your win
+          </p>
+          <div className="bg-surface-overlay rounded-[8px] px-3 py-2">
+            <div className="flex items-center gap-2">
+              <p className="text-text-heading min-w-0 flex-1 truncate text-sm font-medium tracking-[-0.01em]">
+                {shareUrl}
+              </p>
+              <button
+                type="button"
+                className="text-text-sub hover:text-text-heading flex size-5 items-center justify-center"
+                onClick={copyShareLink}
+                aria-label="Copy share link"
+              >
+                <Copy className="size-4" strokeWidth={1.9} />
+              </button>
+            </div>
+          </div>
+          <Button
+            type="button"
+            className="bg-primary-medium text-text-inverse hover:bg-primary-light h-11 rounded-[8px] text-base font-medium tracking-[-0.01em]"
+            onClick={share}
+            disabled={isSharing}
+          >
+            <Share2 className="mr-2 size-4" strokeWidth={1.9} />
+            {isSharing ? "Sharing..." : "Share"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-primary-light text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[8px] bg-transparent text-base font-medium tracking-[-0.01em]"
+            onClick={() =>
+              void shareToWorldChat({
+                metrics: {
+                  winRate: shareWinRate,
+                  pnl:
+                    selectedShareProfitUsd > 0
+                      ? `+$${winAmountFormatter.format(selectedShareProfitUsd)}`
+                      : `$${winAmountFormatter.format(selectedShareProfitUsd)}`,
+                  roi: selectedShareRoi,
+                },
+              })
+            }
+          >
+            <Share2 className="mr-2 size-4" strokeWidth={1.9} />
+            WorldChat
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  if (isDesktopViewport) {
+    return (
+      <Dialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+      >
+        <DialogContent className="pointer-events-none inset-auto top-1/2 left-1/2 block w-auto max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 p-0">
+          <div className="border-border-main bg-background-main pointer-events-auto w-[min(440px,calc(100vw-2rem))] overflow-hidden rounded-[20px] border shadow-[0_24px_100px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <DialogTitle className="sr-only">Share your win</DialogTitle>
+            <DialogDescription className="sr-only">
+              Share your winning bet link or post it to WorldChat.
+            </DialogDescription>
+            {shareContent}
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Sheet isOpen={isOpen} onClose={onClose} detent="content" unstyled>
@@ -412,70 +502,39 @@ export function TradingShareSheet(props: ShareSheetProps) {
           disableDrag={false}
           className="bg-background-main border-border-main pointer-events-auto rounded-t-[16px] border-t"
         >
-          {selectedShareCell ? (
-            <div className="mx-auto w-full max-w-[400px]">
-              <WinShareCard
-                marketSymbol={marketSymbol}
-                multiplier={selectedShareCell.multiplier}
-                amount={selectedShareAmountUsd}
-                openedAt={selectedShareTime}
-                profit={selectedShareProfitUsd}
-              />
-              <div className="px-5 pb-5">
-                <div className="flex flex-col gap-4">
-                  <p className="text-hint text-sm font-medium tracking-[-0.01em]">
-                    Share your win
-                  </p>
-                  <div className="bg-surface-overlay rounded-[8px] px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-text-heading min-w-0 flex-1 truncate text-sm font-medium tracking-[-0.01em]">
-                        {shareUrl}
-                      </p>
-                      <button
-                        type="button"
-                        className="text-text-sub hover:text-text-heading flex size-5 items-center justify-center"
-                        onClick={copyShareLink}
-                        aria-label="Copy share link"
-                      >
-                        <Copy className="size-4" strokeWidth={1.9} />
-                      </button>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    className="bg-primary-medium text-text-inverse hover:bg-primary-light h-11 rounded-[8px] text-base font-medium tracking-[-0.01em]"
-                    onClick={share}
-                    disabled={isSharing}
-                  >
-                    <Share2 className="mr-2 size-4" strokeWidth={1.9} />
-                    {isSharing ? "Sharing..." : "Share"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-primary-light text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[8px] bg-transparent text-base font-medium tracking-[-0.01em]"
-                    onClick={() =>
-                      void shareToWorldChat({
-                        metrics: {
-                          winRate: shareWinRate,
-                          pnl:
-                            selectedShareProfitUsd > 0
-                              ? `+$${winAmountFormatter.format(selectedShareProfitUsd)}`
-                              : `$${winAmountFormatter.format(selectedShareProfitUsd)}`,
-                          roi: selectedShareRoi,
-                        },
-                      })
-                    }
-                  >
-                    <Share2 className="mr-2 size-4" strokeWidth={1.9} />
-                    WorldChat
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ) : null}
+          {shareContent}
         </Sheet.Content>
       </Sheet.Container>
     </Sheet>
   );
+}
+
+function subscribeDesktopShareViewport(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+
+  const mediaQuery = window.matchMedia(
+    `(min-width: ${MOBILE_VIEWPORT_BREAKPOINT_PX}px)`,
+  );
+  const handleChange = () => onStoreChange();
+
+  mediaQuery.addEventListener("change", handleChange);
+
+  return () => {
+    mediaQuery.removeEventListener("change", handleChange);
+  };
+}
+
+function getDesktopShareViewportSnapshot() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.matchMedia(`(min-width: ${MOBILE_VIEWPORT_BREAKPOINT_PX}px)`)
+    .matches;
+}
+
+function getDesktopShareViewportServerSnapshot() {
+  return false;
 }
