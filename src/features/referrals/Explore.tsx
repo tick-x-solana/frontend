@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo, useState, type ComponentType } from "react";
-import { MiniKit } from "@worldcoin/minikit-js";
-import type { MiniKitChatOptions } from "@worldcoin/minikit-js/commands";
 import Image from "next/image";
 import ExploreAiAgentIcon from "@/src/assets/icons/explore-ai-agent.svg";
 import ExploreFeatureDividerIcon from "@/src/assets/icons/explore-feature-divider.svg";
@@ -34,9 +32,7 @@ import HowItWork from "@/src/features/referrals/components/HowItWork";
 import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
 import ReferralsHeader from "@/src/features/referrals/components/ReferralsHeader";
 import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
-import { buildWorldChatShareMessage } from "@/src/features/referrals/worldChatShare";
 import { useAuth } from "@/src/components/providers/AuthProvider";
-import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
 
 type ExploreView =
   | "home"
@@ -192,10 +188,6 @@ const liquidityPools: LiquidityPool[] = [
     volume: "$159,230",
   },
 ];
-
-const FOLLOW_TRADE_SHARE_WIN_RATE = "68%";
-const FOLLOW_TRADE_SHARE_PNL = "+$343.5";
-const FOLLOW_TRADE_SHARE_ROI = "+24.5%";
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
@@ -439,16 +431,10 @@ const Explore = () => {
   const [activeView, setActiveView] = useState<ExploreView>("home");
   const [vaultMode, setVaultMode] = useState<"human" | "agents">("human");
   const { walletAddress, username } = useAuth();
-  const { miniAppUsername, refreshMiniAppUsername } = useMiniAppUsername({
-    username,
-    walletAddress,
-    logPrefix: "[Explore]",
-  });
-  console.log("miniAppUsername: ", miniAppUsername);
 
   const referralLink = useMemo(
-    () => buildMiniAppReferralLink(miniAppUsername ?? username),
-    [miniAppUsername, username],
+    () => buildMiniAppReferralLink(username ?? walletAddress),
+    [username, walletAddress],
   );
   const activeVaultDataset =
     vaultMode === "human" ? humanVaultDataset : agentVaultDataset;
@@ -459,42 +445,6 @@ const Explore = () => {
       toast.success("Copied");
     } catch {
       toast.error("Failed to copy");
-    }
-  };
-
-  const shareToChat = async () => {
-    try {
-      if (!MiniKit.isInWorldApp()) {
-        toast.error("WorldChat is only available in World App");
-        return;
-      }
-
-      const resolvedMiniAppUsername = await refreshMiniAppUsername();
-      if (!resolvedMiniAppUsername) {
-        toast.error("Missing World username. Please set your username first.");
-        return;
-      }
-
-      const miniAppReferralLink = buildMiniAppReferralLink(
-        resolvedMiniAppUsername,
-      );
-      const message = buildWorldChatShareMessage({
-        referralLink: miniAppReferralLink,
-        metrics: {
-          winRate: FOLLOW_TRADE_SHARE_WIN_RATE,
-          pnl: FOLLOW_TRADE_SHARE_PNL,
-          roi: FOLLOW_TRADE_SHARE_ROI,
-        },
-      });
-
-      const input = {
-        message,
-        to: ["andy"],
-      } satisfies MiniKitChatOptions;
-
-      await MiniKit.chat(input);
-    } catch {
-      toast.error("Failed to share to WorldChat");
     }
   };
 
@@ -712,10 +662,7 @@ const Explore = () => {
         {activeView === "referrals" ? (
           <div className="flex flex-col gap-4">
             <BackButton onClick={() => setActiveView("home")} />
-            <ReferralsHeader
-              onShareToChat={() => void shareToChat()}
-              worldId={miniAppUsername}
-            />
+            <ReferralsHeader />
             <ReferAFriend referralLink={referralLink} />
             <HowItWork />
           </div>

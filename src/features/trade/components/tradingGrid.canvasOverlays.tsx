@@ -10,7 +10,7 @@ type WinEffectsLayerProps = {
   activeWinEffectCellIdSet: Set<string>;
   activeWinEffectByCellId: Record<string, ActiveWinEffectState>;
   setWinEffectIconRef: (cellId: string, node: HTMLDivElement | null) => void;
-  wldUsdPrice: number | null | undefined;
+  solUsdPrice: number | null | undefined;
   plotWidth: number;
   plotHeight: number;
 };
@@ -19,14 +19,14 @@ type WinEffectItemProps = {
   target: ShareOverlayTarget;
   effectState: ActiveWinEffectState;
   setWinEffectIconRef: (cellId: string, node: HTMLDivElement | null) => void;
-  wldUsdPrice: number | null | undefined;
+  solUsdPrice: number | null | undefined;
 };
 
 const WinEffectItem = memo(function WinEffectItem({
   target,
   effectState,
   setWinEffectIconRef,
-  wldUsdPrice,
+  solUsdPrice,
 }: WinEffectItemProps) {
   return (
     <div
@@ -50,7 +50,7 @@ const WinEffectItem = memo(function WinEffectItem({
               fontSize: `${Math.max(11, Math.min(20, Math.round(target.cellEdge * 0.24)))}px`,
             }}
           >
-            +{formatApproxUsd(target.totalPayout, wldUsdPrice ?? null) ?? "$--"}
+            +{formatApproxUsd(target.totalPayout, solUsdPrice ?? null) ?? "$--"}
           </span>
         </div>
       ) : (
@@ -65,7 +65,7 @@ const WinEffectItem = memo(function WinEffectItem({
               fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
             }}
           >
-            +{formatApproxUsd(target.basePayout, wldUsdPrice ?? null) ?? "$--"}
+            +{formatApproxUsd(target.basePayout, solUsdPrice ?? null) ?? "$--"}
           </span>
           {target.isHumanVerified ? (
             <Image
@@ -89,7 +89,7 @@ const WinEffectItem = memo(function WinEffectItem({
                 fontSize: `${Math.max(10, Math.min(18, Math.round(target.cellEdge * 0.2)))}px`,
               }}
             >
-              +{formatApproxUsd(target.bonusPayout, wldUsdPrice ?? null) ?? "$--"}
+              +{formatApproxUsd(target.bonusPayout, solUsdPrice ?? null) ?? "$--"}
             </span>
           ) : null}
         </div>
@@ -106,7 +106,7 @@ export const WinEffectsLayer = memo(function WinEffectsLayer(
     activeWinEffectCellIdSet,
     activeWinEffectByCellId,
     setWinEffectIconRef,
-    wldUsdPrice,
+    solUsdPrice,
     plotWidth,
     plotHeight,
   } = props;
@@ -133,7 +133,7 @@ export const WinEffectsLayer = memo(function WinEffectsLayer(
             target={target}
             effectState={effectState}
             setWinEffectIconRef={setWinEffectIconRef}
-            wldUsdPrice={wldUsdPrice}
+            solUsdPrice={solUsdPrice}
           />
         );
       })}

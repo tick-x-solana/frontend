@@ -3,7 +3,6 @@ import Image from "next/image";
 import { Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WalletIcon } from "@/src/assets/icons";
-import WldMarketIcon from "@/src/assets/icons/wld-market.svg";
 import { Button } from "@/src/components/shadcn/button";
 import { balanceFormatter, winAmountFormatter } from "./tradingGrid.constants";
 import type { WinBetBannerData } from "./tradingGrid.utils";
@@ -45,7 +44,14 @@ export function BalanceChip({ balance }: { balance: number }) {
         <WalletIcon className="size-3.5" aria-hidden="true" />
       </span>
       <p className="text-primary-light flex items-center gap-1 text-center text-xs font-bold tracking-[-0.01em] whitespace-nowrap">
-        {balanceFormatter.format(safeBalance)} <WldMarketIcon aria-hidden className="size-3" />
+        {balanceFormatter.format(safeBalance)}{" "}
+        <Image
+          src="/sol.png"
+          alt="SOL"
+          width={12}
+          height={12}
+          className="size-3"
+        />
       </p>
     </div>
   );

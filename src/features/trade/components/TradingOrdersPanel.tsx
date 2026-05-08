@@ -195,8 +195,8 @@ function toRecentUserOrderItem(
 }
 
 function formatBidAmountWld(value: number | null): string {
-  if (value === null) return "-- WLD";
-  return `${formatCompactNumber(value)} WLD`;
+  if (value === null) return "-- SOL";
+  return `${formatCompactNumber(value)} SOL`;
 }
 
 function formatBidAmountUsd(value: number | null): string {

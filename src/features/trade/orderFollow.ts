@@ -1,6 +1,6 @@
 "use client";
 
-import { getAddress } from "viem";
+
 
 export interface OrderFollowingItem {
   id?: string;
@@ -51,12 +51,7 @@ function asNumber(value: unknown): number | null {
 function parseAddress(value: unknown): string | null {
   const raw = asString(value);
   if (!raw) return null;
-
-  try {
-    return getAddress(raw);
-  } catch {
-    return null;
-  }
+  return raw;
 }
 
 function normalizeUsername(value: string | null): string | null {

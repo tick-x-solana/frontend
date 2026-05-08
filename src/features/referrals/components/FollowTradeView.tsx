@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { MiniKit } from "@worldcoin/minikit-js";
 import { Copy, Loader2, UserMinus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/src/components/shadcn/button";
@@ -25,7 +24,6 @@ import {
   useOrderFollowControllerListFollowing,
   useOrderFollowControllerUnsubscribe,
 } from "@/src/services/queries";
-import useMiniAppUsername from "@/src/hooks/useMiniAppUsername";
 import { cn } from "@/lib/utils";
 
 type Tab = "followers" | "following";
@@ -43,31 +41,9 @@ function isAddress(value: string) {
   return EVM_ADDRESS_REGEX.test(value);
 }
 
-function useWorldUsername(userId: string, apiUsername?: string | null) {
-  const [worldUsername, setWorldUsername] = useState<string | null>(
-    // Use apiUsername only if it's not itself an address
-    apiUsername && !isAddress(apiUsername) ? apiUsername : null,
-  );
-
-  useEffect(() => {
-    if (worldUsername) return; // already resolved
-    if (!isAddress(userId)) return;
-
-    let cancelled = false;
-    MiniKit.getUserByAddress(userId)
-      .then((user) => {
-        if (!cancelled && user?.username) {
-          setWorldUsername(user.username);
-        }
-      })
-      .catch(() => {/* silently fall back to address display */});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, worldUsername]);
-
-  return worldUsername;
+function useResolvedUsername(userId: string, apiUsername?: string | null) {
+  // On Solana there is no on-chain username lookup — use apiUsername if not an address
+  return apiUsername && !EVM_ADDRESS_REGEX.test(apiUsername) ? apiUsername : null;
 }
 
 function UserCard({
@@ -83,7 +59,7 @@ function UserCard({
   onUnfollow?: (userId: string, displayName: string) => void;
   isUnfollowing?: boolean;
 }) {
-  const resolvedUsername = useWorldUsername(userId, username);
+  const resolvedUsername = useResolvedUsername(userId, username);
   const initials = getUserInitials(resolvedUsername ?? userId);
   const displayName = resolvedUsername
     ? resolvedUsername.startsWith("@")
@@ -258,15 +234,10 @@ const FollowTradeView = () => {
   const [isUnfollowing, setIsUnfollowing] = useState(false);
   const queryClient = useQueryClient();
   const { isAuthenticated, isLoggingIn, walletAddress, username } = useAuth();
-  const { miniAppUsername } = useMiniAppUsername({
-    username,
-    walletAddress,
-    logPrefix: "[FollowTradeView]",
-  });
 
   const referralLink = useMemo(
-    () => buildMiniAppReferralLink(miniAppUsername ?? username),
-    [miniAppUsername, username],
+    () => buildMiniAppReferralLink(username ?? walletAddress),
+    [username, walletAddress],
   );
 
   const enabled = isAuthenticated && !isLoggingIn;

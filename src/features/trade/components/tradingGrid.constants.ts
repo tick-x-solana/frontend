@@ -3,6 +3,7 @@ import {
   fixedTwoDecimalFormatter,
   oneDecimalFormatter,
 } from "@/src/utils/formatters";
+import { SOLANA_SOCKET_BASE_URL } from "@/src/constants";
 
 export const DESKTOP_ZOOM_MIN = 0.1;
 export const DEFAULT_DESKTOP_ZOOM = 0.4;
@@ -44,12 +45,16 @@ export const WIN_EFFECT_VISIBLE_MS = 2000;
 export const WIN_EFFECT_AMOUNTS_VISIBLE_MS = 1300;
 export const WIN_EFFECT_INIT_GRACE_MS = 5000;
 
-export const MARKET_SYMBOL = "BTC/USD";
+export const MARKET_SYMBOL = "SOL/USDT";
 export const CORE_SOCKET_PATH = "/socket.io";
+export const TRADE_SOCKET_BASE_URL = SOLANA_SOCKET_BASE_URL;
 export const MARKET_OPTIONS = [
-  { symbol: "BTC/USD", shortLabel: "B", iconSrc: "/btc.png", enabled: true },
-  { symbol: "ETH/USD", shortLabel: "E", iconSrc: "/eth.png", enabled: true },
-  { symbol: "WLD/USD", shortLabel: "B", iconSrc: null, enabled: false },
+  {
+    symbol: "SOL/USDT",
+    shortLabel: "S",
+    iconSrc: "/sol.png",
+    enabled: true,
+  },
 ] as const;
 
 export const FOLLOW_REFERRAL_STATS = [

@@ -9,7 +9,7 @@ import type { FollowedOrderActivity } from "@/src/features/trade/orderFollow";
 import {
   MODE_INTERVAL_SECONDS,
   MODE_PRICE_STEP,
-  DEFAULT_BET_AMOUNT_WLD,
+  DEFAULT_BET_AMOUNT_SOL,
   MAX_FOLLOWED_ORDER_ACTIVITIES,
 } from "./storeConstants";
 import {
@@ -127,7 +127,7 @@ export const useGameStore = create<GameState>((set) => ({
   wssKey: null,
   wssKeyExpiresAt: null,
   followedOrderActivities: [],
-  betAmount: DEFAULT_BET_AMOUNT_WLD,
+  betAmount: DEFAULT_BET_AMOUNT_SOL,
   serverTimeOffset: 0,
   serverTimeOffsetReady: false,
   priceStepChangedAt: null,

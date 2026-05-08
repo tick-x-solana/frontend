@@ -22,6 +22,7 @@ import {
   SUBSCRIBE_SUGGESTED_STRATEGY_EVENT,
   SUBSCRIBE_USER_EVENT,
   SUGGESTED_STRATEGY_UPDATE_EVENT,
+  TRADE_SOCKET_BASE_URL,
   UNSUBSCRIBE_ORDER_FOLLOWS_EVENT,
 } from "@/src/features/trade/components/tradingGrid.constants";
 import {
@@ -39,8 +40,8 @@ import {
 type SocketLike = {
   connected: boolean;
   emit: (event: string, payload?: unknown) => void;
-  on: (event: string, handler: (payload: any) => void) => void;
-  off: (event: string, handler?: (payload: any) => void) => void;
+  on: (event: string, handler: (payload: unknown) => void) => void;
+  off: (event: string, handler?: (payload: unknown) => void) => void;
 };
 
 function isSocketLike(value: unknown): value is SocketLike {
@@ -80,7 +81,7 @@ type UseTradingGridSocketEffectsParams = {
 
 export function useTradingGridSocketEffects({
   marketId,
-  marketSocketPath,
+  marketSocketPath: _marketSocketPath,
   updatePrice,
   updateGrid,
   hydrateHistory,
@@ -99,6 +100,7 @@ export function useTradingGridSocketEffects({
   pendingBets,
   storeRef,
 }: UseTradingGridSocketEffectsParams) {
+  void _marketSocketPath;
   const socketRef = useRef<SocketLike | null>(null);
   // 1) Load initial price history (Binance 1s candles) to hydrate the chart.
   useEffect(() => {
@@ -136,15 +138,15 @@ export function useTradingGridSocketEffects({
     return () => abortController.abort();
   }, [hydrateHistory, marketId]);
 
-  // 2) Connect a dedicated market socket for realtime price + grid state.
+  // 2) Connect one Solana socket for both market + user/order actions.
   useEffect(() => {
-    const liveSocket = io("https://api.tickx.finance", {
-      path: marketSocketPath,
+    const unifiedSocket = io(TRADE_SOCKET_BASE_URL, {
+      path: CORE_SOCKET_PATH,
       transports: ["websocket"],
       reconnection: true,
     });
 
-    liveSocket.on("price_now", (payload: unknown) => {
+    const handlePricePayload = (payload: unknown) => {
       const receivedAt = Date.now();
       const data = payload as
         | number
@@ -155,9 +157,13 @@ export function useTradingGridSocketEffects({
       const ts =
         typeof data === "number" ? undefined : (data?.ts ?? data?.time);
       updatePrice(price, ts, receivedAt);
-    });
+    };
 
-    liveSocket.on("grid_update", (payload: unknown) => {
+    // Keep both handlers for transition safety while backend migrates names.
+    unifiedSocket.on("price_update", handlePricePayload);
+    unifiedSocket.on("price_now", handlePricePayload);
+
+    unifiedSocket.on("grid_update", (payload: unknown) => {
       let remoteCells: RemoteCell[] | null = null;
       if (Array.isArray(payload)) {
         remoteCells = payload as RemoteCell[];
@@ -172,33 +178,20 @@ export function useTradingGridSocketEffects({
       if (remoteCells) updateGrid(remoteCells);
     });
 
-    return () => {
-      liveSocket.off("price_now");
-      liveSocket.off("grid_update");
-      liveSocket.disconnect();
-    };
-  }, [marketSocketPath, updateGrid, updatePrice]);
-
-  // 3) Connect the core/action socket for user/order-related events.
-  // Stored in a ref (not Zustand) so it never triggers re-renders or effect loops.
-  useEffect(() => {
-    const actionSocket = io("https://api.tickx.finance", {
-      path: CORE_SOCKET_PATH,
-      transports: ["websocket"],
-      reconnection: true,
-    });
-
-    socketRef.current = actionSocket;
-    useGameStore.getState().setConnection(actionSocket, null);
+    socketRef.current = unifiedSocket;
+    useGameStore.getState().setConnection(unifiedSocket, null);
 
     return () => {
-      actionSocket.disconnect();
+      unifiedSocket.off("price_update", handlePricePayload);
+      unifiedSocket.off("price_now", handlePricePayload);
+      unifiedSocket.off("grid_update");
+      unifiedSocket.disconnect();
       socketRef.current = null;
       useGameStore.getState().setConnection(null, null);
     };
-  }, []);
+  }, [updateGrid, updatePrice]);
 
-  // 4) When the user is authenticated: fetch wssKey + challenge + signature to subscribe to the user channel.
+  // 3) When the user is authenticated: fetch wssKey + challenge + signature to subscribe to the user channel.
   // Re-subscribes on reconnect, before key expiry (3s early), and on "Invalid wss signature" errors.
   useEffect(() => {
     const socket = socketRef.current;
@@ -294,7 +287,7 @@ export function useTradingGridSocketEffects({
     };
   }, [isAuthenticated, resolvedUserAddress]);
 
-  // 5) Subscribe/unsubscribe follow targets (copy-trade) while the Follow panel is visible.
+  // 4) Subscribe/unsubscribe follow targets (copy-trade) while the Follow panel is visible.
   // Unsubscribe in cleanup to avoid leaking subscriptions after closing the panel/changing targets.
   useEffect(() => {
     const socket = socketRef.current;
@@ -363,7 +356,7 @@ export function useTradingGridSocketEffects({
     resolvedUserAddress,
   ]);
 
-  // 6) Receive followed-order update events and push them to the overlay queue (cellId remapped to the current grid).
+  // 5) Receive followed-order update events and push them to the overlay queue (cellId remapped to the current grid).
   useEffect(() => {
     const socket = socketRef.current;
     if (
@@ -402,7 +395,7 @@ export function useTradingGridSocketEffects({
     storeRef,
   ]);
 
-  // 7) Subscribe to the suggested strategy channel when the strategy panel is visible.
+  // 6) Subscribe to the suggested strategy channel when the strategy panel is visible.
   useEffect(() => {
     const socket = socketRef.current;
     if (!isSocketLike(socket) || !isSuggestedStrategyVisible) return;
@@ -413,7 +406,7 @@ export function useTradingGridSocketEffects({
     return () => socket.off("connect", subscribe);
   }, [isSuggestedStrategyVisible]);
 
-  // 8) Receive suggested strategy updates and convert them to a list of valid cellIds.
+  // 7) Receive suggested strategy updates and convert them to a list of valid cellIds.
   useEffect(() => {
     const socket = socketRef.current;
     if (!isSocketLike(socket) || !isSuggestedStrategyVisible) return;
@@ -435,7 +428,7 @@ export function useTradingGridSocketEffects({
       );
   }, [isSuggestedStrategyVisible, queueSuggestedStrategyCellIds, storeRef]);
 
-  // 9) Sync the initial balance from the query response into the store.
+  // 8) Sync the initial balance from the query response into the store.
   useEffect(() => {
     const nextServerBalance = extractBalanceAmount(balanceResponse);
     if (nextServerBalance === null) return;
@@ -446,7 +439,7 @@ export function useTradingGridSocketEffects({
     });
   }, [balanceResponse]);
 
-  // 10) Listen for realtime balance updates; apply only to the current user (if payload has userId).
+  // 9) Listen for realtime balance updates; apply only to the current user (if payload has userId).
   useEffect(() => {
     const socket = socketRef.current;
     if (!isSocketLike(socket)) return;
@@ -474,7 +467,7 @@ export function useTradingGridSocketEffects({
     return () => socket.off(BALANCE_UPDATE_EVENT, handleBalanceUpdate);
   }, [resolvedUserAddress]);
 
-  // 11) Listen for realtime order updates and forward them to the reducer/update handler.
+  // 10) Listen for realtime order updates and forward them to the reducer/update handler.
   useEffect(() => {
     const socket = socketRef.current;
     if (!isSocketLike(socket)) return;
@@ -484,14 +477,14 @@ export function useTradingGridSocketEffects({
     return () => socket.off(ORDER_UPDATE_EVENT, handleOrderUpdate);
   }, [updateOrder]);
 
-  // 12) Backfill orders from the query response to sync the initial state.
+  // 11) Backfill orders from the query response to sync the initial state.
   useEffect(() => {
     const orders = extractUserOrders(userOrdersResponse);
     if (orders.length === 0) return;
     orders.forEach((orderPayload) => updateOrder(orderPayload));
   }, [updateOrder, userOrdersResponse]);
 
-  // 13) Listen to additional follow-order events and handle them the same way as overlay follow updates.
+  // 12) Listen to additional follow-order events and handle them the same way as overlay follow updates.
   useEffect(() => {
     const socket = socketRef.current;
     if (
@@ -535,7 +528,7 @@ export function useTradingGridSocketEffects({
     storeRef,
   ]);
 
-  // 14) Cancel pending bets that have not been confirmed by socket within 3 seconds.
+  // 13) Cancel pending bets that have not been confirmed by socket within 3 seconds.
   useEffect(() => {
     const pendingCellIds = Object.keys(pendingBets);
     if (pendingCellIds.length === 0) return;

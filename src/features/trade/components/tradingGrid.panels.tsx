@@ -29,7 +29,7 @@ import TradingOrdersPanel from "@/src/features/trade/components/TradingOrdersPan
 import TradeControlsPanel from "@/src/features/trade/components/TradeControlsPanel";
 import { WinShareCard } from "@/src/features/trade/components/WinShareCard";
 import { GridActionButton } from "./tradingGrid.ui";
-import { MARKET_OPTIONS, winAmountFormatter } from "./tradingGrid.constants";
+import { MARKET_OPTIONS } from "./tradingGrid.constants";
 
 type TopBarProps = {
   selectedMarketSymbol: string;
@@ -438,9 +438,6 @@ type ShareSheetProps = {
   copyShareLink: () => void;
   isSharing: boolean;
   share: () => void;
-  shareToWorldChat: (payload: {
-    metrics: { winRate: string | null; pnl: string; roi: string | null };
-  }) => Promise<void>;
   shareWinRate: string | null;
   selectedShareRoi: string | null;
 };
@@ -458,9 +455,6 @@ export function TradingShareSheet(props: ShareSheetProps) {
     copyShareLink,
     isSharing,
     share,
-    shareToWorldChat,
-    shareWinRate,
-    selectedShareRoi,
   } = props;
   const isDesktopViewport = React.useSyncExternalStore(
     subscribeDesktopShareViewport,
@@ -506,26 +500,6 @@ export function TradingShareSheet(props: ShareSheetProps) {
             <Share2 className="mr-2 size-4" strokeWidth={1.9} />
             {isSharing ? "Sharing..." : "Share"}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="border-primary-light text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[8px] bg-transparent text-base font-medium tracking-[-0.01em]"
-            onClick={() =>
-              void shareToWorldChat({
-                metrics: {
-                  winRate: shareWinRate,
-                  pnl:
-                    selectedShareProfitUsd > 0
-                      ? `+$${winAmountFormatter.format(selectedShareProfitUsd)}`
-                      : `$${winAmountFormatter.format(selectedShareProfitUsd)}`,
-                  roi: selectedShareRoi,
-                },
-              })
-            }
-          >
-            <Share2 className="mr-2 size-4" strokeWidth={1.9} />
-            WorldChat
-          </Button>
         </div>
       </div>
     </div>
@@ -543,7 +517,7 @@ export function TradingShareSheet(props: ShareSheetProps) {
           <div className="border-border-main bg-background-main pointer-events-auto w-[min(440px,calc(100vw-2rem))] overflow-hidden rounded-[20px] border shadow-[0_24px_100px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.04)]">
             <DialogTitle className="sr-only">Share your win</DialogTitle>
             <DialogDescription className="sr-only">
-              Share your winning bet link or post it to WorldChat.
+              Share your winning bet link.
             </DialogDescription>
             {shareContent}
           </div>

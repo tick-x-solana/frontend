@@ -19,8 +19,7 @@ import React, {
   useMemo,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAccount } from "wagmi";
-import { MiniKit } from "@worldcoin/minikit-js";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { MOBILE_VIEWPORT_BREAKPOINT_PX } from "@/src/constants";
 import { extractOrderFollowings } from "@/src/features/trade/orderFollow";
@@ -54,7 +53,7 @@ import {
 } from "@/src/utils/canvasDraw";
 import { useGridInteraction } from "@/src/hooks/useGridInteraction";
 import useWinShareActions from "@/src/hooks/useWinShareActions";
-import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
+import useSolUsdPrice from "@/src/hooks/useSolUsdPrice";
 import {
   DEFAULT_DESKTOP_ZOOM,
   DEFAULT_MOBILE_ZOOM,
@@ -121,7 +120,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   initialFollowRefCode = null,
 }) => {
   const queryClient = useQueryClient();
-  const { data: wldUsdPrice } = useWldUsdPrice();
+  const { data: solUsdPrice } = useSolUsdPrice();
   // ── Store selectors ────────────────────────────────────────────────────────
   // Read-only slices from zustand store for render + side-effects.
   const cells = useGameStore((s) => s.cells);
@@ -171,17 +170,11 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const balance = useGameStore((s) => s.balance);
   const serverTimeOffset = useGameStore((s) => s.serverTimeOffset);
   const priceStepChangedAt = useGameStore((s) => s.priceStepChangedAt);
-  const { address } = useAccount();
+  const { publicKey } = useWallet();
   const { isAuthenticated, isLoggingIn, username, walletAddress } = useAuth();
-  // Resolve the active user wallet from World App first, then auth provider, then wagmi.
-  const isMiniApp = MiniKit.isInWorldApp();
-  const miniKitWalletAddress = isMiniApp
-    ? (MiniKit.user?.walletAddress ?? null)
-    : null;
   const resolvedUserAddress = useMemo(
-    () =>
-      parseAddress(miniKitWalletAddress ?? walletAddress ?? address ?? null),
-    [address, miniKitWalletAddress, walletAddress],
+    () => parseAddress(walletAddress ?? publicKey?.toBase58() ?? null),
+    [publicKey, walletAddress],
   );
   // Queries used by grid auth, follow trade and user balance/order hydration.
   const {
@@ -350,8 +343,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     wssKey,
     address: resolvedUserAddress,
     wldUsdPrice:
-      typeof wldUsdPrice === "number" && Number.isFinite(wldUsdPrice)
-        ? wldUsdPrice
+      typeof solUsdPrice === "number" && Number.isFinite(solUsdPrice)
+        ? solUsdPrice
         : null,
     followedOrderActivities,
     suggestedStrategyCellIds: [],
@@ -397,8 +390,8 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
       wssKey,
       address: resolvedUserAddress,
       wldUsdPrice:
-        typeof wldUsdPrice === "number" && Number.isFinite(wldUsdPrice)
-          ? wldUsdPrice
+        typeof solUsdPrice === "number" && Number.isFinite(solUsdPrice)
+          ? solUsdPrice
           : null,
       followedOrderActivities,
       suggestedStrategyCellIds: storeRef.current.suggestedStrategyCellIds,
@@ -457,7 +450,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     pendingBets,
     betAmount,
     settledOutcomes,
-    wldUsdPrice: typeof wldUsdPrice === "number" ? wldUsdPrice : null,
+    solUsdPrice: typeof solUsdPrice === "number" ? solUsdPrice : null,
   });
 
   // ── Share overlay positioning (button + win-effect icon refs / positions) ──
@@ -479,7 +472,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   } | null>(null);
   const [isSubmittingFollowReferral, setIsSubmittingFollowReferral] =
     useState(false);
-  const { isSharing, shareUrl, copyShareLink, share, shareToWorldChat } =
+  const { isSharing, shareUrl, copyShareLink, share } =
     useWinShareActions({
       username,
       walletAddress,
@@ -509,9 +502,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const winToastData = useWinNotificationToast({
     socket,
     marketId: selectedMarketId,
-    wldUsdPrice:
-      typeof wldUsdPrice === "number" && Number.isFinite(wldUsdPrice)
-        ? wldUsdPrice
+    solUsdPrice:
+      typeof solUsdPrice === "number" && Number.isFinite(solUsdPrice)
+        ? solUsdPrice
         : null,
   });
 
@@ -623,35 +616,15 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   }, [followReferralCode]);
   const followReferralStats = FOLLOW_REFERRAL_STATS;
 
-  // Resolve referral input to a canonical wallet address (address literal or @username).
+  // Resolve referral input to a canonical wallet address (Solana base58 address only).
   const resolveFollowTargetWallet = useCallback(async (refCode: string) => {
     const normalizedRefCode = normalizeReferralCode(refCode);
-    if (!normalizedRefCode) {
-      throw new Error("Missing referral code");
-    }
+    if (!normalizedRefCode) throw new Error("Missing referral code");
 
     const directWalletAddress = parseAddress(normalizedRefCode);
-    if (directWalletAddress) {
-      return directWalletAddress;
-    }
+    if (directWalletAddress) return directWalletAddress;
 
-    const normalizedUsername = normalizedRefCode.replace(/^@/, "").trim();
-    if (!normalizedUsername) {
-      throw new Error("Missing referral username");
-    }
-
-    const user = await MiniKit.getUserByUsername(normalizedUsername);
-    const walletAddressFromUsername = parseAddress(user.walletAddress);
-    if (!walletAddressFromUsername) {
-      throw new Error("Cannot resolve target wallet from referral code");
-    }
-
-    const userByAddress = await MiniKit.getUserByAddress(
-      walletAddressFromUsername,
-    );
-    return (
-      parseAddress(userByAddress.walletAddress) ?? walletAddressFromUsername
-    );
+    throw new Error("Referral code must be a valid Solana wallet address");
   }, []);
 
   const handleCloseFollowReferralModal = useCallback(() => {
@@ -1472,6 +1445,17 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   // - resolve pointer -> cell via hitTest/hitTestAny
   // - trigger placeBet on click/tap when target cell is eligible
   // - manage preview, drag-pan and zoom state
+  const guardedPlaceBet = useCallback(
+    (cellId: string, amount: number) => {
+      if (!isAuthenticated) {
+        appToast.info("Connect your wallet to place a bet");
+        return;
+      }
+      placeBet(cellId, amount);
+    },
+    [isAuthenticated, placeBet],
+  );
+
   const {
     isDragging,
     handleWheel,
@@ -1493,7 +1477,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     previewCellIdRef,
     hitTest,
     hitTestAnyCell: hitTestAny,
-    placeBet,
+    placeBet: guardedPlaceBet,
     getDefaultZoom,
     getMinZoom,
   });
@@ -1678,7 +1662,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
           activeWinEffectCellIdSet={activeWinEffectCellIdSet}
           activeWinEffectByCellId={activeWinEffectByCellId}
           setWinEffectIconRef={setWinEffectIconRef}
-          wldUsdPrice={wldUsdPrice}
+          solUsdPrice={solUsdPrice}
           plotWidth={overlayPlotBounds.width}
           plotHeight={overlayPlotBounds.height}
         />
@@ -1767,7 +1751,6 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         copyShareLink={copyShareLink}
         isSharing={isSharing}
         share={share}
-        shareToWorldChat={shareToWorldChat}
         shareWinRate={shareWinRate}
         selectedShareRoi={selectedShareRoi}
       />

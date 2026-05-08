@@ -116,6 +116,9 @@ export function formatWalletAddress(
   } = options;
 
   if (!address) return emptyLabel;
-  if (!address.startsWith("0x") || address.length < minLength) return address;
-  return `${address.slice(0, start)}...${address.slice(-end)}`;
+  // Truncate both EVM (0x…) and Solana base58 addresses that are long enough
+  if (address.length >= minLength) {
+    return `${address.slice(0, start)}...${address.slice(-end)}`;
+  }
+  return address;
 }

@@ -19,14 +19,14 @@ export function useShareSheetData({
   pendingBets,
   betAmount,
   settledOutcomes,
-  wldUsdPrice,
+  solUsdPrice,
 }: {
   cells: CellData[];
   bets: Record<string, number>;
   pendingBets: Record<string, number>;
   betAmount: number;
   settledOutcomes: SettledOutcomes;
-  wldUsdPrice: number | null | undefined;
+  solUsdPrice: number | null | undefined;
 }) {
   const [shareCellId, setShareCellId] = useState<string | null>(null);
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
@@ -80,16 +80,16 @@ export function useShareSheetData({
   }, [selectedShareCell]);
 
   const selectedShareProfitApproxUsd = useMemo(() => {
-    if (typeof wldUsdPrice !== "number" || !Number.isFinite(wldUsdPrice))
+    if (typeof solUsdPrice !== "number" || !Number.isFinite(solUsdPrice))
       return null;
-    return selectedShareProfit * wldUsdPrice;
-  }, [selectedShareProfit, wldUsdPrice]);
+    return selectedShareProfit * solUsdPrice;
+  }, [selectedShareProfit, solUsdPrice]);
 
   const selectedShareAmountUsd = useMemo(() => {
-    if (typeof wldUsdPrice !== "number" || !Number.isFinite(wldUsdPrice))
+    if (typeof solUsdPrice !== "number" || !Number.isFinite(solUsdPrice))
       return 0;
-    return toFiniteNumber(selectedShareAmount * wldUsdPrice);
-  }, [selectedShareAmount, wldUsdPrice]);
+    return toFiniteNumber(selectedShareAmount * solUsdPrice);
+  }, [selectedShareAmount, solUsdPrice]);
 
   const selectedShareProfitUsd = useMemo(() => {
     if (selectedShareProfitApproxUsd === null) return 0;

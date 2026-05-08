@@ -11,7 +11,7 @@ import { signWssMessage } from "@/src/features/trade/socketSignature";
 import type { CellData } from "@/src/features/trade/store";
 import { clamp, clampTransformToDataBounds } from "@/src/utils/gridLayout";
 import type { StoreSnapshot, Transform } from "@/src/utils/gridLayout";
-import { getAddress } from "viem";
+
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -319,9 +319,10 @@ export function useGridInteraction({
         return;
       }
 
-        const { bets, pendingBets, betAmount, balance, socket, wssKey, address } =
+      const { bets, pendingBets, betAmount, balance, socket, wssKey, address } =
         storeRef.current;
       const now = nowRef.current;
+      console.log("123address: ", address);
 
       try {
         // Warn if cell is in its closing window
@@ -388,7 +389,7 @@ export function useGridInteraction({
         const cellId = getRemoteCellId(cellOrigin);
         const message = `${cellOrigin.gridTs}:${cellId}:${amountStr}`;
         const signature = await signWssMessage(wssKey, message);
-        const userId = getAddress(address);
+        const userId = address;
 
         const payload = {
           userId,

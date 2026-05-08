@@ -4,11 +4,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
-import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { formatWalletAddress } from "@/src/utils/formatters";
-import { sepolia } from "wagmi/chains";
-import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 
 type NavItem = {
   label: string;
@@ -25,74 +24,24 @@ const navItems: NavItem[] = [
 
 const Header = () => {
   const pathname = usePathname();
-  const { address, chainId, isConnected } = useAccount();
-  const { connect, connectors, isPending: isConnectPending } = useConnect();
-  const { disconnect } = useDisconnect();
-  const { switchChain, isPending: isSwitchPending } = useSwitchChain();
-  const {
-    isAuthenticated,
-    isLoggingIn,
-    isMiniApp,
-    login,
-    logout,
-    walletAddress,
-  } = useAuth();
+  const { connected, publicKey } = useWallet();
+  const { isAuthenticated, isLoggingIn, walletAddress } = useAuth();
 
   const isActivePath = (href: string) => {
     if (href === "#") return false;
     if (href === "/") return pathname === "/";
     return pathname === href || pathname.startsWith(`${href}/`);
   };
+
   const hideOnExploreMobile =
     pathname === "/explore" || pathname.startsWith("/explore/");
 
-  const isWrongNetwork = isConnected && chainId !== sepolia.id;
-  const primaryConnector = connectors[0];
-
-  const handleWalletAction = () => {
-    if (isMiniApp) {
-      if (isAuthenticated) {
-        logout();
-        return;
-      }
-
-      void login();
-      return;
-    }
-
-    if (isWrongNetwork) {
-      switchChain({ chainId: sepolia.id });
-      return;
-    }
-
-    if (isConnected) {
-      disconnect();
-      return;
-    }
-
-    if (!primaryConnector) return;
-
-    connect({
-      connector: primaryConnector,
-      chainId: sepolia.id,
-    });
-  };
-
-  const walletButtonLabel = (() => {
-    if (isLoggingIn) return "Signing in...";
-    if (isMiniApp) {
-      if (isAuthenticated && walletAddress) {
-        return formatWalletAddress(walletAddress);
-      }
-
-      return "Sign in";
-    }
-    if (isSwitchPending) return "Switching...";
-    if (isConnectPending) return "Connecting...";
-    if (isWrongNetwork) return "Switch to Sepolia";
-    if (isConnected && address) return formatWalletAddress(address);
-    return "Connect Wallet";
-  })();
+  const displayAddress = walletAddress ?? publicKey?.toBase58() ?? null;
+  const walletLabel = isLoggingIn
+    ? "Signing in..."
+    : isAuthenticated && displayAddress
+      ? formatWalletAddress(displayAddress, { start: 4, end: 4 })
+      : null;
 
   return (
     <header
@@ -149,22 +98,17 @@ const Header = () => {
           <span className="bg-border-main h-8 w-px shrink-0" aria-hidden />
         </nav>
 
-        <Button
-          type="button"
-          size="lg"
-          onClick={handleWalletAction}
-          disabled={
-            isMiniApp
-              ? isLoggingIn
-              : !primaryConnector ||
-                isConnectPending ||
-                isSwitchPending ||
-                isLoggingIn
-          }
-          className="bg-primary-light text-text-inverse hover:bg-primary-medium ml-auto h-10 rounded-[8px] px-3 py-1.5 text-sm font-medium tracking-[-0.01em] shadow-none disabled:opacity-60"
-        >
-          {walletButtonLabel}
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <WalletMultiButton
+            style={{
+              height: "40px",
+              borderRadius: "8px",
+              fontSize: "14px",
+              fontWeight: 500,
+              padding: "0 12px",
+            }}
+          />
+        </div>
       </div>
     </header>
   );

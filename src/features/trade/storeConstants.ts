@@ -1,6 +1,7 @@
 export const MODE_INTERVAL_SECONDS = 5;
 export const MODE_PRICE_STEP = 25;
-export const DEFAULT_BET_AMOUNT_WLD = 1;
+// Default bid size in SOL (smallest option)
+export const DEFAULT_BET_AMOUNT_SOL = 0.01;
 export const MAX_FOLLOWED_ORDER_ACTIVITIES = 200;
 
 // Very slow smoothing (2%) so each price tick moves serverTimeOffset by at most

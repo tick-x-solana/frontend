@@ -1,12 +1,11 @@
 "use client";
 
 import { WalletMinimal, X } from "lucide-react";
-import WldMarketIcon from "@/src/assets/icons/wld-market.svg";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import TradingOrdersPanel from "@/src/features/trade/components/TradingOrdersPanel";
 import { Button } from "@/src/components/shadcn/button";
 import { useGameStore } from "@/src/features/trade/store";
-import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
+import useSolUsdPrice from "@/src/hooks/useSolUsdPrice";
 import { cn } from "@/lib/utils";
 import { useAuthControllerGetPublicProfile } from "@/src/services/queries";
 import {
@@ -17,7 +16,7 @@ import {
 import Image from "next/image";
 import { useMemo } from "react";
 
-const BID_OPTIONS_WLD = [1, 2, 5, 10];
+const BID_OPTIONS_SOL = [0.01, 0.03, 0.05, 0.1];
 
 type TradeControlsPanelProps = {
   className?: string;
@@ -36,7 +35,7 @@ type TradeControlsPanelProps = {
 export default function TradeControlsPanel({
   className,
   contentClassName,
-  marketSymbol = "BTC/USD",
+  marketSymbol = "SOL/USDT",
   displayPrice = "--",
   showMarketHeader = false,
   showHandle = false,
@@ -54,7 +53,7 @@ export default function TradeControlsPanel({
   const desktopOrdersQueryAnchorTime = useGameStore(
     (s) => s.desktopOrdersQueryAnchorTime,
   );
-  const { data: wldUsdPrice } = useWldUsdPrice();
+  const { data: solUsdPrice } = useSolUsdPrice();
   const { data: publicProfileResponse } = useAuthControllerGetPublicProfile(
     { address: normalizedAddress },
     { query: { enabled: Boolean(normalizedAddress) } },
@@ -70,17 +69,18 @@ export default function TradeControlsPanel({
   }, [publicProfileResponse]);
 
   const selectedBid =
-    BID_OPTIONS_WLD.find((amount) => Math.abs(amount - betAmount) < 1e-9) ??
-    BID_OPTIONS_WLD[0];
+    BID_OPTIONS_SOL.find((amount) => Math.abs(amount - betAmount) < 1e-9) ??
+    BID_OPTIONS_SOL[0];
   const displayIdentity = username?.trim()
     ? `@${username.trim()}`
-    : formatWalletAddress(rawAddress, { start: 7, end: 7, minLength: 14 });
+    : formatWalletAddress(rawAddress);
+
   const marketPriceLabel =
     displayPrice === "--" ? displayPrice : `~ ${displayPrice}`;
   const selectedBidApproxUsd = formatApproxUsd(
     selectedBid,
-    typeof wldUsdPrice === "number" && Number.isFinite(wldUsdPrice)
-      ? wldUsdPrice
+    typeof solUsdPrice === "number" && Number.isFinite(solUsdPrice)
+      ? solUsdPrice
       : null,
     { includeApproxPrefix: true },
   );
@@ -154,8 +154,7 @@ export default function TradeControlsPanel({
                 Balance:
               </p>
               <p className="text-primary-light flex items-center gap-1 font-mono text-sm font-bold tracking-[-0.01em]">
-                {formatCompactNumber(balance)}{" "}
-                <WldMarketIcon aria-hidden className="size-4" />
+                {formatCompactNumber(balance)} SOL
               </p>
             </div>
           </div>
@@ -166,10 +165,10 @@ export default function TradeControlsPanel({
             BID SIZE
           </p>
           <div className="flex items-center gap-2">
-            <WldMarketIcon aria-hidden className="size-4" />
+            <Image src="/sol.png" alt="SOL" width={16} height={16} />
             <div className="flex items-center gap-1">
               <p className="text-text-main text-sm font-medium tracking-[-0.01em]">
-                {selectedBid.toFixed(0)} WLD
+                {selectedBid} SOL
               </p>
               {selectedBidApproxUsd ? (
                 <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">
@@ -181,11 +180,11 @@ export default function TradeControlsPanel({
         </section>
 
         <section className="flex items-center gap-2">
-          {BID_OPTIONS_WLD.map((amountWld) => {
-            const isSelected = selectedBid === amountWld;
+          {BID_OPTIONS_SOL.map((amountSol) => {
+            const isSelected = selectedBid === amountSol;
             return (
               <Button
-                key={amountWld}
+                key={amountSol}
                 type="button"
                 variant="outline"
                 className={cn(
@@ -194,9 +193,9 @@ export default function TradeControlsPanel({
                     ? "border-border-primary bg-surface-selected text-text-link-main hover:bg-surface-control-active hover:text-primary-light"
                     : "border-border-main bg-background-main text-text-main hover:bg-surface-overlay-medium hover:text-text-heading",
                 )}
-                onClick={() => setBetAmount(amountWld)}
+                onClick={() => setBetAmount(amountSol)}
               >
-                {amountWld} WLD
+                {amountSol}
               </Button>
             );
           })}

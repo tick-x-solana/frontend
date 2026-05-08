@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Copy, Share2 } from "lucide-react";
+import { Share2 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { Sheet } from "react-modal-sheet";
 import {
   Table,
   TableBody,
@@ -13,15 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/src/components/shadcn/table";
-import { Button } from "@/src/components/shadcn/button";
 import { useAuth } from "@/src/components/providers/AuthProvider";
-import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
+import useSolUsdPrice from "@/src/hooks/useSolUsdPrice";
 import useWinShareActions from "@/src/hooks/useWinShareActions";
-import { WinShareCard } from "@/src/features/trade/components/WinShareCard";
+import { TradingShareSheet } from "@/src/features/trade/components/tradingGrid.panels";
 import { useOrderControllerGetUserOrders } from "@/src/services/queries";
 import {
   formatFixedTwoDecimal,
-  formatIntegerNumber,
   formatOneDecimalNumber,
 } from "@/src/utils/formatters";
 import { cn } from "@/lib/utils";
@@ -34,7 +31,7 @@ interface TradingHistoryItem {
   id: string;
   market: string;
   amountUsd: number | null;
-  amountWld: number | null;
+  amountSol: number | null;
   multiplier: number | null;
   pnl: number | null;
   settledWin: boolean | null;
@@ -96,9 +93,9 @@ function formatMoney(value: number | null): string {
   return `$${formatFixedTwoDecimal(value)}`;
 }
 
-function formatWld(value: number | null): string {
-  if (value === null) return "-- WLD";
-  return `${formatIntegerNumber(Math.round(value))} WLD`;
+function formatSol(value: number | null): string {
+  if (value === null) return "-- SOL";
+  return `${value.toFixed(4)} SOL`;
 }
 
 function formatMultiplier(value: number | null): string {
@@ -147,7 +144,7 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
   const placedQuotePriceUsd = asNumber(record.placedQuotePriceUsd);
   const amountBetWld =
     asNumber(record.amount) ??
-    asNumber(record.amountWld) ??
+    asNumber(record.amountSol) ??
     asNumber(record.tokenAmount) ??
     asNumber(record.size) ??
     asNumber(record.quantity) ??
@@ -160,7 +157,7 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
       ? amountBetWld * placedQuotePriceUsd
       : null) ??
     null;
-  const amountWld = amountBetWld;
+  const amountSol = amountBetWld;
   const multiplier =
     asNumber(record.multiplier) ??
     asNumber(record.rewardRate) ??
@@ -173,7 +170,13 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
     asBoolean(record.settledWin) ??
     asBoolean(record.isWin) ??
     asBoolean(record.win) ??
-    null;
+    asBoolean(record.isWinning) ??
+    asBoolean(record.won) ??
+    (status === "WIN" || status === "WON" || status === "SETTLED_WIN" || status === "CLOSED_WIN"
+      ? true
+      : status === "LOSE" || status === "LOST" || status === "FAILED" || status === "FAIL" || status === "LOSS"
+        ? false
+        : null);
 
   const directPnl =
     asNumber(record.pnl) ??
@@ -191,8 +194,13 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
     status === "LOSE" ||
     status === "LOST" ||
     status === "FAILED" ||
-    status === "FAIL";
-  const statusIsWin = status === "WIN" || status === "WON";
+    status === "FAIL" ||
+    status === "LOSS";
+  const statusIsWin =
+    status === "WIN" ||
+    status === "WON" ||
+    status === "SETTLED_WIN" ||
+    status === "CLOSED_WIN";
 
   const pnl =
     directPnl ??
@@ -259,7 +267,7 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
       `${market}-${timestampMs}-${amountUsd ?? 0}`,
     market,
     amountUsd,
-    amountWld,
+    amountSol,
     multiplier,
     pnl,
     settledWin,
@@ -288,8 +296,8 @@ function isWinRow(item: TradingHistoryItem): boolean {
 
 const TradingHistoryTable = () => {
   const { isAuthenticated, isLoggingIn, username, walletAddress } = useAuth();
-  const { data: wldUsdPrice } = useWldUsdPrice(isAuthenticated && !isLoggingIn);
-  const { isSharing, shareUrl, copyShareLink, share, shareToWorldChat } =
+  const { data: solUsdPrice } = useSolUsdPrice(isAuthenticated && !isLoggingIn);
+  const { isSharing, shareUrl, copyShareLink, share } =
     useWinShareActions({ username, walletAddress });
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
   const [shareItemId, setShareItemId] = useState<string | null>(null);
@@ -313,28 +321,31 @@ const TradingHistoryTable = () => {
       .map(toHistoryItem)
       .filter((item): item is TradingHistoryItem => item !== null)
       .map((item) => {
-        if (!wldUsdPrice || wldUsdPrice <= 0) {
+        if (!solUsdPrice || solUsdPrice <= 0) {
           return item;
         }
 
-        if (item.amountUsd === null && item.amountWld !== null) {
-          return {
-            ...item,
-            amountUsd: item.amountWld * wldUsdPrice,
-          };
+        let resolved = item;
+
+        if (item.amountUsd === null && item.amountSol !== null) {
+          resolved = { ...resolved, amountUsd: item.amountSol * solUsdPrice };
+        } else if (item.amountUsd !== null) {
+          resolved = { ...resolved, amountSol: item.amountUsd / solUsdPrice };
         }
 
-        if (item.amountUsd === null) {
-          return item;
+        // Recalculate pnl now that amountUsd is resolved
+        if (resolved.pnl === null && resolved.amountUsd !== null && !resolved.inProgress) {
+          if (resolved.settledWin === false) {
+            resolved = { ...resolved, pnl: -Math.abs(resolved.amountUsd) };
+          } else if (resolved.settledWin === true && resolved.multiplier !== null) {
+            resolved = { ...resolved, pnl: resolved.amountUsd * Math.max(resolved.multiplier - 1, 0) };
+          }
         }
 
-        return {
-          ...item,
-          amountWld: item.amountUsd / wldUsdPrice,
-        };
+        return resolved;
       })
       .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [data, wldUsdPrice]);
+  }, [data, solUsdPrice]);
 
   const emptyState = !isLoading && items.length === 0;
   const selectedShareItem = useMemo(
@@ -366,26 +377,31 @@ const TradingHistoryTable = () => {
   };
 
   return (
-    <div className="bg-background-surface border-border-main relative z-10 overflow-hidden rounded-[8px] border">
-      <div className="px-4 py-6">
-        <h3 className="text-text-main text-[20px] font-semibold">
+    <div className="bg-background-surface border-border-main relative z-10 overflow-hidden rounded-[12px] border">
+      <div className="border-border-main flex items-center justify-between border-b px-5 py-4">
+        <h3 className="text-text-main text-[18px] font-semibold tracking-[-0.02em]">
           Trading History
         </h3>
+        {!isLoading && items.length > 0 && (
+          <span className="text-hint bg-surface-overlay-subtle rounded-full px-2.5 py-0.5 text-[12px] font-medium">
+            {items.length} trades
+          </span>
+        )}
       </div>
-      <div className="max-h-[460px] overflow-y-auto">
+      <div className="max-h-[calc(100vh-220px)] overflow-y-auto">
         <Table className="text-text-main w-full table-fixed border-collapse">
-          <TableHeader className="border-border-main sticky top-0 z-10 border-y">
-            <TableRow className="bg-surface-overlay-subtle border-border-main hover:bg-surface-overlay-subtle">
-              <TableHead className="text-text-sub w-[140px] px-4 py-3 text-[14px] font-normal">
+          <TableHeader className="border-border-main sticky top-0 z-10 border-b">
+            <TableRow className="bg-background-surface border-border-main hover:bg-background-surface">
+              <TableHead className="text-hint w-[150px] px-5 py-3 text-[11px] font-medium tracking-[0.04em] uppercase">
                 Size
               </TableHead>
-              <TableHead className="text-text-sub w-[70px] px-4 py-3 text-[14px] font-normal">
+              <TableHead className="text-hint w-[80px] px-4 py-3 text-[11px] font-medium tracking-[0.04em] uppercase">
                 Mult
               </TableHead>
-              <TableHead className="text-text-sub w-[130px] px-4 py-3 text-[14px] font-normal">
+              <TableHead className="text-hint w-[140px] px-4 py-3 text-[11px] font-medium tracking-[0.04em] uppercase">
                 PNL
               </TableHead>
-              <TableHead className="text-text-sub bg-surface-overlay-subtle w-[170px] px-4 py-3 text-[14px] font-normal whitespace-nowrap">
+              <TableHead className="text-hint bg-background-surface w-[160px] px-4 py-3 text-[11px] font-medium tracking-[0.04em] uppercase whitespace-nowrap">
                 When
               </TableHead>
             </TableRow>
@@ -395,7 +411,7 @@ const TradingHistoryTable = () => {
               <TableRow className="border-border-main hover:bg-background-main">
                 <TableCell
                   colSpan={4}
-                  className="text-hint px-4 py-6 text-center text-[14px]"
+                  className="text-hint px-5 py-10 text-center text-[14px]"
                 >
                   Loading trading history...
                 </TableCell>
@@ -406,7 +422,7 @@ const TradingHistoryTable = () => {
               <TableRow className="border-border-main hover:bg-background-main">
                 <TableCell
                   colSpan={4}
-                  className="text-hint px-4 py-6 text-center text-[14px]"
+                  className="text-hint px-5 py-10 text-center text-[14px]"
                 >
                   No trading records yet.
                 </TableCell>
@@ -426,86 +442,23 @@ const TradingHistoryTable = () => {
         </Table>
       </div>
 
-      <Sheet
+      <TradingShareSheet
         isOpen={isShareSheetOpen}
         onClose={() => setIsShareSheetOpen(false)}
-        detent="content"
-        unstyled
-      >
-        <Sheet.Backdrop
-          onTap={() => setIsShareSheetOpen(false)}
-          className="bg-background-main/55 backdrop-blur-[2px]"
-        />
-        <Sheet.Container className="pointer-events-none">
-          <Sheet.Content
-            disableDrag={false}
-            className="bg-background-main border-border-main pointer-events-auto rounded-t-[16px] border-t"
-          >
-            {selectedShareItem ? (
-              <div className="mx-auto w-full max-w-[400px]">
-                <WinShareCard
-                  marketSymbol={selectedShareItem.market}
-                  multiplier={selectedShareMultiplier}
-                  amount={selectedShareAmountUsd}
-                  openedAt={selectedShareItem.createdAtLabel}
-                  profit={selectedShareProfit}
-                />
-                <div className="px-5 pb-5">
-                  <div className="flex flex-col gap-4">
-                    <p className="text-hint text-sm font-medium tracking-[-0.01em]">
-                      Share your win
-                    </p>
-                    <div className="bg-surface-overlay rounded-[8px] px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <p className="text-text-heading min-w-0 flex-1 truncate text-sm font-medium tracking-[-0.01em]">
-                          {shareUrl}
-                        </p>
-                        <button
-                          type="button"
-                          className="text-text-sub hover:text-text-heading flex size-5 items-center justify-center"
-                          onClick={copyShareLink}
-                          aria-label="Copy share link"
-                        >
-                          <Copy className="size-4" strokeWidth={1.9} />
-                        </button>
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      className="bg-primary-medium text-text-inverse hover:bg-primary-light h-11 rounded-[8px] text-base font-medium tracking-[-0.01em]"
-                      onClick={share}
-                      disabled={isSharing}
-                    >
-                      <Share2 className="mr-2 size-4" strokeWidth={1.9} />
-                      {isSharing ? "Sharing..." : "Share"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="border-primary-light text-text-heading hover:bg-surface-overlay-subtle h-11 rounded-[8px] bg-transparent text-base font-medium tracking-[-0.01em]"
-                      onClick={() =>
-                        void shareToWorldChat({
-                          metrics: {
-                            winRate: shareWinRate,
-                            pnl:
-                              selectedShareProfit > 0
-                                ? `+${formatMoney(selectedShareProfit)}`
-                                : formatMoney(selectedShareProfit),
-                            roi: selectedShareRoi,
-                          },
-                        })
-                      }
-                    >
-                      <Share2 className="mr-2 size-4" strokeWidth={1.9} />
-                      WorldChat
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </Sheet.Content>
-        </Sheet.Container>
-      </Sheet>
+        marketSymbol={selectedShareItem?.market ?? ""}
+        selectedShareCell={
+          selectedShareItem ? { multiplier: selectedShareMultiplier } : null
+        }
+        selectedShareAmountUsd={selectedShareAmountUsd}
+        selectedShareTime={selectedShareItem?.createdAtLabel ?? ""}
+        selectedShareProfitUsd={selectedShareProfit}
+        shareUrl={shareUrl}
+        copyShareLink={copyShareLink}
+        isSharing={isSharing}
+        share={share}
+        shareWinRate={shareWinRate}
+        selectedShareRoi={selectedShareRoi}
+      />
     </div>
   );
 };
@@ -517,29 +470,40 @@ interface FragmentRowProps {
 
 const FragmentRow = ({ item, onShare }: FragmentRowProps) => {
   const canShareWin = isWinRow(item);
+  const isWin = isWinRow(item);
+  const isLoss = !item.inProgress && item.settledWin === false;
 
   return (
-    <TableRow className="border-border-main bg-background-main hover:bg-surface-overlay-subtle group border-l-success-medium border-b border-l-2">
-      <TableCell className="px-4 py-2">
+    <TableRow
+      className={cn(
+        "group border-b transition-colors",
+        "border-border-main bg-background-main hover:bg-surface-overlay-subtle",
+        isWin && "border-l-2 border-l-success-medium",
+        isLoss && "border-l-2 border-l-warning-medium",
+        item.inProgress && "border-l-2 border-l-primary-light",
+        !isWin && !isLoss && !item.inProgress && "border-l-2 border-l-transparent",
+      )}
+    >
+      <TableCell className="px-5 py-3">
         <p className="text-text-main text-[14px] font-semibold">
           {formatMoney(item.amountUsd)}
         </p>
-        <p className="text-hint text-[12px] font-semibold uppercase">
-          {formatWld(item.amountWld)}
+        <p className="text-hint mt-0.5 text-[11px] font-medium uppercase tracking-[0.02em]">
+          {formatSol(item.amountSol)}
         </p>
       </TableCell>
-      <TableCell className="px-4 py-2 align-middle">
-        <p className="text-success-light text-[14px] font-normal">
+      <TableCell className="px-4 py-3 align-middle">
+        <span className="bg-surface-overlay-subtle text-text-sub rounded-full px-2 py-0.5 text-[13px] font-medium">
           {formatMultiplier(item.multiplier)}
-        </p>
+        </span>
       </TableCell>
-      <TableCell className="px-4 py-2 align-middle">
+      <TableCell className="px-4 py-3 align-middle">
         <div className="flex items-center justify-between gap-2">
           <p
             className={cn(
-              "min-w-0 truncate text-[14px] font-medium",
+              "min-w-0 truncate text-[14px] font-semibold",
               item.inProgress
-                ? "text-text-main"
+                ? "text-primary-light"
                 : item.pnl !== null && item.pnl >= 0
                   ? "text-success-medium"
                   : "text-warning-medium",
@@ -550,7 +514,7 @@ const FragmentRow = ({ item, onShare }: FragmentRowProps) => {
           {canShareWin ? (
             <button
               type="button"
-              className="bg-background-main/90 border-border-main text-grid-accent hover:bg-surface-overlay-subtle flex h-7 min-h-7 w-7 min-w-7 shrink-0 items-center justify-center rounded-full border p-0"
+              className="bg-background-main/90 border-border-main text-grid-accent hover:bg-surface-overlay-subtle flex h-7 min-h-7 w-7 min-w-7 shrink-0 items-center justify-center rounded-full border p-0 opacity-0 transition-opacity group-hover:opacity-100"
               onClick={(event) => {
                 event.stopPropagation();
                 onShare(item.id);
@@ -562,7 +526,7 @@ const FragmentRow = ({ item, onShare }: FragmentRowProps) => {
           ) : null}
         </div>
       </TableCell>
-      <TableCell className="text-text-sub bg-background-main group-hover:bg-surface-overlay-subtle w-[170px] px-4 py-2 align-middle text-[14px] font-normal whitespace-nowrap">
+      <TableCell className="text-text-sub bg-background-main group-hover:bg-surface-overlay-subtle w-[160px] px-4 py-3 align-middle text-[13px] font-normal whitespace-nowrap">
         {item.whenLabel}
       </TableCell>
     </TableRow>

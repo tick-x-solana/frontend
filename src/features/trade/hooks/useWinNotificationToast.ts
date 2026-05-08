@@ -9,7 +9,6 @@ import {
   formatWalletShort,
   type WinBetBannerData,
 } from "@/src/features/trade/components/tradingGrid.utils";
-import { getAddress, isAddress } from "viem";
 
 type SocketLike = {
   on: (event: string, handler: (payload: unknown) => void) => void;
@@ -32,6 +31,12 @@ function isSocketLike(value: unknown): value is SocketLike {
 
   const record = value as Record<string, unknown>;
   return typeof record.on === "function" && typeof record.off === "function";
+}
+
+/** Returns true for Solana base58 addresses and EVM 0x addresses. */
+function isWalletAddress(value: string): boolean {
+  if (value.startsWith("0x") && value.length === 42) return true;
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value);
 }
 
 function extractWinNotificationMessage(
@@ -66,8 +71,8 @@ function extractWinNotificationMessage(
   console.log("displayName: ", displayName);
   return {
     userId,
-    displayName: isAddress(displayName)
-      ? formatWalletShort(getAddress(displayName))
+    displayName: isWalletAddress(displayName)
+      ? formatWalletShort(displayName)
       : displayName,
     humanVerified,
     payoutAmount,
@@ -78,15 +83,15 @@ function extractWinNotificationMessage(
 
 function toWinBetBannerData(
   payload: WinNotificationMessage,
-  wldUsdPrice: number | null,
+  solUsdPrice: number | null,
 ): WinBetBannerData | null {
-  const payoutAmountWld = Number(payload.payoutAmount);
+  const payoutAmountSol = Number(payload.payoutAmount);
   if (
-    !Number.isFinite(payoutAmountWld) ||
-    payoutAmountWld <= 0 ||
-    typeof wldUsdPrice !== "number" ||
-    !Number.isFinite(wldUsdPrice) ||
-    wldUsdPrice <= 0
+    !Number.isFinite(payoutAmountSol) ||
+    payoutAmountSol <= 0 ||
+    typeof solUsdPrice !== "number" ||
+    !Number.isFinite(solUsdPrice) ||
+    solUsdPrice <= 0
   ) {
     return null;
   }
@@ -98,7 +103,7 @@ function toWinBetBannerData(
 
   return {
     username,
-    amount: payoutAmountWld * wldUsdPrice,
+    amount: payoutAmountSol * solUsdPrice,
     humanVerified: payload.humanVerified,
   };
 }
@@ -106,13 +111,13 @@ function toWinBetBannerData(
 type UseWinNotificationToastParams = {
   socket: unknown;
   marketId: string;
-  wldUsdPrice: number | null;
+  solUsdPrice: number | null;
 };
 
 export default function useWinNotificationToast({
   socket,
   marketId,
-  wldUsdPrice,
+  solUsdPrice,
 }: UseWinNotificationToastParams) {
   const [winToastData, setWinToastData] = useState<WinBetBannerData | null>(
     null,
@@ -132,7 +137,7 @@ export default function useWinNotificationToast({
         return;
       }
 
-      const nextToastData = toWinBetBannerData(notification, wldUsdPrice);
+      const nextToastData = toWinBetBannerData(notification, solUsdPrice);
       if (!nextToastData) {
         return;
       }
@@ -156,7 +161,7 @@ export default function useWinNotificationToast({
         clearTimeout(hideToastTimerId);
       }
     };
-  }, [marketId, socket, wldUsdPrice]);
+  }, [marketId, socket, solUsdPrice]);
 
   return winToastData;
 }

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { MiniKit } from "@worldcoin/minikit-js";
 import { ArrowLeft, Star, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -17,7 +16,6 @@ import { useAuth } from "@/src/components/providers/AuthProvider";
 import CopyTradeProfileCard, {
   type CopyTradeProfile,
 } from "@/src/features/referrals/components/CopyTradeProfileCard";
-import useWorldMiniAppChatPay from "@/src/hooks/useWorldMiniAppChatPay";
 import { extractOrderFollowings } from "@/src/features/trade/orderFollow";
 import {
   getOrderFollowControllerListFollowingQueryKey,
@@ -27,9 +25,6 @@ import {
 import { cn } from "@/lib/utils";
 
 const REFERRAL_CODE_STORAGE_KEY = "tickx-referral-code";
-const COPY_TRADE_PAYMENT_TO = "0x0cb3e84e2c4bf88032e2279e7dd11b4e75ba7303";
-const COPY_TRADE_PAYMENT_AMOUNT_WLD = 0.001;
-const COPY_TRADE_PAYMENT_DESCRIPTION = "Hello";
 const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
 
 function normalizeWorldUsername(value: string): string {
@@ -44,7 +39,6 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isAuthenticated, isLoggingIn } = useAuth();
-  const { payWld, isPaying } = useWorldMiniAppChatPay();
   const { mutateAsync: registerOrderFollow } =
     useOrderFollowControllerRegister();
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
@@ -66,23 +60,12 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
     window.localStorage.setItem(REFERRAL_CODE_STORAGE_KEY, refCode);
   }, [refCode]);
 
+  // On Solana the refCode must be a direct wallet address (base58 or EVM hex for legacy paths).
   const resolveKolWalletAddress = useCallback(
     async (usernameOrWallet: string) => {
       const normalized = normalizeWorldUsername(usernameOrWallet);
-      if (!normalized) {
-        throw new Error("Missing referral username");
-      }
-
-      if (EVM_ADDRESS_REGEX.test(normalized)) {
-        return normalized;
-      }
-
-      const user = await MiniKit.getUserByUsername(normalized);
-      if (!user.walletAddress || !EVM_ADDRESS_REGEX.test(user.walletAddress)) {
-        throw new Error(`Cannot resolve wallet for username "${normalized}"`);
-      }
-
-      return user.walletAddress;
+      if (!normalized) throw new Error("Missing referral code");
+      return normalized;
     },
     [],
   );
@@ -168,9 +151,9 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
   );
 
   const handleCloseCopyTradeModal = useCallback(() => {
-    if (isPaying || isSubmittingFollow) return;
+    if (isSubmittingFollow) return;
     setIsPayModalOpen(false);
-  }, [isPaying, isSubmittingFollow]);
+  }, [isSubmittingFollow]);
   const handlePayModalOpenChange = useCallback(
     (open: boolean) => {
       if (open) {
@@ -191,29 +174,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
         selectedProfile.targetUserId ??
         (await resolveKolWalletAddress(selectedProfile.username));
 
-      const payPromise = payWld({
-        to: COPY_TRADE_PAYMENT_TO,
-        amountWld: COPY_TRADE_PAYMENT_AMOUNT_WLD,
-        description: COPY_TRADE_PAYMENT_DESCRIPTION,
-        fallback: () => {
-          console.log("[Referrals] MiniKit fallback callback triggered");
-        },
-      });
-      void payPromise
-        .then((result) => {
-          console.log("[Referrals] payWld resolved", { result });
-        })
-        .catch((error: unknown) => {
-          console.error("[Referrals] payWld failed", { error });
-        });
-
-      await payPromise;
-
-      await registerOrderFollow({
-        data: {
-          targetUserId,
-        },
-      });
+      await registerOrderFollow({ data: { targetUserId } });
 
       await queryClient.invalidateQueries({
         queryKey: getOrderFollowControllerListFollowingQueryKey(),
@@ -222,20 +183,12 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
       toast.success("Follow trade started successfully.");
       setIsPayModalOpen(false);
     } catch (error) {
-      console.error("[ReferralCopyTradingPage] Failed to start follow trade", {
-        error,
-      });
+      console.error("[ReferralCopyTradingPage] Failed to start follow trade", { error });
       toast.error("Unable to start follow trade. Please try again.");
     } finally {
       setIsSubmittingFollow(false);
     }
-  }, [
-    payWld,
-    queryClient,
-    registerOrderFollow,
-    resolveKolWalletAddress,
-    selectedProfile,
-  ]);
+  }, [queryClient, registerOrderFollow, resolveKolWalletAddress, selectedProfile]);
 
   return (
     <section className="bg-background-main mx-auto flex min-h-[100dvh] w-full max-w-[393px] flex-col">
@@ -356,7 +309,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
                 <div className="bg-surface-overlay-subtle border-border-main flex items-center justify-between gap-2 rounded-[8px] border px-3 py-2">
                   <p className="text-text-sub text-xs font-medium tracking-[-0.01em]">Follow fee</p>
                   <p className="text-text-heading text-sm font-semibold tracking-[-0.01em]">
-                    {COPY_TRADE_PAYMENT_AMOUNT_WLD} WLD
+                    Free
                   </p>
                 </div>
 
@@ -367,7 +320,7 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
                     variant="outline"
                     className="border-border-main text-text-inverse hover:text-text-inverse disabled:opacity-100 h-11 rounded-[8px] bg-white text-sm font-medium tracking-[-0.01em] hover:bg-white/90"
                     onClick={handleCloseCopyTradeModal}
-                    disabled={isPaying || isSubmittingFollow}
+                    disabled={isSubmittingFollow}
                   >
                     Cancel
                   </Button>
@@ -375,9 +328,9 @@ const ReferralCopyTradingPage = ({ refCode }: ReferralCopyTradingPageProps) => {
                     type="button"
                     className="bg-primary-light text-text-inverse hover:bg-primary-light/90 h-11 rounded-[8px] text-sm font-medium tracking-[-0.01em]"
                     onClick={() => void handleConfirmCopyTrade()}
-                    disabled={isPaying || isSubmittingFollow}
+                    disabled={isSubmittingFollow}
                   >
-                    {isPaying || isSubmittingFollow ? "Processing..." : "Copy Trade"}
+                    {isSubmittingFollow ? "Processing..." : "Copy Trade"}
                   </Button>
                 </div>
               </div>

@@ -138,6 +138,9 @@ export function parseAddress(value: string | null | undefined): string | null {
   const trimmed = value.trim();
   if (trimmed.length === 0) return null;
 
+  // Solana base58 addresses don't start with 0x — skip EVM checksum
+  if (!trimmed.startsWith("0x")) return trimmed;
+
   try {
     return getAddress(trimmed);
   } catch {
@@ -413,8 +416,8 @@ export function extractBinanceKlineHistory(value: unknown): StoreSnapshot["histo
   return points;
 }
 
-export function formatApproxUsd(amountWld: number, wldUsdPrice: number | null) {
-  return formatApproxUsdValue(amountWld, wldUsdPrice);
+export function formatApproxUsd(amountSol: number, solUsdPrice: number | null) {
+  return formatApproxUsdValue(amountSol, solUsdPrice);
 }
 
 export function areBooleanMapsEqual(
