@@ -29,6 +29,7 @@ import {
   resolveRemoteCellFromOrderPayload,
   resolveRewardRate,
 } from "./storeUtils";
+import { USER_ORDERS_FETCH_LIMIT } from "@/src/constants";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ interface GameState {
   priceStepChangedAt: number | null;
   isDesktopOrdersVisible: boolean;
   desktopOrdersQueryAnchorTime: number | null;
+  recentOrderUpdates: Record<string, unknown>[];
 
   setBetAmount: (amount: number) => void;
   setDesktopOrdersPanel: (
@@ -133,6 +135,7 @@ export const useGameStore = create<GameState>((set) => ({
   priceStepChangedAt: null,
   isDesktopOrdersVisible: false,
   desktopOrdersQueryAnchorTime: null,
+  recentOrderUpdates: [],
 
   resetGridData: () =>
     set({ cells: [], history: [], currentPrice: 0, basePrice: 0 }),
@@ -140,10 +143,11 @@ export const useGameStore = create<GameState>((set) => ({
   setBetAmount: (amount) => set({ betAmount: amount }),
 
   setDesktopOrdersPanel: (isVisible, queryAnchorTime = null) =>
-    set({
+    set((state) => ({
       isDesktopOrdersVisible: isVisible,
       desktopOrdersQueryAnchorTime: isVisible ? queryAnchorTime : null,
-    }),
+      recentOrderUpdates: isVisible ? [] : state.recentOrderUpdates,
+    })),
 
   setConnection: (socket, wssKey = null) => set({ socket, wssKey }),
 
@@ -444,12 +448,28 @@ export const useGameStore = create<GameState>((set) => ({
    */
   updateOrder: (payload) =>
     set((state) => {
-      const cellId = resolveOrderCellId(payload);
-      if (!cellId) return state;
-
       const record =
         payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
       if (!record) return state;
+
+      const orderIdentityRaw = toNonEmptyString(record.orderId) ?? toNonEmptyString(record.id);
+      const recentOrderUpdates =
+        !state.isDesktopOrdersVisible || orderIdentityRaw === null
+          ? state.recentOrderUpdates
+          : [
+              record,
+              ...state.recentOrderUpdates.filter((item) => {
+                const itemOrderId =
+                  toNonEmptyString(item.orderId) ?? toNonEmptyString(item.id);
+                return itemOrderId !== orderIdentityRaw;
+              }),
+            ].slice(0, USER_ORDERS_FETCH_LIMIT);
+
+      const cellId = resolveOrderCellId(payload);
+      if (!cellId) {
+        if (recentOrderUpdates === state.recentOrderUpdates) return state;
+        return { recentOrderUpdates };
+      }
 
       const status = toNonEmptyString(record.status)?.toUpperCase();
       const amount = toFiniteNumber(record.amount);
@@ -602,7 +622,10 @@ export const useGameStore = create<GameState>((set) => ({
         return nextCell;
       });
 
-      if (!changed) return state;
+      if (!changed) {
+        if (recentOrderUpdates === state.recentOrderUpdates) return state;
+        return { recentOrderUpdates };
+      }
 
       return {
         cells: nextCells,
@@ -611,6 +634,7 @@ export const useGameStore = create<GameState>((set) => ({
         pendingWins: nextPendingWins,
         settledOutcomes: nextSettledOutcomes,
         balance: state.serverBalance,
+        recentOrderUpdates,
       };
     }),
 }));

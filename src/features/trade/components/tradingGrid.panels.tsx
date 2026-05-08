@@ -118,9 +118,11 @@ export function TradingGridTopBar({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        <GridActionButton aria-label="Market info" onClick={onOpenInfo}>
-          <Info className="size-4" strokeWidth={1.75} />
-        </GridActionButton>
+        {false && (
+          <GridActionButton aria-label="Market info" onClick={onOpenInfo}>
+            <Info className="size-4" strokeWidth={1.75} />
+          </GridActionButton>
+        )}
         <GridActionButton
           aria-label="Open user bet orders"
           active={isOrdersVisible}

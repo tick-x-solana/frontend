@@ -6,6 +6,7 @@ import {
   USER_ORDERS_FETCH_LIMIT,
   USER_ORDERS_LOOKBACK_MS,
 } from "@/src/constants";
+import { useGameStore } from "@/src/features/trade/store";
 import { useOrderControllerGetUserOrders } from "@/src/services/queries";
 import {
   formatCompactNumber,
@@ -342,6 +343,7 @@ export default function TradingOrdersPanel({
   showHeader = true,
 }: TradingOrdersPanelProps) {
   const { isAuthenticated, isLoggingIn } = useAuth();
+  const recentOrderUpdates = useGameStore((s) => s.recentOrderUpdates);
   const { data: solUsdPriceRaw } = useSolUsdPrice();
   const solUsdPrice =
     typeof solUsdPriceRaw === "number" && Number.isFinite(solUsdPriceRaw)
@@ -375,14 +377,18 @@ export default function TradingOrdersPanel({
   );
 
   const orders = useMemo(
-    () =>
-      extractOrders(data)
+    () => {
+      const mergedOrders = [...recentOrderUpdates, ...extractOrders(data)];
+      return mergedOrders
         .map((item) =>
           toRecentUserOrderItem(item, fallbackMarketLabel, solUsdPrice),
         )
         .filter((item): item is RecentUserOrderItem => item !== null)
-        .sort((a, b) => b.placedAtMs - a.placedAtMs),
-    [data, fallbackMarketLabel, solUsdPrice],
+        .sort((a, b) => b.placedAtMs - a.placedAtMs)
+        .filter((item, index, arr) => arr.findIndex((entry) => entry.id === item.id) === index)
+        .slice(0, USER_ORDERS_FETCH_LIMIT);
+    },
+    [data, fallbackMarketLabel, recentOrderUpdates, solUsdPrice],
   );
 
   const emptyMessage = !isAuthenticated

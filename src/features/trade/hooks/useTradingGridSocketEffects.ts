@@ -15,6 +15,7 @@ import {
 import {
   BALANCE_UPDATE_EVENT,
   CORE_SOCKET_PATH,
+  FORTRESS_MC_DIAGNOSTICS_EVENT,
   FOLLOW_ORDER_EVENTS,
   FOLLOWED_ORDER_UPDATE_EVENT,
   ORDER_UPDATE_EVENT,
@@ -178,6 +179,14 @@ export function useTradingGridSocketEffects({
       if (remoteCells) updateGrid(remoteCells);
     });
 
+    const handleFortressMcDiagnostics = (payload: unknown) => {
+      console.log("[TradingGrid] fortress_mc_diagnostics", payload);
+    };
+    unifiedSocket.on(
+      FORTRESS_MC_DIAGNOSTICS_EVENT,
+      handleFortressMcDiagnostics,
+    );
+
     socketRef.current = unifiedSocket;
     useGameStore.getState().setConnection(unifiedSocket, null);
 
@@ -185,6 +194,10 @@ export function useTradingGridSocketEffects({
       unifiedSocket.off("price_update", handlePricePayload);
       unifiedSocket.off("price_now", handlePricePayload);
       unifiedSocket.off("grid_update");
+      unifiedSocket.off(
+        FORTRESS_MC_DIAGNOSTICS_EVENT,
+        handleFortressMcDiagnostics,
+      );
       unifiedSocket.disconnect();
       socketRef.current = null;
       useGameStore.getState().setConnection(null, null);
