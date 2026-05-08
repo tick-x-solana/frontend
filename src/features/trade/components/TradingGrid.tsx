@@ -55,6 +55,7 @@ import useWinShareActions from "@/src/hooks/useWinShareActions";
 import useWldUsdPrice from "@/src/hooks/useWldUsdPrice";
 import {
   DEFAULT_DESKTOP_ZOOM,
+  DEFAULT_MOBILE_ZOOM,
   DESKTOP_ZOOM_MIN,
   FOLLOW_OVERLAY_SOCKET_UPDATE_MIN_INTERVAL_MS,
   FOLLOW_REFERRAL_STATS,
@@ -104,6 +105,15 @@ type TradingGridProps = {
 };
 
 const SHARE_BUTTON_HIDE_ZOOM_THRESHOLD = 0.3;
+const MOBILE_BREAKPOINT_PX = 640;
+
+function isMobileViewport(width: number): boolean {
+  return width < MOBILE_BREAKPOINT_PX;
+}
+
+function getViewportDefaultZoom(isMobile: boolean): number {
+  return isMobile ? DEFAULT_MOBILE_ZOOM : DEFAULT_DESKTOP_ZOOM;
+}
 
 export const TradingGrid: React.FC<TradingGridProps> = ({
   initialFollowRefCode = null,
@@ -258,16 +268,14 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
 
   // Live values in refs keep the animation loop stable without hook dependency churn.
   const initialIsMobile =
-    typeof window !== "undefined" ? window.innerWidth < 640 : false;
-  const initialDefaultZoom = initialIsMobile
-    ? MOBILE_ZOOM_MIN
-    : DEFAULT_DESKTOP_ZOOM;
+    typeof window !== "undefined" ? isMobileViewport(window.innerWidth) : false;
+  const initialDefaultZoom = getViewportDefaultZoom(initialIsMobile);
   const nowRef = useRef(0);
   const cameraPriceRef = useRef(currentPrice || 0);
   const isMobileRef = useRef(initialIsMobile);
   const sizeRef = useRef({ w: 0, h: 0 });
   const getDefaultZoom = useCallback(
-    () => (isMobileRef.current ? MOBILE_ZOOM_MIN : DEFAULT_DESKTOP_ZOOM),
+    () => getViewportDefaultZoom(isMobileRef.current),
     [],
   );
   const getMinZoom = useCallback(
@@ -1051,7 +1059,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
 
     const applySize = (w: number, h: number) => {
       sizeRef.current = { w, h };
-      isMobileRef.current = window.innerWidth < 640;
+      isMobileRef.current = isMobileViewport(window.innerWidth);
       const minZoom = getMinZoom();
       if (transformRef.current.zoom < minZoom) {
         transformRef.current = { ...transformRef.current, zoom: minZoom };

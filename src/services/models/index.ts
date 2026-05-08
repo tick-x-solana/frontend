@@ -25,6 +25,7 @@ export * from './leaderboardControllerGetLeaderboardMetric';
 export * from './leaderboardControllerGetLeaderboardParams';
 export * from './leaderboardControllerGetLeaderboardWindow';
 export * from './leaderboardEntryDto';
+export * from './leaderboardStatsDto';
 export * from './loginDto';
 export * from './miniAppLoginDto';
 export * from './miniAppVerifyHumanDto';

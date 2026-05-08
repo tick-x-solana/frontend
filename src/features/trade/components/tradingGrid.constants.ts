@@ -6,7 +6,7 @@ import {
 
 export const DESKTOP_ZOOM_MIN = 0.1;
 export const DEFAULT_DESKTOP_ZOOM = 0.4;
-export const DEFAULT_MOBILE_ZOOM = DEFAULT_DESKTOP_ZOOM;
+export const DEFAULT_MOBILE_ZOOM = 1;
 export const MOBILE_ZOOM_MIN = 0.2;
 export const MIN_PRICE_MOTION_MS = 250;
 export const MAX_PRICE_MOTION_MS = 5000;
@@ -63,9 +63,6 @@ export const MARKET_OPTIONS = [
   { symbol: "ETH/USD", shortLabel: "E", iconSrc: "/eth.png", enabled: true },
   { symbol: "WLD/USD", shortLabel: "B", iconSrc: null, enabled: false },
 ] as const;
-
-export const BINANCE_HISTORY_URL =
-  "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1s&limit=600";
 
 export const FOLLOW_REFERRAL_STATS = [
   { label: "Win rate", value: "68%", color: "text-success-medium" },

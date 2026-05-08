@@ -49,7 +49,8 @@ export const COLOR_RED_SOFT = "#FF5A6E";
 
 const PRICE_AXIS_MIN_LABEL_GAP_PX = 18;
 const TIME_AXIS_MIN_LABEL_GAP_PX = 56;
-const REWARD_RATE_LABEL_HIDE_ZOOM = 0.39;
+const MOBILE_REWARD_RATE_LABEL_HIDE_ZOOM = 0.8;
+const DESKTOP_REWARD_RATE_LABEL_HIDE_ZOOM = 0.3;
 const CELL_DETAIL_COMPACT_ZOOM = 0.5;
 const PRICE_AXIS_ZOOMED_OUT_LABEL_GAP_MULTIPLIER_CAP = 3;
 
@@ -93,6 +94,12 @@ function formatPriceLabel(value: number, marketId: string): string {
   return isEthUsdMarket
     ? priceLabelFormatterTwoDecimals.format(value)
     : priceLabelFormatterOneDecimal.format(value);
+}
+
+function getRewardRateLabelHideZoom(isMobile: boolean): number {
+  return isMobile
+    ? MOBILE_REWARD_RATE_LABEL_HIDE_ZOOM
+    : DESKTOP_REWARD_RATE_LABEL_HIDE_ZOOM;
 }
 
 function getPriceAxisMinLabelGapPx(layout: GridLayout) {
@@ -360,7 +367,8 @@ export function drawBetCells(
 
   // Closing window: cells whose window starts within this many ms cannot be bet on
   const CLOSING_MS = 5000;
-  const shouldHideRewardRateLabel = layout.zoom < REWARD_RATE_LABEL_HIDE_ZOOM;
+  const shouldHideRewardRateLabel =
+    layout.zoom < getRewardRateLabelHideZoom(isMobile);
   const shouldUseCompactCellDetail = layout.zoom < CELL_DETAIL_COMPACT_ZOOM;
   ctx.save();
   ctx.beginPath();

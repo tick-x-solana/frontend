@@ -160,8 +160,7 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
       ? amountBetWld * placedQuotePriceUsd
       : null) ??
     null;
-  const amountWld =
-    amountBetWld;
+  const amountWld = amountBetWld;
   const multiplier =
     asNumber(record.multiplier) ??
     asNumber(record.rewardRate) ??
@@ -375,7 +374,7 @@ const TradingHistoryTable = () => {
       </div>
       <div className="max-h-[460px] overflow-y-auto">
         <Table className="text-text-main w-full table-fixed border-collapse">
-          <TableHeader className="border-border-main border-y sticky top-0 z-10">
+          <TableHeader className="border-border-main sticky top-0 z-10 border-y">
             <TableRow className="bg-surface-overlay-subtle border-border-main hover:bg-surface-overlay-subtle">
               <TableHead className="text-text-sub w-[140px] px-4 py-3 text-[14px] font-normal">
                 Size
@@ -517,7 +516,6 @@ interface FragmentRowProps {
 }
 
 const FragmentRow = ({ item, onShare }: FragmentRowProps) => {
-  console.log("item: ", item);
   const canShareWin = isWinRow(item);
 
   return (

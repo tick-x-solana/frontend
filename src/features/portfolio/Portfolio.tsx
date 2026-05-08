@@ -9,24 +9,58 @@ import WalletActionPanel from "@/src/features/portfolio/components/WalletActionP
 import {
   getAccountControllerGetBalanceQueryKey,
   paymentControllerDebugDeposit,
+  useLeaderboardControllerGetMyStats,
 } from "@/src/services/queries";
+import type { LeaderboardStatsDto } from "@/src/services/models";
+import {
+  formatOneDecimalNumber,
+  formatUsdCurrency,
+  formatUsdCurrencyFixedTwo,
+} from "@/src/utils/formatters";
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-const overviewCards = [
-  { label: "Total Vol", value: "$4,250" },
-  { label: "Win Rate", value: "68.4%", valueClassName: "text-success-medium" },
-  {
-    label: "+Edge Earned",
-    value: "$14.20",
-    valueClassName: "text-primary-medium",
-  },
-];
-
 const FAUCET_AMOUNT_WLD = "50";
 const FAUCET_COOLDOWN_MS = 30 * 60 * 1000;
+
+function toFiniteNumber(value: string | null | undefined): number {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function extractLeaderboardStats(
+  value: unknown,
+): Partial<LeaderboardStatsDto> | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (
+    typeof record.totalVolume === "string" ||
+    typeof record.winRate === "string" ||
+    typeof record.pnl === "string"
+  ) {
+    return record as Partial<LeaderboardStatsDto>;
+  }
+
+  if (record.data && typeof record.data === "object") {
+    const nestedRecord = record.data as Record<string, unknown>;
+
+    if (
+      typeof nestedRecord.totalVolume === "string" ||
+      typeof nestedRecord.winRate === "string" ||
+      typeof nestedRecord.pnl === "string"
+    ) {
+      return nestedRecord as Partial<LeaderboardStatsDto>;
+    }
+  }
+
+  return null;
+}
 
 function getFaucetStorageKey(walletAddress: string | null): string | null {
   if (!walletAddress) {
@@ -47,6 +81,12 @@ function formatCooldown(remainingMs: number): string {
 const Portfolio = () => {
   const queryClient = useQueryClient();
   const { walletAddress } = useAuth();
+  const { data: myStatsResponse } = useLeaderboardControllerGetMyStats({
+    query: {
+      enabled: Boolean(walletAddress),
+    },
+  });
+  console.log("myStatsResponse: ", myStatsResponse);
   const [isFauceting, setIsFauceting] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
 
@@ -106,6 +146,27 @@ const Portfolio = () => {
 
     return "Faucet";
   }, [isFauceting, remainingCooldownMs, walletAddress]);
+
+  const overviewCards = useMemo(() => {
+    const stats = extractLeaderboardStats(myStatsResponse);
+    const totalVolume = toFiniteNumber(stats?.totalVolume);
+    const winRate = toFiniteNumber(stats?.winRate);
+    const pnl = toFiniteNumber(stats?.pnl);
+
+    return [
+      { label: "Total Vol", value: formatUsdCurrency(totalVolume) },
+      {
+        label: "Win Rate",
+        value: `${formatOneDecimalNumber(winRate)}%`,
+        valueClassName: "text-success-medium",
+      },
+      {
+        label: "+Edge Earned",
+        value: formatUsdCurrencyFixedTwo(pnl),
+        valueClassName: pnl < 0 ? "text-destructive" : "text-primary-medium",
+      },
+    ];
+  }, [myStatsResponse]);
 
   const handleFaucet = useCallback(async () => {
     if (!walletAddress) {
