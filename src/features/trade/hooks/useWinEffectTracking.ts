@@ -40,6 +40,22 @@ export function useWinEffectTracking({
   const hasInitializedWinEffectTrackingRef = useRef(false);
   // Lazy-initialized via useState so Date.now() runs once at mount, not on every render.
   const [componentMountedAt] = useState<number>(() => Date.now());
+  const effectTimeoutIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(
+    new Set(),
+  );
+
+  const clearScheduledEffectTimeouts = () => {
+    effectTimeoutIdsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+    effectTimeoutIdsRef.current.clear();
+  };
+
+  const scheduleEffectTimeout = (callback: () => void, delayMs: number) => {
+    const timeoutId = setTimeout(() => {
+      effectTimeoutIdsRef.current.delete(timeoutId);
+      callback();
+    }, delayMs);
+    effectTimeoutIdsRef.current.add(timeoutId);
+  };
 
   // Absorb pre-existing wins into the baseline when the price step changes so
   // cells reconstructed after a price-step clear do not fire spurious win animations.
@@ -104,6 +120,37 @@ export function useWinEffectTracking({
         }
         return nextValue;
       });
+
+      scheduleEffectTimeout(() => {
+        setActiveWinEffectByCellId((currentValue) => {
+          let changed = false;
+          const nextValue = { ...currentValue };
+
+          for (const cellId of newlyWinningCellIds) {
+            const currentCellState = nextValue[cellId];
+            if (!currentCellState || currentCellState.showTotal) continue;
+            nextValue[cellId] = { ...currentCellState, showTotal: true };
+            changed = true;
+          }
+
+          return changed ? nextValue : currentValue;
+        });
+      }, WIN_EFFECT_AMOUNTS_VISIBLE_MS);
+
+      scheduleEffectTimeout(() => {
+        setActiveWinEffectByCellId((currentValue) => {
+          let changed = false;
+          const nextValue = { ...currentValue };
+
+          for (const cellId of newlyWinningCellIds) {
+            if (nextValue[cellId] === undefined) continue;
+            delete nextValue[cellId];
+            changed = true;
+          }
+
+          return changed ? nextValue : currentValue;
+        });
+      }, WIN_EFFECT_VISIBLE_MS);
     }
 
     previousWinningCellIdsRef.current = nextWinningCellIds;
@@ -117,40 +164,12 @@ export function useWinEffectTracking({
     componentMountedAt,
   ]);
 
-  // Win-effect lifecycle: advance showTotal flag and expire finished effects.
+  // Cleanup any pending timers on unmount to avoid stale state updates.
   useEffect(() => {
-    if (Object.keys(activeWinEffectByCellId).length === 0) return;
-
-    const intervalId = setInterval(() => {
-      const tickNow = Date.now();
-      setActiveWinEffectByCellId((currentValue) => {
-        let changed = false;
-        const nextValue: Record<string, ActiveWinEffectState> = {};
-
-        for (const [cellId, cellState] of Object.entries(currentValue)) {
-          const elapsed = tickNow - cellState.startedAt;
-          if (elapsed >= WIN_EFFECT_VISIBLE_MS) {
-            changed = true;
-            continue;
-          }
-
-          const shouldShowTotal = elapsed >= WIN_EFFECT_AMOUNTS_VISIBLE_MS;
-          const nextCellState =
-            shouldShowTotal && !cellState.showTotal
-              ? { ...cellState, showTotal: true }
-              : cellState;
-          if (nextCellState !== cellState) {
-            changed = true;
-          }
-          nextValue[cellId] = nextCellState;
-        }
-
-        return changed ? nextValue : currentValue;
-      });
-    }, 100);
-
-    return () => clearInterval(intervalId);
-  }, [activeWinEffectByCellId]);
+    return () => {
+      clearScheduledEffectTimeouts();
+    };
+  }, []);
 
   const activeWinEffectCellIdSet = useMemo(
     () => new Set(Object.keys(activeWinEffectByCellId)),

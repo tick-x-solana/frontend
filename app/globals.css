@@ -403,6 +403,73 @@
   }
 }
 
+@keyframes bw-fly {
+  0% {
+    transform: translate(0, 0) scale(0) rotate(0deg);
+    opacity: 1;
+  }
+  20% {
+    opacity: 1;
+  }
+  36% {
+    opacity: 0.5;
+  }
+  42% {
+    transform: translate(var(--tx), var(--ty)) scale(1.3) rotate(var(--rt));
+    opacity: 0;
+  }
+  42.1% {
+    transform: translate(0, 0) scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(0, 0) scale(0) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+.bet-win-effect .bw-p {
+  fill: #d0f7dc;
+  font-family: Arial, sans-serif;
+  font-weight: 700;
+  filter: drop-shadow(0 0 8px #d0f7dc) drop-shadow(0 0 14px #a0ffbe);
+  transform-origin: 200px 200px;
+  transform: translate(0, 0) scale(0) rotate(0deg);
+  opacity: 0;
+  animation: bw-fly 2s cubic-bezier(0.1, 0.6, 0.3, 1);
+}
+
+.bet-win-effect .bw-p01 { --tx: 130px; --ty: -50px; --rt: 45deg; animation-delay: 0s; font-size: 16px; }
+.bet-win-effect .bw-p02 { --tx: -75px; --ty: -145px; --rt: -30deg; animation-delay: 0.03s; font-size: 24px; }
+.bet-win-effect .bw-p03 { --tx: 155px; --ty: 20px; --rt: 90deg; animation-delay: 0.06s; font-size: 14px; }
+.bet-win-effect .bw-p04 { --tx: -148px; --ty: 55px; --rt: -60deg; animation-delay: 0.09s; font-size: 22px; }
+.bet-win-effect .bw-p05 { --tx: 40px; --ty: 152px; --rt: 120deg; animation-delay: 0.12s; font-size: 18px; }
+.bet-win-effect .bw-p06 { --tx: -55px; --ty: -150px; --rt: -15deg; animation-delay: 0.15s; font-size: 26px; }
+.bet-win-effect .bw-p07 { --tx: 152px; --ty: -58px; --rt: 75deg; animation-delay: 0.18s; font-size: 13px; }
+.bet-win-effect .bw-p08 { --tx: -150px; --ty: -25px; --rt: -100deg; animation-delay: 0.21s; font-size: 23px; }
+.bet-win-effect .bw-p09 { --tx: 62px; --ty: -148px; --rt: 200deg; animation-delay: 0.24s; font-size: 19px; }
+.bet-win-effect .bw-p10 { --tx: -88px; --ty: 128px; --rt: -45deg; animation-delay: 0.27s; font-size: 15px; }
+.bet-win-effect .bw-p11 { --tx: 100px; --ty: 118px; --rt: 160deg; animation-delay: 0.05s; font-size: 25px; }
+.bet-win-effect .bw-p12 { --tx: -128px; --ty: -98px; --rt: -80deg; animation-delay: 0.08s; font-size: 12px; }
+.bet-win-effect .bw-p13 { --tx: 138px; --ty: -108px; --rt: 55deg; animation-delay: 0.11s; font-size: 20px; }
+.bet-win-effect .bw-p14 { --tx: -30px; --ty: 155px; --rt: -130deg; animation-delay: 0.14s; font-size: 17px; }
+.bet-win-effect .bw-p15 { --tx: 148px; --ty: 72px; --rt: 30deg; animation-delay: 0.17s; font-size: 24px; }
+.bet-win-effect .bw-p16 { --tx: -145px; --ty: -60px; --rt: -50deg; animation-delay: 0.2s; font-size: 14px; }
+.bet-win-effect .bw-p17 { --tx: 75px; --ty: 140px; --rt: 110deg; animation-delay: 0.23s; font-size: 22px; }
+.bet-win-effect .bw-p18 { --tx: -108px; --ty: -130px; --rt: -90deg; animation-delay: 0.26s; font-size: 18px; }
+.bet-win-effect .bw-p19 { --tx: 135px; --ty: 50px; --rt: 65deg; animation-delay: 0.29s; font-size: 27px; }
+.bet-win-effect .bw-p20 { --tx: -50px; --ty: 148px; --rt: -160deg; animation-delay: 0.32s; font-size: 13px; }
+.bet-win-effect .bw-p21 { --tx: 152px; --ty: -28px; --rt: 85deg; animation-delay: 0.02s; font-size: 19px; }
+.bet-win-effect .bw-p22 { --tx: -148px; --ty: 40px; --rt: -35deg; animation-delay: 0.07s; font-size: 23px; }
+.bet-win-effect .bw-p23 { --tx: 22px; --ty: -155px; --rt: 175deg; animation-delay: 0.13s; font-size: 15px; }
+.bet-win-effect .bw-p24 { --tx: -118px; --ty: 112px; --rt: -70deg; animation-delay: 0.16s; font-size: 26px; }
+.bet-win-effect .bw-p25 { --tx: 110px; --ty: -138px; --rt: 40deg; animation-delay: 0.19s; font-size: 17px; }
+.bet-win-effect .bw-p26 { --tx: -92px; --ty: -72px; --rt: -115deg; animation-delay: 0.22s; font-size: 24px; }
+.bet-win-effect .bw-p27 { --tx: 142px; --ty: 88px; --rt: 95deg; animation-delay: 0.25s; font-size: 20px; }
+.bet-win-effect .bw-p28 { --tx: -42px; --ty: -152px; --rt: -25deg; animation-delay: 0.28s; font-size: 14px; }
+.bet-win-effect .bw-p29 { --tx: 122px; --ty: -92px; --rt: 140deg; animation-delay: 0.31s; font-size: 25px; }
+.bet-win-effect .bw-p30 { --tx: -72px; --ty: 45px; --rt: -55deg; animation-delay: 0.04s; font-size: 18px; }
+
 .pumpfun-jitter {
   animation: pumpfun-jitter 520ms steps(2, end) 1 both;
   will-change: transform;

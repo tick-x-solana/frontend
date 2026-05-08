@@ -18,7 +18,7 @@ export default function ErrorPage({
     <AppErrorFallback
       error={error}
       title="This page failed to load"
-      description="Next.js caught a route-level error for this segment."
+      description=""
       onRetry={() => unstable_retry()}
     />
   );

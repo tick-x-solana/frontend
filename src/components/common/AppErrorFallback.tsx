@@ -26,8 +26,7 @@ export default function AppErrorFallback({
   onRetry,
 }: AppErrorFallbackProps) {
   const errorMessage = getErrorMessage(error);
-  const showErrorDetails = process.env.NODE_ENV !== "production";
-
+  const showErrorDetails = false;
   return (
     <div className="bg-background-main text-text-main flex min-h-[60vh] flex-1 items-center justify-center px-5 py-8">
       <div className="border-border-main bg-surface-card w-full max-w-md rounded-[20px] border p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">

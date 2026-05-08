@@ -1,126 +1,85 @@
 "use client";
 
-export function BetWinEffect() {
-  return (
-    <svg
-      width="200"
-      height="200"
-      viewBox="0 0 400 400"
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-[200px] w-[200px]"
-    >
-      <style>{`
-        @keyframes bw-fly {
-          0% { transform: translate(0,0) scale(0) rotate(0deg); opacity: 1; }
-          20% { opacity: 1; }
-          36% { opacity: 0.5; }
-          42% { transform: translate(var(--tx), var(--ty)) scale(1.3) rotate(var(--rt)); opacity: 0; }
-          42.1% { transform: translate(0,0) scale(0) rotate(0deg); opacity: 0; }
-          100% { transform: translate(0,0) scale(0) rotate(0deg); opacity: 0; }
-        }
-        .bw-p {
-          fill: #D0F7DC;
-          font-family: Arial, sans-serif;
-          font-weight: bold;
-          filter: drop-shadow(0 0 8px #D0F7DC) drop-shadow(0 0 14px #a0ffbe);
-          transform-origin: 200px 200px;
-          transform: translate(0, 0) scale(0) rotate(0deg);
-          opacity: 0;
-          animation: bw-fly 2s cubic-bezier(0.1, 0.6, 0.3, 1);
-        }
-        .bw-p01 { --tx: 130px; --ty: -50px; --rt: 45deg; animation-delay: .00s; font-size:16px; }
-        .bw-p02 { --tx: -75px; --ty:-145px; --rt: -30deg; animation-delay: .03s; font-size:24px; }
-        .bw-p03 { --tx: 155px; --ty: 20px; --rt: 90deg; animation-delay: .06s; font-size:14px; }
-        .bw-p04 { --tx:-148px; --ty: 55px; --rt: -60deg; animation-delay: .09s; font-size:22px; }
-        .bw-p05 { --tx: 40px; --ty: 152px; --rt: 120deg; animation-delay: .12s; font-size:18px; }
-        .bw-p06 { --tx: -55px; --ty:-150px; --rt: -15deg; animation-delay: .15s; font-size:26px; }
-        .bw-p07 { --tx: 152px; --ty: -58px; --rt: 75deg; animation-delay: .18s; font-size:13px; }
-        .bw-p08 { --tx:-150px; --ty: -25px; --rt:-100deg; animation-delay: .21s; font-size:23px; }
-        .bw-p09 { --tx: 62px; --ty:-148px; --rt: 200deg; animation-delay: .24s; font-size:19px; }
-        .bw-p10 { --tx: -88px; --ty: 128px; --rt: -45deg; animation-delay: .27s; font-size:15px; }
-        .bw-p11 { --tx: 100px; --ty: 118px; --rt: 160deg; animation-delay: .05s; font-size:25px; }
-        .bw-p12 { --tx:-128px; --ty: -98px; --rt: -80deg; animation-delay: .08s; font-size:12px; }
-        .bw-p13 { --tx: 138px; --ty:-108px; --rt: 55deg; animation-delay: .11s; font-size:20px; }
-        .bw-p14 { --tx: -30px; --ty: 155px; --rt:-130deg; animation-delay: .14s; font-size:17px; }
-        .bw-p15 { --tx: 148px; --ty: 72px; --rt: 30deg; animation-delay: .17s; font-size:24px; }
-        .bw-p16 { --tx:-145px; --ty: -60px; --rt: -50deg; animation-delay: .20s; font-size:14px; }
-        .bw-p17 { --tx: 75px; --ty: 140px; --rt: 110deg; animation-delay: .23s; font-size:22px; }
-        .bw-p18 { --tx:-108px; --ty:-130px; --rt: -90deg; animation-delay: .26s; font-size:18px; }
-        .bw-p19 { --tx: 135px; --ty: 50px; --rt: 65deg; animation-delay: .29s; font-size:27px; }
-        .bw-p20 { --tx: -50px; --ty: 148px; --rt:-160deg; animation-delay: .32s; font-size:13px; }
-        .bw-p21 { --tx: 152px; --ty: -28px; --rt: 85deg; animation-delay: .02s; font-size:19px; }
-        .bw-p22 { --tx:-148px; --ty: 40px; --rt: -35deg; animation-delay: .07s; font-size:23px; }
-        .bw-p23 { --tx: 22px; --ty:-155px; --rt: 175deg; animation-delay: .13s; font-size:15px; }
-        .bw-p24 { --tx:-118px; --ty: 112px; --rt: -70deg; animation-delay: .16s; font-size:26px; }
-        .bw-p25 { --tx: 110px; --ty:-138px; --rt: 40deg; animation-delay: .19s; font-size:17px; }
-        .bw-p26 { --tx: -92px; --ty: -72px; --rt:-115deg; animation-delay: .22s; font-size:24px; }
-        .bw-p27 { --tx: 142px; --ty: 88px; --rt: 95deg; animation-delay: .25s; font-size:20px; }
-        .bw-p28 { --tx: -42px; --ty:-152px; --rt: -25deg; animation-delay: .28s; font-size:14px; }
-        .bw-p29 { --tx: 122px; --ty: -92px; --rt: 140deg; animation-delay: .31s; font-size:25px; }
-        .bw-p30 { --tx: -72px; --ty: 45px; --rt: -55deg; animation-delay: .04s; font-size:18px; }
-      `}</style>
+import type { CSSProperties } from "react";
+import { memo } from "react";
+import styles from "./BetWinEffect.module.css";
 
-      <circle
-        cx="200"
-        cy="200"
-        fill="none"
-        stroke="#D0F7DC"
-        strokeWidth="3"
-        r="4"
-        opacity="0"
-      >
-        <animate attributeName="r" values="4;45;45" keyTimes="0;0.33;1" dur="2s" begin="0.15s" repeatCount="1" />
-        <animate attributeName="opacity" values="0.7;0;0" keyTimes="0;0.33;1" dur="2s" begin="0.15s" repeatCount="1" />
-        <animate attributeName="stroke-width" values="3;0;0" keyTimes="0;0.33;1" dur="2s" begin="0.15s" repeatCount="1" />
-      </circle>
-      <circle
-        cx="200"
-        cy="200"
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth="2"
-        r="4"
-        opacity="0"
-      >
-        <animate attributeName="r" values="4;30;30" keyTimes="0;0.27;1" dur="2s" begin="0.3s" repeatCount="1" />
-        <animate attributeName="opacity" values="0.5;0;0" keyTimes="0;0.27;1" dur="2s" begin="0.3s" repeatCount="1" />
-        <animate attributeName="stroke-width" values="2;0;0" keyTimes="0;0.27;1" dur="2s" begin="0.3s" repeatCount="1" />
-      </circle>
-      <circle cx="200" cy="200" r="5" fill="#ffffff" opacity="0">
-        <animate attributeName="r" values="5;18;1;1" keyTimes="0;0.15;0.21;1" dur="2s" repeatCount="1" />
-        <animate attributeName="opacity" values="1;0.7;0;0" keyTimes="0;0.15;0.21;1" dur="2s" repeatCount="1" />
-      </circle>
+const WIN_BURST_PARTICLES = [
+  { id: "p01", tx: 65, ty: -25, rotation: 45, delay: 0, size: 8 },
+  { id: "p02", tx: -38, ty: -72, rotation: -30, delay: 0.03, size: 12 },
+  { id: "p03", tx: 78, ty: 10, rotation: 90, delay: 0.06, size: 7 },
+  { id: "p04", tx: -74, ty: 28, rotation: -60, delay: 0.09, size: 11 },
+  { id: "p05", tx: 20, ty: 76, rotation: 120, delay: 0.12, size: 9 },
+  { id: "p06", tx: -28, ty: -75, rotation: -15, delay: 0.15, size: 13 },
+  { id: "p07", tx: 76, ty: -29, rotation: 75, delay: 0.18, size: 7 },
+  { id: "p08", tx: -75, ty: -13, rotation: -100, delay: 0.21, size: 12 },
+  { id: "p09", tx: 31, ty: -74, rotation: 200, delay: 0.24, size: 10 },
+  { id: "p10", tx: -44, ty: 64, rotation: -45, delay: 0.27, size: 8 },
+  { id: "p11", tx: 50, ty: 59, rotation: 160, delay: 0.05, size: 13 },
+  { id: "p12", tx: -64, ty: -49, rotation: -80, delay: 0.08, size: 6 },
+  { id: "p13", tx: 69, ty: -54, rotation: 55, delay: 0.11, size: 10 },
+  { id: "p14", tx: -15, ty: 78, rotation: -130, delay: 0.14, size: 9 },
+  { id: "p15", tx: 74, ty: 36, rotation: 30, delay: 0.17, size: 12 },
+  { id: "p16", tx: -73, ty: -30, rotation: -50, delay: 0.2, size: 7 },
+  { id: "p17", tx: 38, ty: 70, rotation: 110, delay: 0.23, size: 11 },
+  { id: "p18", tx: -54, ty: -65, rotation: -90, delay: 0.26, size: 9 },
+  { id: "p19", tx: 68, ty: 25, rotation: 65, delay: 0.29, size: 14 },
+  { id: "p20", tx: -25, ty: 74, rotation: -160, delay: 0.32, size: 7 },
+  { id: "p21", tx: 76, ty: -14, rotation: 85, delay: 0.02, size: 10 },
+  { id: "p22", tx: -74, ty: 20, rotation: -35, delay: 0.07, size: 12 },
+  { id: "p23", tx: 11, ty: -78, rotation: 175, delay: 0.13, size: 8 },
+  { id: "p24", tx: -59, ty: 56, rotation: -70, delay: 0.16, size: 13 },
+  { id: "p25", tx: 55, ty: -69, rotation: 40, delay: 0.19, size: 9 },
+  { id: "p26", tx: -46, ty: -36, rotation: -115, delay: 0.22, size: 12 },
+  { id: "p27", tx: 71, ty: 44, rotation: 95, delay: 0.25, size: 10 },
+  { id: "p28", tx: -21, ty: -76, rotation: -25, delay: 0.28, size: 7 },
+  { id: "p29", tx: 61, ty: -46, rotation: 140, delay: 0.31, size: 13 },
+  { id: "p30", tx: -36, ty: 22, rotation: -55, delay: 0.04, size: 9 },
+] as const;
 
-      <text className="bw-p bw-p01" x="200" y="207">$</text>
-      <text className="bw-p bw-p02" x="200" y="207">$</text>
-      <text className="bw-p bw-p03" x="200" y="207">$</text>
-      <text className="bw-p bw-p04" x="200" y="207">$</text>
-      <text className="bw-p bw-p05" x="200" y="207">$</text>
-      <text className="bw-p bw-p06" x="200" y="207">$</text>
-      <text className="bw-p bw-p07" x="200" y="207">$</text>
-      <text className="bw-p bw-p08" x="200" y="207">$</text>
-      <text className="bw-p bw-p09" x="200" y="207">$</text>
-      <text className="bw-p bw-p10" x="200" y="207">$</text>
-      <text className="bw-p bw-p11" x="200" y="207">$</text>
-      <text className="bw-p bw-p12" x="200" y="207">$</text>
-      <text className="bw-p bw-p13" x="200" y="207">$</text>
-      <text className="bw-p bw-p14" x="200" y="207">$</text>
-      <text className="bw-p bw-p15" x="200" y="207">$</text>
-      <text className="bw-p bw-p16" x="200" y="207">$</text>
-      <text className="bw-p bw-p17" x="200" y="207">$</text>
-      <text className="bw-p bw-p18" x="200" y="207">$</text>
-      <text className="bw-p bw-p19" x="200" y="207">$</text>
-      <text className="bw-p bw-p20" x="200" y="207">$</text>
-      <text className="bw-p bw-p21" x="200" y="207">$</text>
-      <text className="bw-p bw-p22" x="200" y="207">$</text>
-      <text className="bw-p bw-p23" x="200" y="207">$</text>
-      <text className="bw-p bw-p24" x="200" y="207">$</text>
-      <text className="bw-p bw-p25" x="200" y="207">$</text>
-      <text className="bw-p bw-p26" x="200" y="207">$</text>
-      <text className="bw-p bw-p27" x="200" y="207">$</text>
-      <text className="bw-p bw-p28" x="200" y="207">$</text>
-      <text className="bw-p bw-p29" x="200" y="207">$</text>
-      <text className="bw-p bw-p30" x="200" y="207">$</text>
-    </svg>
-  );
+type BetWinParticleStyle = CSSProperties & {
+  "--bet-win-delay": string;
+  "--bet-win-rotation": string;
+  "--bet-win-size": string;
+  "--bet-win-translate-x": string;
+  "--bet-win-translate-y": string;
+};
+
+function buildParticleStyle({
+  delay,
+  rotation,
+  size,
+  tx,
+  ty,
+}: (typeof WIN_BURST_PARTICLES)[number]): BetWinParticleStyle {
+  return {
+    "--bet-win-delay": `${delay}s`,
+    "--bet-win-rotation": `${rotation}deg`,
+    "--bet-win-size": `${size}px`,
+    "--bet-win-translate-x": `${tx}px`,
+    "--bet-win-translate-y": `${ty}px`,
+  };
 }
+
+// Inline primitives avoid the extra SVG document and heavy filter paints that
+// made the previous object-based win burst stutter under frequent updates.
+export const BetWinEffect = memo(function BetWinEffect() {
+  return (
+    <div className={styles.effect} aria-hidden>
+      <span className={`${styles.ring} ${styles.outerRing}`} />
+      <span className={`${styles.ring} ${styles.innerRing}`} />
+      <span className={styles.corePulse} />
+
+      {WIN_BURST_PARTICLES.map((particle) => (
+        <span key={particle.id} className={styles.particleSlot}>
+          <span
+            className={styles.particle}
+            style={buildParticleStyle(particle)}
+          >
+            $
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+});
