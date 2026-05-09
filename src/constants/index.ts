@@ -13,6 +13,8 @@ export const RECENT_ORDERS_SHEET_MAX_HEIGHT = "calc(100dvh - 240px)";
 export const SOLANA_PROGRAM_ID = "Bwwg2cPZzgij4GT795iBB882wFtRyuSr5qBrAYzyAoWT";
 // RPC endpoint hard-locked to Solana Devnet during migration.
 export const SOLANA_DEVNET_RPC_URL = "https://api.devnet.solana.com";
+// Base URL for SolanaScan transaction pages scoped to Solana Devnet.
+export const SOLANASCAN_DEVNET_TX_BASE_URL = "https://solscan.io/tx";
 // Single realtime socket endpoint for Solana market + user events.
 export const SOLANA_SOCKET_BASE_URL = "https://api-tap-fun-solana.nysm.work";
 // Each fortress diagnostics heatmap column covers this many seconds.
@@ -28,4 +30,5 @@ export const FAUCET_DEPOSIT_AMOUNT_SOL = 3;
 // Cooldown time in milliseconds between faucet requests.
 export const FAUCET_COOLDOWN_MS = 30 * 60 * 1000;
 // Local storage key for last faucet timestamp (milliseconds since epoch).
-export const FAUCET_LAST_REQUEST_AT_STORAGE_KEY = "tickx-faucet-last-request-at";
+export const FAUCET_LAST_REQUEST_AT_STORAGE_KEY =
+  "tickx-faucet-last-request-at";

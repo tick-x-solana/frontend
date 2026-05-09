@@ -975,6 +975,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     cancelPendingBet,
     pendingBets,
     storeRef,
+    isFortressMcDiagnosticsOpen: isMcDiagnosticsOpen,
     onFortressMcDiagnostics: setFortressMcDiagnosticsPayload,
   });
 

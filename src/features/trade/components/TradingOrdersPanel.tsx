@@ -339,7 +339,7 @@ function formatMultiple(value: number | null): string {
 
 export default function TradingOrdersPanel({
   className,
-  fallbackMarketLabel = "BTC/USD",
+  fallbackMarketLabel = "SOL/USDT",
   inline = false,
   queryAnchorTime,
   showHeader = true,
@@ -378,20 +378,20 @@ export default function TradingOrdersPanel({
     },
   );
 
-  const orders = useMemo(
-    () => {
-      const mergedOrders = [...recentOrderUpdates, ...extractOrders(data)];
-      return mergedOrders
-        .map((item) =>
-          toRecentUserOrderItem(item, fallbackMarketLabel, solUsdPrice),
-        )
-        .filter((item): item is RecentUserOrderItem => item !== null)
-        .sort((a, b) => b.placedAtMs - a.placedAtMs)
-        .filter((item, index, arr) => arr.findIndex((entry) => entry.id === item.id) === index)
-        .slice(0, USER_ORDERS_FETCH_LIMIT);
-    },
-    [data, fallbackMarketLabel, recentOrderUpdates, solUsdPrice],
-  );
+  const orders = useMemo(() => {
+    const mergedOrders = [...recentOrderUpdates, ...extractOrders(data)];
+    return mergedOrders
+      .map((item) =>
+        toRecentUserOrderItem(item, fallbackMarketLabel, solUsdPrice),
+      )
+      .filter((item): item is RecentUserOrderItem => item !== null)
+      .sort((a, b) => b.placedAtMs - a.placedAtMs)
+      .filter(
+        (item, index, arr) =>
+          arr.findIndex((entry) => entry.id === item.id) === index,
+      )
+      .slice(0, USER_ORDERS_FETCH_LIMIT);
+  }, [data, fallbackMarketLabel, recentOrderUpdates, solUsdPrice]);
 
   const emptyMessage = !isAuthenticated
     ? "Sign in to view your latest orders."

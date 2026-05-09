@@ -310,6 +310,13 @@
   flex-direction: row;
 }
 
+/* Hide native number input increment/decrement controls in custom bid field. */
+.no-number-spinner::-webkit-outer-spin-button,
+.no-number-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 @keyframes pumpfun-jitter {
   0%,
   100% {

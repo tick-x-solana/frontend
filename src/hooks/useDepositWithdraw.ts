@@ -19,7 +19,11 @@ import {
   paymentControllerDebugFinalizeWithdrawal,
   paymentControllerRequestWithdrawal,
 } from "@/src/services/queries";
-import { SOLANA_RPC_ENDPOINT, TICKX_SOLANA_PROGRAM_ID } from "@/src/constants/solana";
+import {
+  SOLANA_RPC_ENDPOINT,
+  SOLANA_TX_EXPLORER_BASE_URL,
+  TICKX_SOLANA_PROGRAM_ID,
+} from "@/src/constants/solana";
 
 type DepositSolParams = {
   amountSol: string;
@@ -192,7 +196,13 @@ const useDepositWithdraw = () => {
           queryKey: getAccountControllerGetBalanceQueryKey(),
         });
 
-        toast.success("Deposit completed");
+        const txUrl = `${SOLANA_TX_EXPLORER_BASE_URL}/${signature}?cluster=devnet`;
+        toast.success("Deposit success", {
+          action: {
+            label: "View tx",
+            onClick: () => window.open(txUrl, "_blank", "noopener,noreferrer"),
+          },
+        });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Failed to complete deposit";
@@ -247,7 +257,13 @@ const useDepositWithdraw = () => {
           queryKey: getAccountControllerGetBalanceQueryKey(),
         });
 
-        toast.success("Withdrawal completed");
+        const txUrl = `${SOLANA_TX_EXPLORER_BASE_URL}/${signature}?cluster=devnet`;
+        toast.success("Withdrawal completed", {
+          action: {
+            label: "View tx",
+            onClick: () => window.open(txUrl, "_blank", "noopener,noreferrer"),
+          },
+        });
       } catch (error) {
         const message =
           error instanceof Error

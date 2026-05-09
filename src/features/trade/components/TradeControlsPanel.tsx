@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Minus, Plus, WalletMinimal, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Check, WalletMinimal, X } from "lucide-react";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import TradingOrdersPanel from "@/src/features/trade/components/TradingOrdersPanel";
 import { Button } from "@/src/components/shadcn/button";
@@ -52,21 +52,33 @@ export default function TradeControlsPanel({
   const betAmount = useGameStore((s) => s.betAmount);
   const setBetAmount = useGameStore((s) => s.setBetAmount);
   const [customBidInput, setCustomBidInput] = useState(() => String(betAmount));
-  const [isCustomBidEditorOpen, setIsCustomBidEditorOpen] = useState(false);
+  const [isCustomBidEditorMounted, setIsCustomBidEditorMounted] =
+    useState(false);
+  const [isCustomBidEditorVisible, setIsCustomBidEditorVisible] =
+    useState(false);
   const customBidEditorRef = useRef<HTMLDivElement | null>(null);
+  const isCustomBidEditorVisibleRef = useRef(isCustomBidEditorVisible);
   const isDesktopOrdersVisible = useGameStore((s) => s.isDesktopOrdersVisible);
   const desktopOrdersQueryAnchorTime = useGameStore(
     (s) => s.desktopOrdersQueryAnchorTime,
   );
   const { data: solUsdPrice } = useSolUsdPrice();
-  const selectedBid = BID_OPTIONS_SOL.find(
-    (amount) => Math.abs(amount - betAmount) < 1e-9,
+  const hasHydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
   );
-  const currentBid = selectedBid ?? betAmount;
+  const hydratedBetAmount = hasHydrated ? betAmount : BID_OPTIONS_SOL[0];
+  const selectedBid = BID_OPTIONS_SOL.find(
+    (amount) => Math.abs(amount - hydratedBetAmount) < 1e-9,
+  );
+  const currentBid = selectedBid ?? hydratedBetAmount;
   const isUsingCustomBid = selectedBid === undefined;
-  const displayIdentity = username?.trim()
+
+  const resolvedIdentity = username?.trim()
     ? `@${username.trim()}`
     : formatWalletAddress(rawAddress);
+  const displayIdentity = hasHydrated ? resolvedIdentity : "Not connected";
 
   const marketPriceLabel =
     displayPrice === "--" ? displayPrice : `~ ${displayPrice}`;
@@ -83,53 +95,60 @@ export default function TradeControlsPanel({
       toast.error("Enter a valid bid size.");
       return;
     }
-    if (parsedBid < MIN_CUSTOM_BID_SIZE_SOL || parsedBid > MAX_CUSTOM_BID_SIZE_SOL) {
+    if (
+      parsedBid < MIN_CUSTOM_BID_SIZE_SOL ||
+      parsedBid > MAX_CUSTOM_BID_SIZE_SOL
+    ) {
       toast.error(
         `Custom bid size must be between ${MIN_CUSTOM_BID_SIZE_SOL} and ${MAX_CUSTOM_BID_SIZE_SOL} SOL.`,
       );
       return;
     }
-    setBetAmount(parsedBid);
-    setCustomBidInput(String(parsedBid));
-    setIsCustomBidEditorOpen(false);
+    setIsCustomBidEditorVisible(false);
+    window.requestAnimationFrame(() => {
+      setBetAmount(parsedBid);
+      setCustomBidInput(String(parsedBid));
+    });
   }, [customBidInput, setBetAmount]);
 
-  const updateCustomBidByStep = useCallback(
-    (direction: "up" | "down") => {
-      const currentValue = Number(customBidInput.trim());
-      const fallbackValue = Number.isFinite(currentValue) ? currentValue : betAmount;
-      const delta = 0.01;
-      const nextValue =
-        direction === "up" ? fallbackValue + delta : fallbackValue - delta;
-      const boundedValue = Math.max(
-        MIN_CUSTOM_BID_SIZE_SOL,
-        Math.min(MAX_CUSTOM_BID_SIZE_SOL, Number(nextValue.toFixed(3))),
-      );
-      setCustomBidInput(String(boundedValue));
-    },
-    [betAmount, customBidInput],
-  );
+  useEffect(() => {
+    isCustomBidEditorVisibleRef.current = isCustomBidEditorVisible;
+  }, [isCustomBidEditorVisible]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setCustomBidInput(String(betAmount));
-    }, 0);
-    return () => window.clearTimeout(timer);
+    if (isCustomBidEditorVisibleRef.current) return;
+    setCustomBidInput(String(betAmount));
   }, [betAmount]);
 
   useEffect(() => {
-    if (!isCustomBidEditorOpen) return;
+    if (!isCustomBidEditorMounted) return;
     const onPointerDown = (event: MouseEvent) => {
       if (
         customBidEditorRef.current &&
         !customBidEditorRef.current.contains(event.target as Node)
       ) {
-        setIsCustomBidEditorOpen(false);
+        setIsCustomBidEditorVisible(false);
       }
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [isCustomBidEditorOpen]);
+  }, [isCustomBidEditorMounted]);
+
+  useEffect(() => {
+    if (!isCustomBidEditorMounted) return;
+    const frameId = window.requestAnimationFrame(() => {
+      setIsCustomBidEditorVisible(true);
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isCustomBidEditorMounted]);
+
+  useEffect(() => {
+    if (!isCustomBidEditorMounted || isCustomBidEditorVisible) return;
+    const closeTimer = window.setTimeout(() => {
+      setIsCustomBidEditorMounted(false);
+    }, 520);
+    return () => window.clearTimeout(closeTimer);
+  }, [isCustomBidEditorMounted, isCustomBidEditorVisible]);
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
@@ -216,85 +235,73 @@ export default function TradeControlsPanel({
           </div>
         </section>
 
-        <section ref={customBidEditorRef} className="relative">
-          <div className="flex items-center gap-2">
-            {BID_OPTIONS_SOL.map((amountSol) => {
-              const isSelected = selectedBid === amountSol;
-              return (
-                <Button
-                  key={amountSol}
-                  type="button"
-                  variant="outline"
-                  className={cn(
-                    "h-9 flex-1 rounded-[8px] border px-0 text-sm font-medium tracking-[-0.01em] shadow-none transition-colors",
-                    isSelected
-                      ? "border-border-primary bg-surface-selected text-text-link-main hover:bg-surface-control-active hover:text-primary-light"
-                      : "border-border-main bg-background-main text-text-main hover:bg-surface-overlay-medium hover:text-text-heading",
-                  )}
-                  onClick={() => {
-                    setBetAmount(amountSol);
-                    setCustomBidInput(String(amountSol));
-                  }}
-                >
-                  {amountSol}
-                </Button>
-              );
-            })}
-          </div>
-
-          {!isCustomBidEditorOpen ? (
-            <div className="mt-2">
-              <Button
-                type="button"
-                className="text-primary-light border-border-primary h-10 w-full rounded-[10px] border bg-[linear-gradient(120deg,rgba(208,247,220,0.16),rgba(127,216,154,0.08))] text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-300 hover:bg-[linear-gradient(120deg,rgba(208,247,220,0.24),rgba(127,216,154,0.14))] hover:text-text-heading"
-                onClick={() => setIsCustomBidEditorOpen(true)}
-              >
-                Custom bid
-              </Button>
+        <section ref={customBidEditorRef}>
+          <div className="relative">
+            <div className="flex items-center gap-2">
+              {BID_OPTIONS_SOL.map((amountSol) => {
+                const isSelected = selectedBid === amountSol;
+                return (
+                  <Button
+                    key={amountSol}
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      "h-9 flex-1 rounded-[8px] border px-0 text-sm font-medium tracking-[-0.01em] shadow-none transition-colors",
+                      isSelected
+                        ? "border-border-primary bg-surface-selected text-text-link-main hover:bg-surface-control-active hover:text-primary-light"
+                        : "border-border-main bg-background-main text-text-main hover:bg-surface-overlay-medium hover:text-text-heading",
+                    )}
+                    onClick={() => {
+                      setBetAmount(amountSol);
+                      setCustomBidInput(String(amountSol));
+                    }}
+                  >
+                    {amountSol}
+                  </Button>
+                );
+              })}
             </div>
-          ) : null}
 
-          <div
-            className={cn(
-              "bg-surface-card w-full overflow-hidden rounded-[12px] border border-border-main p-4 shadow-[20px_0_40px_rgba(0,0,0,0.4)] transition-all duration-300 ease-out",
-              isCustomBidEditorOpen
-                ? "pointer-events-auto mt-2 max-h-[420px] translate-x-0 translate-y-0 opacity-100 blur-0"
-                : "pointer-events-none mt-0 max-h-0 -translate-x-1 -translate-y-1 opacity-0 blur-[2px]",
-            )}
-            aria-hidden={!isCustomBidEditorOpen}
-          >
-            <p className="text-text-heading text-base font-semibold tracking-[-0.01em]">
-              Custom bid
-            </p>
-            <p className="text-text-sub mt-1 text-sm tracking-[-0.01em]">
-              Set your manual SOL amount.
-            </p>
+            {isCustomBidEditorMounted ? (
+              <div
+                className={cn(
+                  "bg-surface-card border-border-main absolute top-[calc(100%+8px)] left-0 z-40 w-full rounded-[12px] border p-4 shadow-[20px_0_40px_rgba(0,0,0,0.4)] transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+                  isCustomBidEditorVisible
+                    ? "pointer-events-auto translate-x-0 opacity-100"
+                    : "pointer-events-none -translate-x-14 opacity-0",
+                )}
+                aria-hidden={!isCustomBidEditorVisible}
+                onTransitionEnd={(event) => {
+                  if (
+                    event.target === event.currentTarget &&
+                    event.propertyName === "transform" &&
+                    !isCustomBidEditorVisible
+                  ) {
+                    setIsCustomBidEditorMounted(false);
+                  }
+                }}
+              >
+              <p className="text-text-heading text-base font-semibold tracking-[-0.01em]">
+                Custom bid
+              </p>
+              <p className="text-text-sub mt-1 text-sm tracking-[-0.01em]">
+                Set your manual SOL amount.
+              </p>
 
-            <div className="mt-4 rounded-[10px] border border-border-main bg-background-surface p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-text-sub text-xs font-semibold tracking-[-0.01em]">
-                  BID SIZE
-                </p>
-                {isUsingCustomBid ? (
-                  <span className="text-primary-light inline-flex items-center gap-1 rounded-[999px] bg-primary-light/12 px-2 py-0.5 text-[11px] font-semibold tracking-[-0.01em]">
-                    <Check className="size-3" />
-                    Active
-                  </span>
-                ) : null}
-              </div>
+              <div className="border-border-main bg-background-surface mt-4 rounded-[10px] border p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-text-sub text-xs font-semibold tracking-[-0.01em]">
+                    BID SIZE
+                  </p>
+                  {isUsingCustomBid ? (
+                    <span className="text-primary-light bg-primary-light/12 inline-flex items-center gap-1 rounded-[999px] px-2 py-0.5 text-[11px] font-semibold tracking-[-0.01em]">
+                      <Check className="size-3" />
+                      Active
+                    </span>
+                  ) : null}
+                </div>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="border-border-main bg-background-main text-text-main hover:bg-surface-overlay-medium h-9 w-9 rounded-[8px] shadow-none"
-                  onClick={() => updateCustomBidByStep("down")}
-                >
-                  <Minus className="size-4" />
-                </Button>
-
-                <div className="border-border-main bg-background-main flex h-9 min-w-0 flex-1 items-center rounded-[8px] border px-3">
+                <div className="border-border-main bg-background-main flex h-11 min-w-0 items-center rounded-[8px] border px-3">
                   <input
                     type="number"
                     inputMode="decimal"
@@ -304,41 +311,50 @@ export default function TradeControlsPanel({
                     value={customBidInput}
                     onChange={(event) => setCustomBidInput(event.target.value)}
                     placeholder="Enter SOL amount"
-                    className="text-text-main placeholder:text-hint w-full bg-transparent text-sm font-medium outline-none"
+                    className="no-number-spinner text-text-main placeholder:text-hint w-full [appearance:textfield] bg-transparent text-sm font-medium outline-none"
                   />
-                  <span className="text-text-sub ml-2 text-xs font-semibold">SOL</span>
+                  <span className="text-text-sub ml-2 text-xs font-semibold">
+                    SOL
+                  </span>
                 </div>
 
+                <p className="text-hint mt-2 text-[11px] tracking-[-0.01em]">
+                  Range {MIN_CUSTOM_BID_SIZE_SOL} - {MAX_CUSTOM_BID_SIZE_SOL}
+                </p>
+              </div>
+
+              <div className="mt-4 flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  size="icon"
-                  className="border-border-main bg-background-main text-text-main hover:bg-surface-overlay-medium h-9 w-9 rounded-[8px] shadow-none"
-                  onClick={() => updateCustomBidByStep("up")}
+                  className="h-9 rounded-[8px] px-3"
+                  onClick={() => setIsCustomBidEditorVisible(false)}
                 >
-                  <Plus className="size-4" />
+                  Close
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-primary-medium text-text-inverse hover:bg-primary-light h-9 rounded-[8px] px-3"
+                  onClick={applyCustomBid}
+                >
+                  Apply
                 </Button>
               </div>
+              </div>
+            ) : null}
+          </div>
 
-              <p className="text-hint mt-2 text-[11px] tracking-[-0.01em]">
-                Range {MIN_CUSTOM_BID_SIZE_SOL} - {MAX_CUSTOM_BID_SIZE_SOL}
-              </p>
-            </div>
-
-            <div className="mt-4 flex justify-end gap-2">
+          {!isCustomBidEditorVisible ? (
+            <div className="mt-2">
               <Button
                 type="button"
-                variant="outline"
-                className="h-9 rounded-[8px] px-3"
-                onClick={() => setIsCustomBidEditorOpen(false)}
+                className="text-primary-light border-border-primary hover:text-text-heading h-10 w-full rounded-[10px] border bg-[linear-gradient(120deg,rgba(208,247,220,0.16),rgba(127,216,154,0.08))] text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-300 hover:bg-[linear-gradient(120deg,rgba(208,247,220,0.24),rgba(127,216,154,0.14))]"
+                onClick={() => setIsCustomBidEditorMounted(true)}
               >
-                Close
-              </Button>
-              <Button type="button" className="h-9 rounded-[8px] px-3" onClick={applyCustomBid}>
-                Apply
+                Custom bid
               </Button>
             </div>
-          </div>
+          ) : null}
         </section>
 
         {showInlineOrders && isDesktopOrdersVisible ? (

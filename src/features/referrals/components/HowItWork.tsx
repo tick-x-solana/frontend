@@ -24,7 +24,7 @@ const HOW_IT_WORK_STEPS = [
 
 const HowItWork = () => {
   return (
-    <section className="column w-full gap-3">
+    <section className="flex w-full flex-col gap-3">
       <h3 className="text-text-heading text-[22px] font-semibold tracking-[-0.02em]">
         How It Works
       </h3>

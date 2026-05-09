@@ -20,6 +20,7 @@ import { useOrderControllerGetUserOrders } from "@/src/services/queries";
 import {
   formatFixedTwoDecimal,
   formatOneDecimalNumber,
+  formatUpToFourDecimalNumber,
 } from "@/src/utils/formatters";
 import { cn } from "@/lib/utils";
 
@@ -95,7 +96,7 @@ function formatMoney(value: number | null): string {
 
 function formatSol(value: number | null): string {
   if (value === null) return "-- SOL";
-  return `${value.toFixed(4)} SOL`;
+  return `${formatUpToFourDecimalNumber(value)} SOL`;
 }
 
 function formatMultiplier(value: number | null): string {
@@ -172,9 +173,16 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
     asBoolean(record.win) ??
     asBoolean(record.isWinning) ??
     asBoolean(record.won) ??
-    (status === "WIN" || status === "WON" || status === "SETTLED_WIN" || status === "CLOSED_WIN"
+    (status === "WIN" ||
+    status === "WON" ||
+    status === "SETTLED_WIN" ||
+    status === "CLOSED_WIN"
       ? true
-      : status === "LOSE" || status === "LOST" || status === "FAILED" || status === "FAIL" || status === "LOSS"
+      : status === "LOSE" ||
+          status === "LOST" ||
+          status === "FAILED" ||
+          status === "FAIL" ||
+          status === "LOSS"
         ? false
         : null);
 
@@ -215,6 +223,8 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
             : null);
 
   const timestampMs =
+    readTimestampMs(record.placeAt) ??
+    readTimestampMs(record.placedAt) ??
     readTimestampMs(record.createdAt) ??
     readTimestampMs(record.updatedAt) ??
     readTimestampMs(record.timestamp) ??
@@ -237,7 +247,7 @@ function toHistoryItem(order: unknown): TradingHistoryItem | null {
     (asString(record.baseAsset) && asString(record.quoteAsset)
       ? `${asString(record.baseAsset)}/${asString(record.quoteAsset)}`
       : null) ??
-    "BTC/USD";
+    "SOL/USDT";
 
   const currentPrice =
     asNumber(record.currentPrice) ?? asNumber(record.entryPrice) ?? null;
@@ -297,8 +307,10 @@ function isWinRow(item: TradingHistoryItem): boolean {
 const TradingHistoryTable = () => {
   const { isAuthenticated, isLoggingIn, username, walletAddress } = useAuth();
   const { data: solUsdPrice } = useSolUsdPrice(isAuthenticated && !isLoggingIn);
-  const { isSharing, shareUrl, copyShareLink, share } =
-    useWinShareActions({ username, walletAddress });
+  const { isSharing, shareUrl, copyShareLink, share } = useWinShareActions({
+    username,
+    walletAddress,
+  });
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
   const [shareItemId, setShareItemId] = useState<string | null>(null);
 
@@ -334,11 +346,21 @@ const TradingHistoryTable = () => {
         }
 
         // Recalculate pnl now that amountUsd is resolved
-        if (resolved.pnl === null && resolved.amountUsd !== null && !resolved.inProgress) {
+        if (
+          resolved.pnl === null &&
+          resolved.amountUsd !== null &&
+          !resolved.inProgress
+        ) {
           if (resolved.settledWin === false) {
             resolved = { ...resolved, pnl: -Math.abs(resolved.amountUsd) };
-          } else if (resolved.settledWin === true && resolved.multiplier !== null) {
-            resolved = { ...resolved, pnl: resolved.amountUsd * Math.max(resolved.multiplier - 1, 0) };
+          } else if (
+            resolved.settledWin === true &&
+            resolved.multiplier !== null
+          ) {
+            resolved = {
+              ...resolved,
+              pnl: resolved.amountUsd * Math.max(resolved.multiplier - 1, 0),
+            };
           }
         }
 
@@ -401,7 +423,7 @@ const TradingHistoryTable = () => {
               <TableHead className="text-hint w-[140px] px-4 py-3 text-[11px] font-medium tracking-[0.04em] uppercase">
                 PNL
               </TableHead>
-              <TableHead className="text-hint bg-background-surface w-[160px] px-4 py-3 text-[11px] font-medium tracking-[0.04em] uppercase whitespace-nowrap">
+              <TableHead className="text-hint bg-background-surface w-[160px] px-4 py-3 text-[11px] font-medium tracking-[0.04em] whitespace-nowrap uppercase">
                 When
               </TableHead>
             </TableRow>
@@ -478,17 +500,20 @@ const FragmentRow = ({ item, onShare }: FragmentRowProps) => {
       className={cn(
         "group border-b transition-colors",
         "border-border-main bg-background-main hover:bg-surface-overlay-subtle",
-        isWin && "border-l-2 border-l-success-medium",
-        isLoss && "border-l-2 border-l-warning-medium",
-        item.inProgress && "border-l-2 border-l-primary-light",
-        !isWin && !isLoss && !item.inProgress && "border-l-2 border-l-transparent",
+        isWin && "border-l-success-medium border-l-2",
+        isLoss && "border-l-warning-medium border-l-2",
+        item.inProgress && "border-l-primary-light border-l-2",
+        !isWin &&
+          !isLoss &&
+          !item.inProgress &&
+          "border-l-2 border-l-transparent",
       )}
     >
       <TableCell className="px-5 py-3">
         <p className="text-text-main text-[14px] font-semibold">
           {formatMoney(item.amountUsd)}
         </p>
-        <p className="text-hint mt-0.5 text-[11px] font-medium uppercase tracking-[0.02em]">
+        <p className="text-hint mt-0.5 text-[11px] font-medium tracking-[0.02em] uppercase">
           {formatSol(item.amountSol)}
         </p>
       </TableCell>

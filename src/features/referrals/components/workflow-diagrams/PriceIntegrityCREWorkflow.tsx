@@ -47,37 +47,6 @@ function pointStyle(x: number, y: number): React.CSSProperties {
   };
 }
 
-function Frame({
-  className,
-  children,
-  box,
-}: PositionedProps & { box: DiagramBox }) {
-  return (
-    <div
-      className={[
-        "absolute z-10 rounded-[24px] border-[1.5px] bg-[#05080f]",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      style={{ ...boxStyle(box), borderColor: LINE_COLOR }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Task({ text, box }: { text: string; box: DiagramBox }) {
-  return (
-    <div
-      className="text-text-main absolute z-20 flex items-center justify-center rounded-[18px] border-[1.5px] bg-[#05080f] px-2 text-center text-[7px] font-semibold whitespace-nowrap min-[520px]:text-[9px] min-[760px]:text-[11px]"
-      style={{ ...boxStyle(box), borderColor: LINE_COLOR }}
-    >
-      {text}
-    </div>
-  );
-}
-
 function FlowPath({
   d,
   durationSeconds = 2.4,
@@ -159,15 +128,26 @@ function TextLabel({
 export const PriceIntegrityCREWorkflow: React.FC = () => {
   return (
     <div
-      className={`${architectsDaughter.className} bg-background-main mx-auto w-full max-w-[980px] overflow-x-auto overflow-y-hidden rounded-[14px] border border-white/10 p-2`}
+      className={`${architectsDaughter.className} bg-background-main mx-auto w-full max-w-[980px] overflow-x-auto overflow-y-hidden rounded-[14px] border border-white/5 p-2`}
     >
-      <div className="relative aspect-[1613/947] min-w-[760px] overflow-hidden rounded-[12px] border border-white/30 bg-[#04070d] md:min-w-0">
-        <Frame
-          box={{ x: 12, y: 34, width: 294, height: 204 }}
-          className="px-[2.3%] py-[2.7%]"
+      <div
+        className="relative aspect-[1613/947] min-w-[760px] overflow-hidden rounded-[12px] border border-white/10 md:min-w-0"
+        style={{
+          background:
+            "radial-gradient(ellipse at 30% 40%, rgba(109,40,217,0.13) 0%, transparent 55%), radial-gradient(ellipse at 75% 20%, rgba(37,99,235,0.10) 0%, transparent 50%), #07091a",
+        }}
+      >
+        {/* Binance/Chainlink — pink/magenta */}
+        <div
+          className="absolute z-10 rounded-[12px] border-[1.5px] px-[2.3%] py-[2.7%]"
+          style={{
+            ...boxStyle({ x: 12, y: 34, width: 294, height: 204 }),
+            borderColor: "#f472b6",
+            background: "rgba(244,114,182,0.10)",
+          }}
         >
           <p
-            className="text-text-main text-[7px] font-semibold min-[520px]:text-[10px] min-[760px]:text-[13px]"
+            className="mt-[-10px] text-[7px] font-semibold text-[#f9a8d4] min-[520px]:text-[10px] min-[760px]:text-[13px]"
             style={{ lineHeight: 1.35 }}
           >
             Binance/Chainlink
@@ -183,16 +163,21 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
               className="h-auto w-full object-contain"
             />
           </div>
-        </Frame>
+        </div>
 
-        <Frame
-          box={{ x: 11, y: 278, width: 297, height: 205 }}
-          className="px-[2.3%] py-[2.9%]"
+        {/* TickX price API — teal/cyan */}
+        <div
+          className="absolute z-10 rounded-[12px] border-[1.5px] px-[2.3%] py-[2.9%]"
+          style={{
+            ...boxStyle({ x: 11, y: 278, width: 297, height: 205 }),
+            borderColor: "#2dd4bf",
+            background: "rgba(45,212,191,0.09)",
+          }}
         >
-          <p className="text-text-main text-[7px] font-semibold min-[520px]:text-[10px] min-[760px]:text-[13px]">
+          <p className="text-[7px] font-semibold text-[#5eead4] min-[520px]:text-[10px] min-[760px]:text-[13px]">
             TickX price API
           </p>
-          <div className="mx-auto mt-[16%] w-[20px] min-[520px]:w-[28px] min-[760px]:w-[38px]">
+          <div className="mx-auto mt-3 w-[20px] min-[520px]:w-[28px] min-[760px]:w-[38px]">
             <Image
               src="/tickX.png"
               alt="TickX"
@@ -201,13 +186,18 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
               className="h-auto w-full object-contain"
             />
           </div>
-        </Frame>
+        </div>
 
-        <Frame
-          box={{ x: 440, y: 12, width: 603, height: 923 }}
-          className="px-[2%] py-[2.6%]"
+        {/* Switchboard TEE frame — violet */}
+        <div
+          className="absolute z-10 rounded-[12px] border-[1.5px] px-[2%] py-[2.6%]"
+          style={{
+            ...boxStyle({ x: 440, y: 12, width: 603, height: 923 }),
+            borderColor: "#a78bfa",
+            background: "rgba(109,40,217,0.08)",
+          }}
         >
-          <p className="text-text-main text-[7px] font-semibold min-[520px]:text-[10px] min-[760px]:text-[13px]">
+          <p className="text-[7px] font-semibold text-[#c4b5fd] min-[520px]:text-[10px] min-[760px]:text-[13px]">
             Switchboard TEE
           </p>
           <div className="absolute top-[1.7%] right-[7.2%]">
@@ -219,23 +209,45 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
               className="h-auto w-[28px] min-[520px]:w-[42px] min-[760px]:w-[58px]"
             />
           </div>
-        </Frame>
+        </div>
 
-        <Task
-          text="HTTP Task"
-          box={{ x: 628, y: 93, width: 209, height: 97 }}
-        />
-        <Task
-          text="HTTP Task"
-          box={{ x: 632, y: 242, width: 209, height: 98 }}
-        />
-        <Task
-          text="Comparision Task"
-          box={{ x: 634, y: 403, width: 209, height: 98 }}
-        />
-
+        {/* HTTP Tasks — blue */}
         <div
-          className="absolute z-20 rounded-[20px] border-[1.5px] border-[#9a7bff] bg-[rgba(107,86,168,0.78)] px-[1.5%] py-[1.8%] text-[5px] font-semibold whitespace-nowrap text-[#efe8ff] min-[520px]:text-[7px] min-[760px]:text-[9px]"
+          className="absolute z-20 flex items-center justify-center rounded-[12px] border-[1.5px] px-2 text-center text-[7px] font-semibold whitespace-nowrap text-[#93c5fd] min-[520px]:text-[9px] min-[760px]:text-[11px]"
+          style={{
+            ...boxStyle({ x: 628, y: 93, width: 209, height: 97 }),
+            borderColor: "#3b82f6",
+            background: "rgba(37,99,235,0.18)",
+          }}
+        >
+          HTTP Task
+        </div>
+        <div
+          className="absolute z-20 flex items-center justify-center rounded-[12px] border-[1.5px] px-2 text-center text-[7px] font-semibold whitespace-nowrap text-[#93c5fd] min-[520px]:text-[9px] min-[760px]:text-[11px]"
+          style={{
+            ...boxStyle({ x: 632, y: 242, width: 209, height: 98 }),
+            borderColor: "#3b82f6",
+            background: "rgba(37,99,235,0.18)",
+          }}
+        >
+          HTTP Task
+        </div>
+
+        {/* Comparison Task — emerald/green */}
+        <div
+          className="absolute z-20 flex items-center justify-center rounded-[12px] border-[1.5px] px-2 text-center text-[7px] font-semibold whitespace-nowrap text-[#6ee7b7] min-[520px]:text-[9px] min-[760px]:text-[11px]"
+          style={{
+            ...boxStyle({ x: 634, y: 403, width: 209, height: 98 }),
+            borderColor: "#10b981",
+            background: "rgba(5,150,105,0.18)",
+          }}
+        >
+          Comparision Task
+        </div>
+
+        {/* 6 Switchboard feeds — purple */}
+        <div
+          className="absolute z-20 rounded-[12px] border-[1.5px] border-[#9a7bff] bg-[rgba(107,86,168,0.78)] px-[1.5%] py-[1.8%] text-[5px] font-semibold whitespace-nowrap text-[#efe8ff] min-[520px]:text-[7px] min-[760px]:text-[9px]"
           style={{
             ...boxStyle({ x: 631, y: 581, width: 226, height: 234 }),
             lineHeight: 1.38,
@@ -250,11 +262,16 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
           <p>6 score_bps</p>
         </div>
 
-        <Frame
-          box={{ x: 1177, y: 18, width: 427, height: 372 }}
-          className="px-[2%] py-[2.4%]"
+        {/* Price Integrity Contract — blue */}
+        <div
+          className="absolute z-10 rounded-[12px] border-[1.5px] px-[2%] py-[2.4%]"
+          style={{
+            ...boxStyle({ x: 1177, y: 18, width: 427, height: 372 }),
+            borderColor: "#60a5fa",
+            background: "rgba(37,99,235,0.10)",
+          }}
         >
-          <p className="text-text-main text-[7px] font-semibold min-[520px]:text-[9px] min-[760px]:text-[11px]">
+          <p className="text-[7px] font-semibold text-[#93c5fd] min-[520px]:text-[9px] min-[760px]:text-[11px]">
             Price Integrity Contract
           </p>
           <div className="absolute top-[5.8%] right-[5.2%]">
@@ -266,10 +283,11 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
               className="h-auto w-[20px] min-[520px]:w-[28px] min-[760px]:w-[36px]"
             />
           </div>
-        </Frame>
+        </div>
 
+        {/* Report box — emerald green */}
         <div
-          className="absolute z-20 rounded-[21px] border-[1.5px] border-[#00d88b] bg-[rgba(0,128,88,0.46)] px-[1.3%] py-[1.7%] text-[6px] font-semibold text-[#d7ffe9] min-[520px]:text-[8px] min-[760px]:text-[10px]"
+          className="absolute z-20 rounded-[12px] border-[1.5px] border-[#00d88b] bg-[rgba(0,128,88,0.46)] px-[1.3%] py-[1.7%] text-[6px] font-semibold text-[#d7ffe9] min-[520px]:text-[8px] min-[760px]:text-[10px]"
           style={{
             ...boxStyle({ x: 1254, y: 126, width: 252, height: 228 }),
             lineHeight: 1.35,
@@ -348,7 +366,7 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
             durationSeconds={1.9}
           />
           <FlowPath
-            d="M 857 724 H 957 Q 958 724 958 723 V 225 H 1272"
+            d="M 857 724 H 957 Q 958 724 958 723 V 225 H 1254"
             delaySeconds={0.22}
             durationSeconds={2.8}
           />

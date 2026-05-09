@@ -2,7 +2,7 @@ import Link from "next/link";
 
 const Footer = () => {
   return (
-    <footer className="border-[#0f2742] border-t bg-[#041026] px-4 py-4">
+    <footer className="border-t border-[#0f2742] bg-[#041026] px-4 py-4">
       <div className="flex items-center justify-between">
         <p className="text-[12px] leading-4 font-medium tracking-[-0.01em] text-[#587994]">
           TickX ©️ 2026. All rights reserved.
@@ -19,10 +19,6 @@ const Footer = () => {
           <div className="flex items-center gap-2">
             <Link href="#" className="transition-colors hover:text-[#9eb6c8]">
               Twitter
-            </Link>
-            <span aria-hidden>·</span>
-            <Link href="#" className="transition-colors hover:text-[#9eb6c8]">
-              Facebook
             </Link>
             <span aria-hidden>·</span>
             <Link href="#" className="transition-colors hover:text-[#9eb6c8]">

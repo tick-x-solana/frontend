@@ -78,6 +78,7 @@ type UseTradingGridSocketEffectsParams = {
   cancelPendingBet: (cellId: string) => void;
   pendingBets: Record<string, number>;
   storeRef: React.MutableRefObject<{ cells: CellData[] }>;
+  isFortressMcDiagnosticsOpen: boolean;
   onFortressMcDiagnostics?: (payload: unknown) => void;
 };
 
@@ -101,6 +102,7 @@ export function useTradingGridSocketEffects({
   cancelPendingBet,
   pendingBets,
   storeRef,
+  isFortressMcDiagnosticsOpen,
   onFortressMcDiagnostics,
 }: UseTradingGridSocketEffectsParams) {
   void _marketSocketPath;
@@ -181,15 +183,6 @@ export function useTradingGridSocketEffects({
       if (remoteCells) updateGrid(remoteCells);
     });
 
-    const handleFortressMcDiagnostics = (payload: unknown) => {
-      console.log("[TradingGrid] fortress_mc_diagnostics", payload);
-      onFortressMcDiagnostics?.(payload);
-    };
-    unifiedSocket.on(
-      FORTRESS_MC_DIAGNOSTICS_EVENT,
-      handleFortressMcDiagnostics,
-    );
-
     socketRef.current = unifiedSocket;
     useGameStore.getState().setConnection(unifiedSocket, null);
 
@@ -197,15 +190,31 @@ export function useTradingGridSocketEffects({
       unifiedSocket.off("price_update", handlePricePayload);
       unifiedSocket.off("price_now", handlePricePayload);
       unifiedSocket.off("grid_update");
-      unifiedSocket.off(
-        FORTRESS_MC_DIAGNOSTICS_EVENT,
-        handleFortressMcDiagnostics,
-      );
       unifiedSocket.disconnect();
       socketRef.current = null;
       useGameStore.getState().setConnection(null, null);
     };
-  }, [onFortressMcDiagnostics, updateGrid, updatePrice]);
+  }, [updateGrid, updatePrice]);
+
+  // 2.1) Subscribe fortress diagnostics only while the diagnostics modal is open.
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!isSocketLike(socket)) return;
+    if (!isFortressMcDiagnosticsOpen || !onFortressMcDiagnostics) return;
+
+    const handleFortressMcDiagnostics = (payload: unknown) => {
+      console.log("[TradingGrid] fortress_mc_diagnostics", payload);
+      onFortressMcDiagnostics(payload);
+    };
+
+    socket.on(FORTRESS_MC_DIAGNOSTICS_EVENT, handleFortressMcDiagnostics);
+    return () => {
+      socket.off(FORTRESS_MC_DIAGNOSTICS_EVENT, handleFortressMcDiagnostics);
+    };
+  }, [
+    isFortressMcDiagnosticsOpen,
+    onFortressMcDiagnostics,
+  ]);
 
   // 3) When the user is authenticated: fetch wssKey + challenge + signature to subscribe to the user channel.
   // Re-subscribes on reconnect, before key expiry (3s early), and on "Invalid wss signature" errors.

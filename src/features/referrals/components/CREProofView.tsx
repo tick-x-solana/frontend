@@ -29,13 +29,17 @@ type CreSectionProps = {
 };
 
 const txHashes = [
-  "0x4fab246383c2a73d61bcb7040a017e48f0e5bfc897bcda9118f54328769a269e",
-  "0x40a9682d7a17b4cefd00ed7e158ac9d94690d0cd7eb70317bf86a1508259211c",
-  "0x95af04427f0d4855c1b456b3073b6da72890673c177c16a7c3a54b8687ea87c6",
-  "0x070575ef375180ff49db864bec90a8112001c8c0bfc45fdf0ca4c394972b364c",
-  "0x802cc8c9c9be4801ec2b69b879174c3867e01a78b7677b351587f469bd3cbe4c",
-  "0xbc7975c18b8c1d933ffd80f434c93f641daf259d9c97144d5acee31b9a5a8eeb",
-  "0x9dc16f41ce8a2fc8b198500232e7d471c5dfebb9168c7168db8ca84b150fcb08",
+  "57jGVDvMPT6UxNcrx6ktkf7bDF19pS9PANCtfqcZF6QVA9F7AqWhpb59t6F863qzg14jYHN5WLmKdeVqhQXphZJ3",
+  "2eu1wbc4Ys4aLsddu9MmaSHregJqbySaA28U9Vnc1J4amXUNf99LBBUG3RVogZKKkwu2JpX2gYMLAKiujC2gvt4N",
+  "28AVqUCd2V1GAR7pbYVQHpSkEkq2mhTjf5gQ2tqM3n8WXaFPzsYw8NiqEQZXf8z7Ei8MsXid55odTPoVd4ujKiW7",
+  "1dbNrPdoGpUN2A6tqGScWQa67CcgAeRiS9GgA5i4vHL4sXraVw4aaUHdauJ47KjrGrZ1mw934dTngxYdtUmXn89",
+  "3aYK4jj7BVqJX4CZqEG71wuU2a5QD5NFtJaRU6YtXynoVgdRaXq7P3EFR2F4siovPSiacZxju7tHDY2geW9cTbAr",
+  "2nJVouNqdqLkqFkSAknNMpoMbmLz73njNnaoAqLifaRj3vZo44YeiQyWyfThsPXad3o5KQpFexjuXp36aRRjvKzt",
+  "2u7e2UGKke8mKRLyVHcZZStRcq5qNKwUXvVnoEx6YyxTKZEpPE18TJNYu89HCScZyUUARjnQhabB5SvYEMA2pRK8",
+  "4FBcsCDdh1AfUd2AwEiNvtasC5MT1cWvtz8Ez2q2dbeCdtGxMMMhyRbhB9jkVvUN9iQRAUdKq4ZjuR3MYLf42Tv3",
+  "4mzFTjY1gKVGXnaNgLLyAQoMUUy9DK331mZ8tRn4a7W4nZhgpbi8RvSJpqxnu33B6cbWSiMJxK3cwvVtpFAG5Ucc",
+  "5xzLbu3j7n7WZY1s6p6KX68R8cC1FbpowB8mwMPQBXK5c4j9HSk3upYucjhCSm6E6bFtMiavYjEqJYtWMdeNMRYS",
+  "5zvkVohD2Xd25Mn2MmokptFTmEeX4NxdngQKdjzMytqhWZBAg9i4ryNkQDv2TAV3LgUzj5Pjh8NF9p3c4AwT25vu",
 ];
 const nowTimestamp = Date.now();
 const fifteenMinutesMs = 15 * 60 * 1000;
@@ -167,12 +171,12 @@ function StatChip({
   valueClassName?: string;
 }) {
   return (
-    <div className="border-border-main bg-surface-overlay-subtle flex min-w-[132px] flex-col gap-1 rounded-[10px] border px-3 py-2">
+    <div className="border-border-main bg-surface-overlay-subtle flex min-w-0 flex-col gap-1 rounded-[10px] border px-3 py-2">
       <p className="text-text-sub text-[10px] font-semibold tracking-[0.14em] uppercase">
         {label}
       </p>
       <p
-        className={["text-sm font-bold", valueClassName]
+        className={["text-sm font-bold break-words", valueClassName]
           .filter(Boolean)
           .join(" ")}
       >
@@ -223,15 +227,15 @@ export default function CREProofView() {
             </div>
             <div className="min-w-0">
               <h2 className="text-text-heading text-lg font-semibold tracking-[-0.02em]">
-                CRE Runs
+                Switchboard TEE Runs
               </h2>
               <p className="text-text-sub text-xs">
-                On-chain CRE events in the last 7 days
+                On-chain Switchboard TEE events in the last 7 days
               </p>
             </div>
           </div>
 
-          <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-4">
+          <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-4">
             <StatChip
               label="Total Batches"
               value={fmt(totalBatches)}
@@ -303,7 +307,7 @@ export default function CREProofView() {
               render: (row) => (
                 <a
                   className="text-text-link-main hover:text-primary-light transition-colors"
-                  href={`https://worldscan.org/tx/${String(row.txHash)}`}
+                  href={`https://solscan.io/tx/${String(row.txHash)}?cluster=devnet`}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -320,7 +324,7 @@ export default function CREProofView() {
       </CreSection>
 
       <p className="text-hint px-1 text-center text-[10px]">
-        Data sourced from CRE worker events
+        Data sourced from Switchboard TEE worker events
       </p>
     </div>
   );

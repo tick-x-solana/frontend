@@ -25,6 +25,11 @@ export const upToOneDecimalFormatter = new Intl.NumberFormat(DEFAULT_LOCALE, {
   maximumFractionDigits: 1,
 });
 
+export const upToFourDecimalFormatter = new Intl.NumberFormat(DEFAULT_LOCALE, {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 4,
+});
+
 export const usdCurrencyFormatter = new Intl.NumberFormat(DEFAULT_LOCALE, {
   style: "currency",
   currency: "USD",
@@ -71,6 +76,10 @@ export function formatOneDecimalNumber(value: number): string {
 
 export function formatUpToOneDecimalNumber(value: number): string {
   return upToOneDecimalFormatter.format(value);
+}
+
+export function formatUpToFourDecimalNumber(value: number): string {
+  return upToFourDecimalFormatter.format(value);
 }
 
 export function formatApproxUsd(

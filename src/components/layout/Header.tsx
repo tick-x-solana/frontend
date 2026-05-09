@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { Button } from "@/src/components/shadcn/button";
+import ClientWalletMultiButton from "@/src/components/wallet/ClientWalletMultiButton";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,6 @@ import {
   DialogTitle,
 } from "@/src/components/shadcn/dialog";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { paymentControllerDebugDeposit } from "@/src/services/queries";
 import {
   FAUCET_COOLDOWN_MS,
@@ -192,14 +192,14 @@ const Header = () => {
             <Button
               type="button"
               variant="outline"
-              className="h-10 rounded-[8px] px-3"
+              className="bg-primary-medium h-10 rounded-[8px] px-3"
               disabled={isFauceting}
               onClick={() => void handleFaucet()}
             >
               {faucetLabel}
             </Button>
           ) : null}
-          <WalletMultiButton
+          <ClientWalletMultiButton
             style={{
               height: "40px",
               borderRadius: "8px",

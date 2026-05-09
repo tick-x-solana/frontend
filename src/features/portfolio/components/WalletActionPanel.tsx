@@ -3,6 +3,7 @@
 import { WalletIcon } from "@/src/assets/icons";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { Button } from "@/src/components/shadcn/button";
+import ClientWalletMultiButton from "@/src/components/wallet/ClientWalletMultiButton";
 import { useGameStore } from "@/src/features/trade/store";
 import useDepositWithdraw from "@/src/hooks/useDepositWithdraw";
 import { useAccountControllerGetBalance } from "@/src/services/queries";
@@ -17,7 +18,6 @@ import {
   useState,
 } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { toast } from "sonner";
 
 type PortfolioAction = "withdraw" | "deposit";
@@ -218,7 +218,7 @@ const WalletActionPanel = () => {
             Connect a Solana wallet to view your balance and manage funds.
           </p>
         </div>
-        <WalletMultiButton
+        <ClientWalletMultiButton
           style={{
             width: "100%",
             height: "40px",

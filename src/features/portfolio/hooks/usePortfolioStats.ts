@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { customClient } from "@/src/services/custom-client";
 import type { LeaderboardStatsDto } from "@/src/services/models";
+import useSolUsdPrice from "@/src/hooks/useSolUsdPrice";
 import { formatUsdCurrency } from "@/src/utils/formatters";
 
 type StatsEnvelope = {
@@ -32,10 +33,17 @@ function formatPnl(value: string | undefined): string {
   return numericValue > 0 ? `+${formatted}` : formatted;
 }
 
-function formatVolume(value: string | undefined): string {
-  if (!value) return "--";
+function formatVolume(totalVolumeSol: string | undefined, solUsdPrice: number | undefined): string {
+  if (!totalVolumeSol) return "--";
 
-  return formatUsdCurrency(value);
+  const numericVolumeSol = Number(totalVolumeSol);
+  if (!Number.isFinite(numericVolumeSol) || numericVolumeSol < 0) return "--";
+
+  if (typeof solUsdPrice !== "number" || !Number.isFinite(solUsdPrice) || solUsdPrice <= 0) {
+    return "--";
+  }
+
+  return formatUsdCurrency(numericVolumeSol * solUsdPrice);
 }
 
 async function fetchPortfolioStats(): Promise<LeaderboardStatsDto | null> {
@@ -56,6 +64,7 @@ async function fetchPortfolioStats(): Promise<LeaderboardStatsDto | null> {
 }
 
 export function usePortfolioStatsCards(): PortfolioStatCard[] {
+  const { data: solUsdPrice } = useSolUsdPrice();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["/api/stats/me"],
     queryFn: fetchPortfolioStats,
@@ -79,7 +88,7 @@ export function usePortfolioStatsCards(): PortfolioStatCard[] {
   }
 
   return [
-    { label: "Total Vol", value: formatVolume(data.totalVolume) },
+    { label: "Total Vol", value: formatVolume(data.totalVolume, solUsdPrice) },
     {
       label: "Win Rate",
       value: formatWinRate(data.winRate),

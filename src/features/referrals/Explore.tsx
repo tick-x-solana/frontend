@@ -68,8 +68,8 @@ const humanVaultDataset: VaultDataset = {
   totalValueLocked: "$22,200",
   protocolVaults: [
     [
-      { label: "Vault", value: "Hyperliquidity Provider (HLP)" },
-      { label: "Leader", value: "0x677d...84e7" },
+      { label: "Vault", value: "TickX Liquidity Provider (TLP)" },
+      { label: "Leader", value: "7xKp...3mQe" },
       { label: "APR", value: "-0.19%", valueClassName: "text-red-400" },
       { label: "TVL", value: "$29,480.00" },
       { label: "Your Deposit", value: "$0.00" },
@@ -77,8 +77,8 @@ const humanVaultDataset: VaultDataset = {
       { label: "Snapshot", value: "-" },
     ],
     [
-      { label: "Vault", value: "[ Systemic Strategies] HyperGrowth" },
-      { label: "Leader", value: "0x2b80...6f6b" },
+      { label: "Vault", value: "[ Systemic Strategies] SolGrowth" },
+      { label: "Leader", value: "4nRt...9wBz" },
       { label: "APR", value: "-0.19%", valueClassName: "text-red-400" },
       { label: "TVL", value: "$22,760.00" },
       { label: "Your Deposit", value: "$0.00" },
@@ -88,8 +88,8 @@ const humanVaultDataset: VaultDataset = {
   ],
   userVaults: [
     [
-      { label: "Vault", value: "BlackRock Fund 101" },
-      { label: "Leader", value: "0x2b80...6f6b" },
+      { label: "Vault", value: "Solana Alpha Fund 101" },
+      { label: "Leader", value: "4nRt...9wBz" },
       { label: "APR", value: "2.18%" },
       { label: "TVL", value: "$12,340.00" },
       { label: "Your Deposit", value: "$4,200.00" },
@@ -97,8 +97,8 @@ const humanVaultDataset: VaultDataset = {
       { label: "Snapshot", value: "-" },
     ],
     [
-      { label: "Vault", value: "BlackRock Fund 102" },
-      { label: "Leader", value: "0x677d...84e7" },
+      { label: "Vault", value: "Solana Alpha Fund 102" },
+      { label: "Leader", value: "7xKp...3mQe" },
       { label: "APR", value: "1.76%" },
       { label: "TVL", value: "$9,860.00" },
       { label: "Your Deposit", value: "$2,150.00" },
@@ -112,8 +112,8 @@ const agentVaultDataset: VaultDataset = {
   totalValueLocked: "$28,600",
   protocolVaults: [
     [
-      { label: "Vault", value: "Agent Morpho Delta Neutral" },
-      { label: "Leader", value: "agent-morpho-01" },
+      { label: "Vault", value: "Agent SOL Delta Neutral" },
+      { label: "Leader", value: "agent-sol-01" },
       { label: "APR", value: "7.03%" },
       { label: "TVL", value: "$37,600" },
       { label: "Your Deposit", value: "$0.00" },
@@ -121,8 +121,8 @@ const agentVaultDataset: VaultDataset = {
       { label: "Snapshot", value: "2026-04-24" },
     ],
     [
-      { label: "Vault", value: "Agent Uni v3 Rebalancer WLD/USDC" },
-      { label: "Leader", value: "agent-univ3-07" },
+      { label: "Vault", value: "Agent Raydium Rebalancer SOL/USDC" },
+      { label: "Leader", value: "agent-ray-07" },
       { label: "APR", value: "5.64%" },
       { label: "TVL", value: "$24,700" },
       { label: "Your Deposit", value: "$0.00" },
@@ -154,36 +154,36 @@ const agentVaultDataset: VaultDataset = {
 
 const liquidityPools: LiquidityPool[] = [
   {
-    id: "wld-usdt-005",
-    pair: "WLD/USDT Market · 0.05%",
+    id: "sol-usdc-005",
+    pair: "SOL/USDC Market · 0.05%",
     apr: "2.31%",
     tvl: "$184,220",
     volume: "$412,740",
   },
   {
-    id: "wld-usdt-03",
-    pair: "WLD/USDT Market · 0.30%",
+    id: "sol-usdc-03",
+    pair: "SOL/USDC Market · 0.30%",
     apr: "3.84%",
     tvl: "$96,870",
     volume: "$238,510",
   },
   {
-    id: "wld-usdt-100",
-    pair: "WLD/USDT Market · 1.00%",
+    id: "sol-usdc-100",
+    pair: "SOL/USDC Market · 1.00%",
     apr: "5.12%",
     tvl: "$58,430",
     volume: "$121,980",
   },
   {
-    id: "wld-usdt-wide",
-    pair: "WLD/USDT Market · Wide Range",
+    id: "sol-usdc-wide",
+    pair: "SOL/USDC Market · Wide Range",
     apr: "1.92%",
     tvl: "$41,260",
     volume: "$67,540",
   },
   {
-    id: "wld-usdt-narrow",
-    pair: "WLD/USDT Market · Narrow Range",
+    id: "sol-usdc-narrow",
+    pair: "SOL/USDC Market · Narrow Range",
     apr: "6.28%",
     tvl: "$74,510",
     volume: "$159,230",
@@ -217,13 +217,13 @@ function KVCard({ rows }: { rows: VaultRow[] }) {
       {rows.map((row) => (
         <div
           key={`${row.label}-${row.value}`}
-          className="grid grid-cols-[1fr_auto] items-center gap-3 py-0.5"
+          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-0.5"
         >
           <p className="text-text-sub text-[14px] font-semibold tracking-[-0.01em]">
             {row.label}
           </p>
           <p
-            className={`text-text-main text-right text-[14px] font-medium tracking-[-0.01em] ${row.valueClassName ?? ""}`}
+            className={`text-text-main min-w-0 text-right text-[14px] font-medium tracking-[-0.01em] break-all ${row.valueClassName ?? ""}`}
           >
             {row.value}
           </p>
@@ -237,16 +237,22 @@ function LiquidityCard({ pool }: { pool: LiquidityPool }) {
   return (
     <article className="border-border-subtle w-full rounded-[8px] border px-3 py-3">
       <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="relative flex h-6 items-center">
             <span className="bg-background-subtle flex size-6 items-center justify-center rounded-full">
-              <WldMarketIcon aria-hidden className="size-4" />
+              <Image
+                src="/sol.png"
+                alt="SOL"
+                width={20}
+                height={20}
+                className="size-5"
+              />
             </span>
             <span className="bg-background-subtle -ml-2 flex size-6 items-center justify-center rounded-full">
               <TetherIcon aria-hidden className="size-4" />
             </span>
           </span>
-          <p className="text-text-heading text-[16px] font-semibold tracking-[-0.01em]">
+          <p className="text-text-heading truncate text-[16px] font-semibold tracking-[-0.01em]">
             {pool.pair}
           </p>
         </div>
@@ -506,18 +512,18 @@ const Explore = () => {
                 Featured
               </p>
               <div className="relative flex gap-2 md:gap-3">
-                    <FeaturedCard
-                      Icon={ExploreVaultIcon}
-                      title="Vault"
-                      comingSoon
-                      onClick={() => handleNavigateView("vault")}
-                    />
-                    <FeaturedCard
-                      Icon={ExploreLiquidityIcon}
-                      title="Provide Liquidity"
-                      comingSoon
-                      onClick={() => handleNavigateView("liquidity")}
-                    />
+                <FeaturedCard
+                  Icon={ExploreVaultIcon}
+                  title="Vault"
+                  comingSoon
+                  onClick={() => handleNavigateView("vault")}
+                />
+                <FeaturedCard
+                  Icon={ExploreLiquidityIcon}
+                  title="Provide Liquidity"
+                  comingSoon
+                  onClick={() => handleNavigateView("liquidity")}
+                />
               </div>
             </section>
 
@@ -526,31 +532,31 @@ const Explore = () => {
                 Browse
               </p>
               <div className="md:border-border-main/70 md:bg-surface-overlay-subtle grid gap-5 md:grid-cols-2 md:rounded-[14px] md:border md:p-5">
-                    <BrowseRow
-                      Icon={ExploreFollowTradingIcon}
-                      title="Follow Trading"
-                      subtitle="Copy top-performing strategies in real-time."
-                      onClick={() => handleNavigateView("follow-trade")}
-                    />
+                <BrowseRow
+                  Icon={ExploreFollowTradingIcon}
+                  title="Follow Trading"
+                  subtitle="Copy top-performing strategies in real-time."
+                  onClick={() => handleNavigateView("follow-trade")}
+                />
                 <BrowseRow
                   Icon={ExploreReferralIcon}
                   title="Referral & Earnings"
                   subtitle="Invite friends and grow your passive income."
-                      onClick={() => handleNavigateView("referrals")}
+                  onClick={() => handleNavigateView("referrals")}
                 />
                 <BrowseRow
                   Icon={ExploreIntegrityIcon}
                   title="Proof of Integrity"
                   subtitle="Verify transparency and secure transaction data."
-                      onClick={() => handleNavigateView("integrity")}
+                  onClick={() => handleNavigateView("integrity")}
                 />
                 <BrowseRow
                   Icon={ExploreAiAgentIcon}
                   title="AI Agent Space"
                   subtitle="Deploy and manage your custom trading algorithms."
                   comingSoon
-                      onClick={() => handleNavigateView("ai-agent")}
-                    />
+                  onClick={() => handleNavigateView("ai-agent")}
+                />
               </div>
             </section>
 
@@ -561,27 +567,11 @@ const Explore = () => {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  aria-label="Open World App"
-                  className="flex size-10 items-center justify-center rounded-[4px]"
-                >
-                  <span className="flex size-6 items-center justify-center">
-                    <Image
-                      src="/world-app.avif"
-                      alt=""
-                      width={22}
-                      height={22}
-                      aria-hidden="true"
-                      className="size-[22px] rounded-[4px] object-cover"
-                    />
-                  </span>
-                </button>
-                <button
-                  type="button"
                   aria-label="Open X"
                   className="flex size-10 items-center justify-center rounded-[4px]"
                 >
                   <span className="flex size-6 items-center justify-center">
-                    <SocialXFigmaIcon aria-hidden className="size-[12]" />
+                    <SocialXFigmaIcon aria-hidden className="size-[12px]" />
                   </span>
                 </button>
                 <button
@@ -721,7 +711,8 @@ const Explore = () => {
                   </div>
                 </div>
                 <p className="text-text-sub text-[13px] tracking-[-0.01em]">
-                  Set up your AI agent in minutes and connect it to TickX MCP.
+                  Set up your AI agent in minutes and connect it to TickX on
+                  Solana.
                 </p>
               </div>
             </section>
@@ -729,26 +720,26 @@ const Explore = () => {
             <div className="flex flex-col gap-3">
               <AgentStep
                 index={1}
-                title="Register your agent using Worldchain Agent Kit"
-                command="npx @worldcoin/agentkit-cli register <agent-address>"
+                title="Register your agent wallet on Solana Devnet"
+                command="solana-keygen new --outfile agent-keypair.json"
                 onCopy={handleCopyText}
               />
               <AgentStep
                 index={2}
-                title="Teach your agent to use Worldchain AgentKit"
-                command="npx skills add worldcoin/agentkit"
+                title="Airdrop SOL to your agent for gas fees"
+                command="solana airdrop 2 <agent-address> --url devnet"
                 onCopy={handleCopyText}
               />
               <AgentStep
                 index={3}
-                title="Tell your agent to add TickX mcp"
+                title="Tell your agent to add TickX MCP"
                 command="https://mcp.tickx.finance"
                 onCopy={handleCopyText}
               />
               <AgentStep
                 index={4}
-                title="Teach your agent to join & use TickX.finance"
-                command="Hey bro! Read https://tickx.finance/skill.md and follow the instructions to join TickX"
+                title="Teach your agent to join & use TickX on Solana"
+                command="Hey! Read https://solana.tickx.finance/skill.md and follow the instructions to join TickX"
                 onCopy={handleCopyText}
               />
             </div>
@@ -771,7 +762,7 @@ const Explore = () => {
                     @QuantAgent.3475
                   </span>
                   <span className="text-hint font-mono text-[12px] font-medium tracking-[-0.01em]">
-                    ID: 0xa3f2...7c91
+                    ID: 7xKp...3mQe
                   </span>
                 </div>
                 <span className="flex items-center gap-1 text-[12px] font-semibold text-emerald-400">
@@ -793,7 +784,7 @@ const Explore = () => {
                     @DeltaBot.8812
                   </span>
                   <span className="text-hint font-mono text-[12px] font-medium tracking-[-0.01em]">
-                    ID: 0xb91e...4d03
+                    ID: 4nRt...9wBz
                   </span>
                 </div>
                 <span className="text-hint flex items-center gap-1 text-[12px] font-semibold">
