@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import {
+  RECENT_ORDERS_INLINE_MAX_HEIGHT,
+  RECENT_ORDERS_SHEET_MAX_HEIGHT,
   USER_ORDERS_FETCH_LIMIT,
   USER_ORDERS_LOOKBACK_MS,
 } from "@/src/constants";
@@ -407,11 +409,14 @@ export default function TradingOrdersPanel({
     ? "text-destructive flex min-h-20 items-center justify-center rounded-[8px] bg-destructive/10 px-4 text-center text-sm font-medium tracking-[-0.01em]"
     : "text-destructive flex min-h-24 items-center justify-center rounded-[8px] border border-dashed border-destructive/30 px-4 text-center text-sm font-medium tracking-[-0.01em]";
   const listClassName = inline
-    ? "flex max-h-[560px] flex-col gap-2 overflow-y-auto pr-1"
-    : "flex max-h-[420px] flex-col gap-3 overflow-y-auto pr-1";
+    ? "flex min-h-0 flex-col gap-2 overflow-y-auto pr-1"
+    : "flex min-h-0 flex-col gap-3 overflow-y-auto pr-1";
   const cardClassName = inline
     ? "border-border-main/70 bg-surface-overlay-subtle rounded-[8px] border p-3"
     : "border-border-main bg-background-main rounded-[12px] border p-4";
+  const listMaxHeight = inline
+    ? RECENT_ORDERS_INLINE_MAX_HEIGHT
+    : RECENT_ORDERS_SHEET_MAX_HEIGHT;
 
   return (
     <section className={cn(containerClassName, className)}>
@@ -443,7 +448,7 @@ export default function TradingOrdersPanel({
       ) : orders.length === 0 ? (
         <div className={emptyStateClassName}>{emptyMessage}</div>
       ) : (
-        <div className={listClassName}>
+        <div className={listClassName} style={{ maxHeight: listMaxHeight }}>
           {orders.map((order) => (
             <article key={order.id} className={cardClassName}>
               <div

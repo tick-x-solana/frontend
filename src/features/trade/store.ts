@@ -10,6 +10,8 @@ import {
   MODE_INTERVAL_SECONDS,
   MODE_PRICE_STEP,
   DEFAULT_BET_AMOUNT_SOL,
+  MAX_CUSTOM_BID_SIZE_SOL,
+  MIN_CUSTOM_BID_SIZE_SOL,
   MAX_FOLLOWED_ORDER_ACTIVITIES,
 } from "./storeConstants";
 import {
@@ -30,6 +32,20 @@ import {
   resolveRewardRate,
 } from "./storeUtils";
 import { USER_ORDERS_FETCH_LIMIT } from "@/src/constants";
+import { CUSTOM_BID_SIZE_STORAGE_KEY } from "@/src/constants";
+
+function getInitialBetAmount() {
+  if (typeof window === "undefined") return DEFAULT_BET_AMOUNT_SOL;
+
+  const rawValue = window.localStorage.getItem(CUSTOM_BID_SIZE_STORAGE_KEY);
+  if (!rawValue) return DEFAULT_BET_AMOUNT_SOL;
+
+  const parsedValue = Number(rawValue);
+  if (!Number.isFinite(parsedValue)) return DEFAULT_BET_AMOUNT_SOL;
+  if (parsedValue < MIN_CUSTOM_BID_SIZE_SOL) return DEFAULT_BET_AMOUNT_SOL;
+  if (parsedValue > MAX_CUSTOM_BID_SIZE_SOL) return DEFAULT_BET_AMOUNT_SOL;
+  return parsedValue;
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -129,7 +145,7 @@ export const useGameStore = create<GameState>((set) => ({
   wssKey: null,
   wssKeyExpiresAt: null,
   followedOrderActivities: [],
-  betAmount: DEFAULT_BET_AMOUNT_SOL,
+  betAmount: getInitialBetAmount(),
   serverTimeOffset: 0,
   serverTimeOffsetReady: false,
   priceStepChangedAt: null,
@@ -140,7 +156,20 @@ export const useGameStore = create<GameState>((set) => ({
   resetGridData: () =>
     set({ cells: [], history: [], currentPrice: 0, basePrice: 0 }),
 
-  setBetAmount: (amount) => set({ betAmount: amount }),
+  setBetAmount: (amount) => {
+    if (!Number.isFinite(amount)) return;
+    const normalizedAmount = Math.max(
+      MIN_CUSTOM_BID_SIZE_SOL,
+      Math.min(MAX_CUSTOM_BID_SIZE_SOL, amount),
+    );
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        CUSTOM_BID_SIZE_STORAGE_KEY,
+        String(normalizedAmount),
+      );
+    }
+    set({ betAmount: normalizedAmount });
+  },
 
   setDesktopOrdersPanel: (isVisible, queryAnchorTime = null) =>
     set((state) => ({

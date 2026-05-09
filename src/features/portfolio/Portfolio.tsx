@@ -4,15 +4,11 @@ import Title from "@/src/components/common/Title";
 import OverviewCard from "@/src/features/portfolio/components/OverviewCard";
 import TradingHistoryTable from "@/src/features/portfolio/components/TradingHistoryTable";
 import WalletActionPanel from "@/src/features/portfolio/components/WalletActionPanel";
+import { usePortfolioStatsCards } from "@/src/features/portfolio/hooks/usePortfolioStats";
 import Image from "next/image";
 
-const overviewCards = [
-  { label: "Total Vol", value: "$12,480" },
-  { label: "Win Rate", value: "64.2%", valueClassName: "text-success-medium" },
-  { label: "+Edge Earned", value: "+$340.50", valueClassName: "text-primary-medium" },
-];
-
 const Portfolio = () => {
+  const overviewCards = usePortfolioStatsCards();
 
   return (
     <div className="bg-background-main relative min-h-screen overflow-hidden px-4 py-4 md:px-10 xl:px-20">

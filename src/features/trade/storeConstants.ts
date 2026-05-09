@@ -2,6 +2,12 @@ export const MODE_INTERVAL_SECONDS = 5;
 export const MODE_PRICE_STEP = 25;
 // Default bid size in SOL (smallest option)
 export const DEFAULT_BET_AMOUNT_SOL = 0.01;
+// Preset quick-select bid options in SOL.
+export const BID_OPTIONS_SOL = [0.01, 0.03, 0.05, 0.1];
+// Minimum allowed custom bid size in SOL.
+export const MIN_CUSTOM_BID_SIZE_SOL = 0.001;
+// Maximum allowed custom bid size in SOL.
+export const MAX_CUSTOM_BID_SIZE_SOL = 100;
 export const MAX_FOLLOWED_ORDER_ACTIVITIES = 200;
 
 // Very slow smoothing (2%) so each price tick moves serverTimeOffset by at most

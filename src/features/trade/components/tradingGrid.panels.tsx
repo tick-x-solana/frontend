@@ -1,5 +1,5 @@
 import React from "react";
-import { Copy, Eye, Info, LocateFixed, Share2, Wallet } from "lucide-react";
+import { ChartNoAxesColumn, Copy, Eye, Info, LocateFixed, Share2, Wallet } from "lucide-react";
 import HamburgerMenuIcon from "@/src/assets/icons/hamburger-menu.svg";
 import {
   Dialog,
@@ -36,6 +36,7 @@ type TopBarProps = {
   onOpenOrders: () => void;
   onOpenOverlay: () => void;
   onRecenter: () => void;
+  onOpenMcDiagnostics: () => void;
 };
 
 export function TradingGridTopBar({
@@ -49,6 +50,7 @@ export function TradingGridTopBar({
   onOpenOrders,
   onOpenOverlay,
   onRecenter,
+  onOpenMcDiagnostics,
 }: TopBarProps) {
   const selectedOption =
     MARKET_OPTIONS.find((option) => option.symbol === selectedMarketSymbol) ??
@@ -147,6 +149,12 @@ export function TradingGridTopBar({
           onClick={onRecenter}
         >
           <LocateFixed className="size-4" strokeWidth={1.75} />
+        </GridActionButton>
+        <GridActionButton
+          aria-label="Open fortress diagnostics chart"
+          onClick={onOpenMcDiagnostics}
+        >
+          <ChartNoAxesColumn className="size-4" strokeWidth={1.75} />
         </GridActionButton>
       </div>
     </div>

@@ -2,8 +2,8 @@
 
 import { useMemo, useState, type ComponentType } from "react";
 import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
 import ExploreAiAgentIcon from "@/src/assets/icons/explore-ai-agent.svg";
-import ExploreFeatureDividerIcon from "@/src/assets/icons/explore-feature-divider.svg";
 import ExploreFeatureEllipseBottomIcon from "@/src/assets/icons/explore-feature-ellipse-bottom.svg";
 import ExploreFeatureEllipseLeftIcon from "@/src/assets/icons/explore-feature-ellipse-left.svg";
 import ExploreFeatureOrbIcon from "@/src/assets/icons/explore-feature-orb.svg";
@@ -33,6 +33,7 @@ import ReferAFriend from "@/src/features/referrals/components/ReferAFriend";
 import ReferralsHeader from "@/src/features/referrals/components/ReferralsHeader";
 import { buildMiniAppReferralLink } from "@/src/features/referrals/constants";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import { EXPLORE_TAB_QUERY_KEY } from "@/src/constants";
 
 type ExploreView =
   | "home"
@@ -406,9 +407,9 @@ function BrowseRow({
     <button
       type="button"
       onClick={onClick}
-      className="relative flex w-full items-start gap-3 rounded-[8px] text-left"
+      className="border-border-main/60 from-surface-overlay-subtle via-background-surface/70 to-surface-overlay-subtle hover:border-border-main hover:from-surface-overlay-medium hover:to-surface-overlay-medium relative flex w-full items-start gap-3 overflow-hidden rounded-[12px] border bg-gradient-to-r px-3 py-3 text-left transition-all duration-200"
     >
-      <span className="bg-background-surface flex size-11 shrink-0 items-center justify-center rounded-[8px]">
+      <span className="from-background-subtle to-background-surface border-border-main/70 flex size-11 shrink-0 items-center justify-center rounded-[10px] border bg-gradient-to-b">
         <Icon className="size-6" />
       </span>
       <span className="flex min-w-0 flex-col pt-0.5">
@@ -422,15 +423,31 @@ function BrowseRow({
           {subtitle}
         </span>
       </span>
-      <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0px_-4px_16px_0px_rgba(255,255,255,0.05)]" />
+      <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0px_1px_0px_rgba(255,255,255,0.06),inset_0px_-10px_26px_rgba(4,11,24,0.48)]" />
     </button>
   );
 }
 
 const Explore = () => {
-  const [activeView, setActiveView] = useState<ExploreView>("home");
   const [vaultMode, setVaultMode] = useState<"human" | "agents">("human");
   const { walletAddress, username } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const activeView = useMemo<ExploreView>(() => {
+    const currentTab = searchParams.get(EXPLORE_TAB_QUERY_KEY);
+    if (
+      currentTab === "vault" ||
+      currentTab === "liquidity" ||
+      currentTab === "follow-trade" ||
+      currentTab === "referrals" ||
+      currentTab === "integrity" ||
+      currentTab === "ai-agent"
+    ) {
+      return currentTab;
+    }
+    return "home";
+  }, [searchParams]);
 
   const referralLink = useMemo(
     () => buildMiniAppReferralLink(username ?? walletAddress),
@@ -448,12 +465,20 @@ const Explore = () => {
     }
   };
 
+  const handleNavigateView = (nextView: ExploreView) => {
+    if (nextView === "home") {
+      router.push("/explore");
+      return;
+    }
+    router.push(`/explore?${EXPLORE_TAB_QUERY_KEY}=${nextView}`);
+  };
+
   return (
     <div className="bg-background-main min-h-full w-full">
-      <div className="mx-auto flex w-full max-w-[393px] flex-col px-4 pt-5 pb-6">
+      <div className="mx-auto flex w-full max-w-[393px] flex-col px-4 pt-5 pb-6 md:max-w-[1200px] md:px-6 md:pt-8 md:pb-10 lg:px-8">
         {activeView === "home" ? (
           <>
-            <section className="relative -mx-4 -mt-5 overflow-hidden px-4 pt-5">
+            <section className="relative -mx-4 -mt-5 overflow-hidden px-4 pt-5 md:mx-0 md:mt-0 md:px-0 md:pt-0">
               <span
                 aria-hidden
                 className="bg-accent-blue/15 absolute -top-28 right-[-70px] h-72 w-56 rotate-[-8deg] blur-3xl"
@@ -462,12 +487,12 @@ const Explore = () => {
                 aria-hidden
                 className="bg-success-light/10 absolute -top-20 right-10 h-64 w-32 rotate-[12deg] blur-3xl"
               />
-              <h1 className="text-text-heading mb-8 text-[24px] font-semibold tracking-[-0.01em]">
+              <h1 className="text-text-heading mb-8 text-[24px] font-semibold tracking-[-0.01em] md:mb-6 md:text-[32px]">
                 Explore
               </h1>
             </section>
 
-            <section className="relative -mx-4 mb-7 overflow-hidden px-4 pt-4 pb-8">
+            <section className="md:border-border-main/70 md:bg-surface-overlay-subtle relative -mx-4 mb-7 overflow-hidden px-4 pt-4 pb-8 md:mx-0 md:rounded-[14px] md:border md:px-5 md:pt-5 md:pb-10">
               <ExploreFeatureEllipseBottomIcon
                 aria-hidden
                 className="pointer-events-none absolute bottom-[-52px] left-1/2 h-[100px] w-32 -translate-x-1/2"
@@ -480,61 +505,56 @@ const Explore = () => {
               <p className="text-text-heading mb-4 text-[16px] font-semibold tracking-[-0.01em]">
                 Featured
               </p>
-              <div className="relative flex gap-2">
-                <FeaturedCard
-                  Icon={ExploreVaultIcon}
-                  title="Vault"
-                  comingSoon
-                  onClick={() => setActiveView("vault")}
-                />
-                <FeaturedCard
-                  Icon={ExploreLiquidityIcon}
-                  title="Provide Liquidity"
-                  comingSoon
-                  onClick={() => setActiveView("liquidity")}
-                />
+              <div className="relative flex gap-2 md:gap-3">
+                    <FeaturedCard
+                      Icon={ExploreVaultIcon}
+                      title="Vault"
+                      comingSoon
+                      onClick={() => handleNavigateView("vault")}
+                    />
+                    <FeaturedCard
+                      Icon={ExploreLiquidityIcon}
+                      title="Provide Liquidity"
+                      comingSoon
+                      onClick={() => handleNavigateView("liquidity")}
+                    />
               </div>
-
-              <ExploreFeatureDividerIcon
-                aria-hidden
-                className="pointer-events-none absolute bottom-[-21px] left-[-16px] h-[42px] w-[393px]"
-              />
             </section>
 
             <section className="mb-7">
               <p className="text-text-heading mb-4 text-[16px] font-semibold tracking-[-0.01em]">
                 Browse
               </p>
-              <div className="flex flex-col gap-5">
-                <BrowseRow
-                  Icon={ExploreFollowTradingIcon}
-                  title="Follow Trading"
-                  subtitle="Copy top-performing strategies in real-time."
-                  onClick={() => setActiveView("follow-trade")}
-                />
+              <div className="md:border-border-main/70 md:bg-surface-overlay-subtle grid gap-5 md:grid-cols-2 md:rounded-[14px] md:border md:p-5">
+                    <BrowseRow
+                      Icon={ExploreFollowTradingIcon}
+                      title="Follow Trading"
+                      subtitle="Copy top-performing strategies in real-time."
+                      onClick={() => handleNavigateView("follow-trade")}
+                    />
                 <BrowseRow
                   Icon={ExploreReferralIcon}
                   title="Referral & Earnings"
                   subtitle="Invite friends and grow your passive income."
-                  onClick={() => setActiveView("referrals")}
+                      onClick={() => handleNavigateView("referrals")}
                 />
                 <BrowseRow
                   Icon={ExploreIntegrityIcon}
                   title="Proof of Integrity"
                   subtitle="Verify transparency and secure transaction data."
-                  onClick={() => setActiveView("integrity")}
+                      onClick={() => handleNavigateView("integrity")}
                 />
                 <BrowseRow
                   Icon={ExploreAiAgentIcon}
                   title="AI Agent Space"
                   subtitle="Deploy and manage your custom trading algorithms."
                   comingSoon
-                  onClick={() => setActiveView("ai-agent")}
-                />
+                      onClick={() => handleNavigateView("ai-agent")}
+                    />
               </div>
             </section>
 
-            <section>
+            <section className="md:border-border-main/70 md:bg-surface-overlay-subtle md:rounded-[14px] md:border md:p-5">
               <p className="text-text-heading mb-4 text-[16px] font-semibold tracking-[-0.01em]">
                 Social
               </p>
@@ -582,8 +602,8 @@ const Explore = () => {
         ) : null}
 
         {activeView === "vault" ? (
-          <div className="flex flex-col gap-4">
-            <BackButton onClick={() => setActiveView("home")} />
+          <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
+            <BackButton onClick={() => handleNavigateView("home")} />
 
             <div className="flex items-center justify-between gap-3">
               <div className="flex flex-col items-start gap-1">
@@ -629,16 +649,18 @@ const Explore = () => {
 
             <section className="flex flex-col gap-2">
               <SectionTitle>User Vaults</SectionTitle>
-              {activeVaultDataset.userVaults.map((rows, index) => (
-                <KVCard key={`user-${index}`} rows={rows} />
-              ))}
+              <div className="grid gap-2 md:grid-cols-2">
+                {activeVaultDataset.userVaults.map((rows, index) => (
+                  <KVCard key={`user-${index}`} rows={rows} />
+                ))}
+              </div>
             </section>
           </div>
         ) : null}
 
         {activeView === "liquidity" ? (
-          <div className="flex flex-col gap-4">
-            <BackButton onClick={() => setActiveView("home")} />
+          <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
+            <BackButton onClick={() => handleNavigateView("home")} />
             <div className="flex flex-col items-start gap-1">
               <h1 className="text-text-heading text-[24px] font-semibold tracking-[-0.01em]">
                 Provide Liquidity
@@ -646,22 +668,24 @@ const Explore = () => {
               <ComingSoonBadge />
             </div>
 
-            {liquidityPools.map((pool) => (
-              <LiquidityCard key={pool.id} pool={pool} />
-            ))}
+            <div className="grid gap-4 md:grid-cols-2">
+              {liquidityPools.map((pool) => (
+                <LiquidityCard key={pool.id} pool={pool} />
+              ))}
+            </div>
           </div>
         ) : null}
 
         {activeView === "follow-trade" ? (
-          <div className="flex flex-col gap-4">
-            <BackButton onClick={() => setActiveView("home")} />
+          <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
+            <BackButton onClick={() => handleNavigateView("home")} />
             <FollowTradeView />
           </div>
         ) : null}
 
         {activeView === "referrals" ? (
-          <div className="flex flex-col gap-4">
-            <BackButton onClick={() => setActiveView("home")} />
+          <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
+            <BackButton onClick={() => handleNavigateView("home")} />
             <ReferralsHeader />
             <ReferAFriend referralLink={referralLink} />
             <HowItWork />
@@ -669,15 +693,15 @@ const Explore = () => {
         ) : null}
 
         {activeView === "integrity" ? (
-          <div className="flex flex-col gap-4">
-            <BackButton onClick={() => setActiveView("home")} />
+          <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
+            <BackButton onClick={() => handleNavigateView("home")} />
             <CREProofView />
           </div>
         ) : null}
 
         {activeView === "ai-agent" ? (
-          <div className="flex flex-col gap-4">
-            <BackButton onClick={() => setActiveView("home")} />
+          <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
+            <BackButton onClick={() => handleNavigateView("home")} />
 
             <section className="border-border-main/70 from-background-surface to-surface-card relative overflow-hidden rounded-[14px] border bg-gradient-to-br p-4">
               <span

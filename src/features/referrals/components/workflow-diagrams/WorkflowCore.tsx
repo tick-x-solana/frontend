@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Shared Types ────────────────────────────────────────────────────────────
 interface NodeDef {
@@ -22,8 +22,10 @@ interface EdgeDef {
   label?: string;
   labelPos?: { x: number; y: number };
   dashed?: boolean;
+  showArrow?: boolean;
   curved?: boolean;
   cp?: { x: number; y: number };
+  waypoints?: Array<{ x: number; y: number }>;
 }
 
 interface StepDef {
@@ -298,6 +300,58 @@ function computeEdgePath(
   toNode: NodeDef,
   edge: EdgeDef,
 ): { d: string; midX: number; midY: number } {
+  if (edge.waypoints && edge.waypoints.length > 0) {
+    const firstPoint = edge.waypoints[0];
+    const lastPoint = edge.waypoints[edge.waypoints.length - 1];
+    if (!firstPoint || !lastPoint) {
+      return { d: "", midX: fromNode.x, midY: fromNode.y };
+    }
+
+    const fromOffset = getShapeOffset(fromNode, firstPoint.x, firstPoint.y);
+    const toOffset = getShapeOffset(toNode, lastPoint.x, lastPoint.y);
+    const start = {
+      x: fromNode.x + fromOffset.dx,
+      y: fromNode.y + fromOffset.dy,
+    };
+    const end = { x: toNode.x + toOffset.dx, y: toNode.y + toOffset.dy };
+    const points = [start, ...edge.waypoints, end];
+
+    const segments = points.slice(1).map((point, index) => {
+      const prev = points[index];
+      return Math.hypot(point.x - prev.x, point.y - prev.y);
+    });
+    const totalLength =
+      segments.reduce((sum, segment) => sum + segment, 0) || 1;
+    let distance = 0;
+    const half = totalLength / 2;
+    let midX = (start.x + end.x) / 2;
+    let midY = (start.y + end.y) / 2;
+
+    for (let i = 0; i < segments.length; i += 1) {
+      const prev = points[i];
+      const next = points[i + 1];
+      const segmentLength = segments[i];
+      if (!prev || !next || segmentLength === undefined) continue;
+      if (distance + segmentLength >= half) {
+        const t = (half - distance) / segmentLength;
+        midX = prev.x + (next.x - prev.x) * t;
+        midY = prev.y + (next.y - prev.y) * t;
+        break;
+      }
+      distance += segmentLength;
+    }
+
+    return {
+      d: points
+        .map(
+          (point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`,
+        )
+        .join(" "),
+      midX,
+      midY,
+    };
+  }
+
   if (edge.curved && edge.cp) {
     const { cp } = edge;
     const fOff = getShapeOffset(fromNode, cp.x, cp.y);
@@ -351,6 +405,7 @@ const AnimatedEdge: React.FC<AnimatedEdgeProps> = ({
   const { d, midX, midY } = computeEdgePath(fromNode, toNode, edge);
   const color = fromNode.color;
   const markerId = `ah-${diagramId}-${edge.id}`;
+  const showArrow = edge.showArrow ?? true;
 
   const labelX = edge.labelPos?.x ?? midX;
   const labelY = edge.labelPos?.y ?? midY;
@@ -379,7 +434,7 @@ const AnimatedEdge: React.FC<AnimatedEdgeProps> = ({
         stroke={color}
         strokeWidth={active ? 2 : 1.5}
         strokeDasharray={edge.dashed ? "5,4" : undefined}
-        markerEnd={`url(#${markerId})`}
+        markerEnd={showArrow ? `url(#${markerId})` : undefined}
         opacity={active ? 1 : 0.6}
         className="transition-all duration-300"
       />
@@ -410,12 +465,13 @@ const WorkflowDiagram: React.FC<{
   onReset: () => void;
   step: number;
   diagramId: string;
-}> = ({ config, onReset, step, diagramId }) => {
+  instantDesktopPan?: boolean;
+}> = ({ config, onReset, step, diagramId, instantDesktopPan = false }) => {
   const { width, height, nodes, edges, steps, groupBox, accentColor } = config;
   const labelScale = config.labelScale ?? 1;
   const minZoom = 1;
   const maxZoom = 2.5;
-  const zoomStep = 0.2;
+  const zoomStep = 0.03;
   const holdToPanMouseMs = 180;
   const holdToPanMs = 220;
 
@@ -485,7 +541,7 @@ const WorkflowDiagram: React.FC<{
     };
   }, []);
 
-  const updateZoom = (next: number) => {
+  const updateZoom = useCallback((next: number) => {
     setZoom(() => {
       const z = Math.max(minZoom, Math.min(maxZoom, next));
       if (z === minZoom) {
@@ -499,7 +555,24 @@ const WorkflowDiagram: React.FC<{
       }
       return z;
     });
-  };
+  }, []);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const delta = event.deltaY > 0 ? -zoomStep : zoomStep;
+      updateZoom(zoom + delta);
+    };
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel);
+    };
+  }, [updateZoom, zoom]);
 
   const getTouchDistance = (touches: React.TouchList) => {
     if (touches.length < 2) return 0;
@@ -574,11 +647,6 @@ const WorkflowDiagram: React.FC<{
         ]
           .filter(Boolean)
           .join(" ")}
-        onWheel={(event) => {
-          event.preventDefault();
-          const delta = event.deltaY > 0 ? -zoomStep : zoomStep;
-          updateZoom(zoom + delta);
-        }}
         onPointerDown={(event) => {
           if (zoom <= 1) return;
           if (event.pointerType === "touch") return;
@@ -592,6 +660,19 @@ const WorkflowDiagram: React.FC<{
           event.currentTarget.setPointerCapture(event.pointerId);
 
           clearHoldTimer();
+          if (instantDesktopPan && event.pointerType === "mouse") {
+            setIsDragging(true);
+            setIsHoldPending(false);
+            setDragStart({
+              pointerId: event.pointerId,
+              mouseX: event.clientX,
+              mouseY: event.clientY,
+              panX: clampedPanX,
+              panY: clampedPanY,
+            });
+            return;
+          }
+
           setIsHoldPending(true);
           holdDraftRef.current = {
             pointerId: event.pointerId,
@@ -697,7 +778,9 @@ const WorkflowDiagram: React.FC<{
             if (currentDistance <= 0) return;
 
             event.preventDefault();
-            updateZoom((pinch.startZoom * currentDistance) / pinch.startDistance);
+            updateZoom(
+              (pinch.startZoom * currentDistance) / pinch.startDistance,
+            );
             return;
           }
 
@@ -736,16 +819,21 @@ const WorkflowDiagram: React.FC<{
         onTouchCancel={() => {
           stopDragging();
         }}
-        style={{ touchAction: zoom > 1 ? "none" : "pan-y" }}
+        style={{
+          touchAction: zoom > 1 ? "none" : "pan-y",
+          overscrollBehavior: "contain",
+        }}
       >
         <div className="relative w-full max-w-full">
           {zoom > 1 && !isDragging ? (
             <div className="pointer-events-none absolute top-2 right-2 z-10 rounded bg-black/45 px-2 py-1 font-mono text-[10px] text-gray-200">
               {isHoldPending
                 ? "Hold..."
-                : lastPointerType === "mouse"
+                : lastPointerType === "mouse" && !instantDesktopPan
                   ? "Hold left click to pan"
-                  : "Pinch to zoom · Drag to pan"}
+                  : lastPointerType === "mouse"
+                    ? "Scroll to zoom · Drag to pan"
+                    : "Pinch to zoom · Drag to pan"}
             </div>
           ) : null}
           <svg
@@ -841,171 +929,190 @@ const WorkflowDiagram: React.FC<{
 export const PRICE_INTEGRITY_CONFIG: WorkflowConfig = {
   title: "Price Integrity CRE Workflow",
   subtitle: "price-integrity-cre.workflow",
-  accentColor: "#F472B6",
-  labelScale: 1.3,
-  width: 1000,
-  height: 650,
+  accentColor: "#A78BFA",
+  labelScale: 1.1,
+  width: 1480,
+  height: 860,
   groupBox: {
-    label: "Price Integrity CRE Workflow",
-    x: 20,
-    y: 180,
-    w: 520,
-    h: 460,
-    color: "#F472B6",
+    label: "Switchboard TEE",
+    x: 388,
+    y: 20,
+    w: 530,
+    h: 820,
+    color: "#D1D5DB",
   },
   nodes: [
-    // Outside group – top right: Chainlink Price Stream
+    // Left source nodes (outside group)
     {
-      id: "cps_ext",
-      label: "Chainlink Price\nstream",
-      x: 620,
-      y: 90,
-      w: 180,
-      h: 70,
+      id: "chainlink_feed",
+      label: "Binance/Chainlink\nData Feeds\n\n⬡",
+      x: 170,
+      y: 148,
+      w: 280,
+      h: 200,
       shape: "rounded",
-      color: "#F472B6",
+      color: "#D1D5DB",
     },
-    // Real-time price streaming – further right with clear gap
     {
-      id: "rtps",
-      label: "Real-time price\nstreaming",
-      x: 900,
-      y: 90,
-      w: 160,
-      h: 70,
+      id: "tickx_api",
+      label: "TickX price API\n\n↙",
+      x: 170,
+      y: 430,
+      w: 280,
+      h: 200,
       shape: "rounded",
-      color: "#60A5FA",
+      color: "#D1D5DB",
     },
-    // In-app ledger – outside group, aligned under rtps
+
+    // Switchboard TEE — vertical task chain (inside group)
     {
-      id: "ledger",
-      label: "In-app price snapshots",
-      x: 900,
-      y: 330,
-      w: 150,
-      h: 70,
+      id: "http_task_1",
+      label: "HTTP Task",
+      x: 653,
+      y: 148,
+      w: 220,
+      h: 88,
       shape: "rounded",
-      color: "#34D399",
+      color: "#D1D5DB",
     },
-    // Inside group – left: Chainlink monitor icon
     {
-      id: "cps_icon",
-      label: "Chainlink Price Feed API",
-      x: 140,
-      y: 330,
-      w: 80,
-      h: 60,
-      shape: "circle",
-      color: "#F472B6",
-      icon: "🖥",
-    },
-    // Center of group
-    {
-      id: "compare",
-      label: "Compare prices\nin a window",
-      x: 370,
-      y: 330,
-      w: 160,
-      h: 90,
+      id: "http_task_2",
+      label: "HTTP Task",
+      x: 653,
+      y: 310,
+      w: 220,
+      h: 88,
       shape: "rounded",
-      color: "#60A5FA",
-      fill: "#60A5FA",
-      processing: true,
+      color: "#D1D5DB",
     },
     {
-      id: "score",
-      label: "Price matching\nscore",
-      x: 370,
-      y: 470,
-      w: 180,
-      h: 64,
-      shape: "rect",
-      color: "#34D399",
-      fill: "#34D399",
+      id: "comparison_task",
+      label: "Comparision Task",
+      x: 653,
+      y: 472,
+      w: 220,
+      h: 88,
+      shape: "rounded",
+      color: "#D1D5DB",
     },
+    // Score payload (purple, inside group, bottom)
     {
-      id: "blockchain",
-      label: "Blockchain",
-      x: 370,
-      y: 590,
-      w: 48,
-      h: 48,
-      shape: "network",
-      color: "#818CF8",
+      id: "score_payload",
+      label:
+        "6 Switchboard feeds\n1 ohlc_mae_bps\n2 ohlc_p95_bps\n3 ohlc_max_bps\n4 direction_match_bps\n5 outlier_count\n6 score_bps",
+      x: 653,
+      y: 680,
+      w: 232,
+      h: 230,
+      shape: "rounded",
+      color: "#A78BFA",
+      fill: "#A78BFA",
+    },
+
+    // Price Integrity Contract — outer frame (right, outside group)
+    {
+      id: "contract_box",
+      label: "Price Integrity Contract\n\n\n\n\n\n\n\n\n",
+      x: 1270,
+      y: 250,
+      w: 400,
+      h: 380,
+      shape: "rounded",
+      color: "#D1D5DB",
+    },
+    // Report payload — green box inside contract frame
+    {
+      id: "report_payload",
+      label:
+        "Report\nepoch_id\nwindow_start\nscore_bps\nis_passed\nfailure_flags",
+      x: 1330,
+      y: 260,
+      w: 200,
+      h: 195,
+      shape: "rounded",
+      color: "#00D084",
+      fill: "#00D084",
     },
   ],
   edges: [
-    // Chainlink Price Stream → Real-time price streaming
+    // Chainlink → HTTP Task 1 (horizontal arrow, "ohlc source of truth")
     {
       id: "e1",
-      from: "cps_ext",
-      to: "rtps",
-      label: "price input",
-      labelPos: { x: 760, y: 75 },
+      from: "chainlink_feed",
+      to: "http_task_1",
+      label: "ohlc source of truth",
+      labelPos: { x: 460, y: 130 },
     },
-    // Real-time price streaming → In-app ledger (sync downward)
+    // TickX API → HTTP Task 2 ("attested OHLC") — goes right then up to task 2
     {
       id: "e2",
-      from: "rtps",
-      to: "ledger",
-      label: "sync",
-      labelPos: { x: 920, y: 210 },
+      from: "tickx_api",
+      to: "http_task_2",
+      label: "attested OHLC",
+      labelPos: { x: 468, y: 296 },
+      waypoints: [
+        { x: 388, y: 430 },
+        { x: 388, y: 310 },
+      ],
     },
-    // Chainlink icon → Compare prices
+    // HTTP Task 1 → HTTP Task 2 (straight down)
     {
       id: "e3",
-      from: "cps_icon",
-      to: "compare",
+      from: "http_task_1",
+      to: "http_task_2",
       label: "",
     },
-    // In-app ledger → Compare prices (from right)
+    // HTTP Task 2 → Comparison Task (straight down)
     {
       id: "e4",
-      from: "ledger",
-      to: "compare",
+      from: "http_task_2",
+      to: "comparison_task",
       label: "",
-      curved: true,
-      cp: { x: 635, y: 300 },
     },
-    // Compare prices → Price matching score
+    // Comparison Task → Score payload (straight down)
     {
       id: "e5",
-      from: "compare",
-      to: "score",
+      from: "comparison_task",
+      to: "score_payload",
       label: "",
     },
-    // Price matching score → Blockchain
+    // Score payload → Report payload (L-shape: right then up, arrow at end)
     {
       id: "e6",
-      from: "score",
-      to: "blockchain",
+      from: "score_payload",
+      to: "report_payload",
       label: "",
+      waypoints: [
+        { x: 918, y: 680 },
+        { x: 1060, y: 680 },
+        { x: 1060, y: 430 },
+      ],
     },
   ],
   steps: [
     {
       edgeId: "e1",
-      desc: "Chainlink Price Stream delivers real-time price data to the Real-time price streaming node.",
+      desc: "Binance/Chainlink Data Feeds provide the OHLC source of truth to the first HTTP Task in Switchboard TEE.",
     },
     {
       edgeId: "e2",
-      desc: "Real-time price streaming syncs the latest price data down to the In-app ledger.",
+      desc: "TickX price API sends attested OHLC data into the second HTTP Task.",
     },
     {
       edgeId: "e3",
-      desc: "Chainlink Price Stream (in-app monitor instance) feeds price samples into the comparison window.",
+      desc: "The first HTTP Task forwards normalized data to the second HTTP Task.",
     },
     {
       edgeId: "e4",
-      desc: "The In-app ledger provides its stored price records to the Compare prices engine.",
+      desc: "The second HTTP Task sends combined input into the Comparison Task.",
     },
     {
       edgeId: "e5",
-      desc: "The CRE compares prices across the window and calculates a Price matching score.",
+      desc: "The Comparison Task computes scoring metrics and produces the payload fields including score_bps.",
     },
     {
       edgeId: "e6",
-      desc: "The Price matching score is committed to the Blockchain for on-chain integrity verification.",
+      desc: "The scoring payload is routed to the Price Integrity Contract report node.",
     },
   ],
 };
@@ -1617,7 +1724,8 @@ export const SETTLEMENT_CONFIG: WorkflowConfig = {
 export const WorkflowPlayer: React.FC<{
   config: WorkflowConfig;
   diagramId: string;
-}> = ({ config, diagramId }) => {
+  instantDesktopPan?: boolean;
+}> = ({ config, diagramId, instantDesktopPan = false }) => {
   const [step, setStep] = useState(-1);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -1638,6 +1746,7 @@ export const WorkflowPlayer: React.FC<{
       }}
       step={step}
       diagramId={diagramId}
+      instantDesktopPan={instantDesktopPan}
     />
   );
 };

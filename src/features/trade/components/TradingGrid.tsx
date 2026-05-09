@@ -80,6 +80,7 @@ import {
   TradingOverlaySheet,
   TradingShareSheet,
 } from "./tradingGrid.panels";
+import { FortressMcDiagnosticsModal } from "@/src/features/trade/components/FortressMcDiagnosticsModal";
 import {
   ShareButtonsLayer,
   WinEffectsLayer,
@@ -426,6 +427,9 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
   const [isOverlaySheetOpen, setIsOverlaySheetOpen] = useState(false);
   const [isInfoSheetOpen, setIsInfoSheetOpen] = useState(false);
   const [isOrdersSheetOpen, setIsOrdersSheetOpen] = useState(false);
+  const [isMcDiagnosticsOpen, setIsMcDiagnosticsOpen] = useState(false);
+  const [fortressMcDiagnosticsPayload, setFortressMcDiagnosticsPayload] =
+    useState<unknown>(null);
   const [ordersSheetQueryAnchorTime, setOrdersSheetQueryAnchorTime] =
     useState<number | null>(null);
   // ── Share sheet data (amounts / profit / ROI / win-rate) ──────────────────
@@ -971,6 +975,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
     cancelPendingBet,
     pendingBets,
     storeRef,
+    onFortressMcDiagnostics: setFortressMcDiagnosticsPayload,
   });
 
   // Convert incoming history ticks into smooth price-motion segments for the line renderer.
@@ -1630,6 +1635,7 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         onOpenOrders={handleOpenOrders}
         onOpenOverlay={handleOpenOverlaySheet}
         onRecenter={handleRecenterGrid}
+        onOpenMcDiagnostics={() => setIsMcDiagnosticsOpen(true)}
       />
 
       {/* Canvas wrapper */}
@@ -1753,6 +1759,13 @@ export const TradingGrid: React.FC<TradingGridProps> = ({
         share={share}
         shareWinRate={shareWinRate}
         selectedShareRoi={selectedShareRoi}
+      />
+
+      <FortressMcDiagnosticsModal
+        isOpen={isMcDiagnosticsOpen}
+        onClose={() => setIsMcDiagnosticsOpen(false)}
+        payload={fortressMcDiagnosticsPayload}
+        currentPrice={currentPrice}
       />
     </div>
   );

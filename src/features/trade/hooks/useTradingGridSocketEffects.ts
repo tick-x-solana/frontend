@@ -78,6 +78,7 @@ type UseTradingGridSocketEffectsParams = {
   cancelPendingBet: (cellId: string) => void;
   pendingBets: Record<string, number>;
   storeRef: React.MutableRefObject<{ cells: CellData[] }>;
+  onFortressMcDiagnostics?: (payload: unknown) => void;
 };
 
 export function useTradingGridSocketEffects({
@@ -100,6 +101,7 @@ export function useTradingGridSocketEffects({
   cancelPendingBet,
   pendingBets,
   storeRef,
+  onFortressMcDiagnostics,
 }: UseTradingGridSocketEffectsParams) {
   void _marketSocketPath;
   const socketRef = useRef<SocketLike | null>(null);
@@ -181,6 +183,7 @@ export function useTradingGridSocketEffects({
 
     const handleFortressMcDiagnostics = (payload: unknown) => {
       console.log("[TradingGrid] fortress_mc_diagnostics", payload);
+      onFortressMcDiagnostics?.(payload);
     };
     unifiedSocket.on(
       FORTRESS_MC_DIAGNOSTICS_EVENT,
@@ -202,7 +205,7 @@ export function useTradingGridSocketEffects({
       socketRef.current = null;
       useGameStore.getState().setConnection(null, null);
     };
-  }, [updateGrid, updatePrice]);
+  }, [onFortressMcDiagnostics, updateGrid, updatePrice]);
 
   // 3) When the user is authenticated: fetch wssKey + challenge + signature to subscribe to the user channel.
   // Re-subscribes on reconnect, before key expiry (3s early), and on "Invalid wss signature" errors.

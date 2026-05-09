@@ -14,12 +14,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
 import { useGameStore } from "@/src/features/trade/store";
+import { DEFAULT_BET_AMOUNT_SOL } from "@/src/features/trade/storeConstants";
 import {
   accountControllerGetBalance,
   authControllerGetChallenge,
   authControllerLogin,
   getAccountControllerGetBalanceQueryKey,
 } from "@/src/services/queries";
+import {
+  CUSTOM_BID_SIZE_STORAGE_KEY,
+  FAUCET_LAST_REQUEST_AT_STORAGE_KEY,
+} from "@/src/constants";
 
 type AuthContextValue = {
   isAuthenticated: boolean;
@@ -127,6 +132,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const isLoggingInRef = useRef(false);
   const previousConnectedRef = useRef(false);
+  const previousWalletAddressRef = useRef<string | null>(null);
   const loginRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const walletAddress = publicKey?.toBase58() ?? authWalletAddress;
@@ -146,6 +152,13 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     useGameStore.setState({ balance: 0, serverBalance: 0 });
   }, []);
 
+  const clearWalletScopedSettings = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(CUSTOM_BID_SIZE_STORAGE_KEY);
+    window.localStorage.removeItem(FAUCET_LAST_REQUEST_AT_STORAGE_KEY);
+    useGameStore.setState({ betAmount: DEFAULT_BET_AMOUNT_SOL });
+  }, []);
+
   const clearSession = useCallback(() => {
     if (typeof window === "undefined") return;
     window.localStorage.removeItem("token");
@@ -156,8 +169,9 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(null);
     setAuthWalletAddress(null);
     useGameStore.setState({ wssKey: null });
+    clearWalletScopedSettings();
     clearBalance();
-  }, [clearBalance]);
+  }, [clearBalance, clearWalletScopedSettings]);
 
   const logout = useCallback(() => {
     clearSession();
@@ -258,8 +272,10 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [connected, publicKey, signMessage, storeAuthSession, syncBalance]);
 
-  // Keep loginRef pointing at the latest login without making it an effect dep
-  loginRef.current = login;
+  // Keep loginRef pointing at the latest login without making it an effect dep.
+  useEffect(() => {
+    loginRef.current = login;
+  }, [login]);
 
   // Auto-login when wallet connects — depends only on connection state, not
   // the login callback, so it won't re-fire on every render caused by
@@ -270,10 +286,24 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       void loginRef.current();
     });
     return () => window.cancelAnimationFrame(frame);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, publicKey]);
 
   // Clear session when wallet disconnects
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const previousWalletAddress = previousWalletAddressRef.current;
+    const nextWalletAddress = publicKey?.toBase58() ?? null;
+    previousWalletAddressRef.current = nextWalletAddress;
+
+    if (
+      previousWalletAddress &&
+      nextWalletAddress &&
+      previousWalletAddress !== nextWalletAddress
+    ) {
+      clearWalletScopedSettings();
+    }
+  }, [publicKey, clearWalletScopedSettings]);
+
   useEffect(() => {
     const wasConnected = previousConnectedRef.current;
     previousConnectedRef.current = connected;
