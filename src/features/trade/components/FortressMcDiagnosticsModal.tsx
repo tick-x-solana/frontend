@@ -42,6 +42,7 @@ const PADDING = { top: 24, right: 16, bottom: 34, left: 64 };
 const HEATMAP_LABEL_MIN_CELL_WIDTH = 26;
 const HEATMAP_LABEL_MIN_CELL_HEIGHT = 14;
 const HEATMAP_LABEL_FONT_SIZE = 11;
+const HEATMAP_LABEL_DECIMALS = 4;
 const PRICE_AXIS_LABEL_DECIMALS = 4;
 const PRICE_AXIS_QUANTIZE_STEP = 0.0005;
 
@@ -88,6 +89,11 @@ function probabilityLabelColor(value: number, max: number): string {
   if (normalized >= 0.45) return "var(--color-text-heading)";
   if (normalized >= 0.2) return "var(--color-text-main)";
   return "var(--color-grid-axis)";
+}
+
+function formatHeatmapLabel(value: number): string {
+  const rounded = value.toFixed(HEATMAP_LABEL_DECIMALS);
+  return Number(rounded).toString();
 }
 
 export function FortressMcDiagnosticsModal({
@@ -262,7 +268,7 @@ export function FortressMcDiagnosticsModal({
                     const canRenderLabel =
                       width >= HEATMAP_LABEL_MIN_CELL_WIDTH &&
                       height >= HEATMAP_LABEL_MIN_CELL_HEIGHT;
-                    const label = value.toFixed(2);
+                    const label = formatHeatmapLabel(value);
                     return (
                       <g key={`cell-${rowIndex}-${colIndex}`}>
                         <rect
