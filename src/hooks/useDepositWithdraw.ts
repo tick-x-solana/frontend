@@ -12,6 +12,8 @@ import {
 } from "@solana/web3.js";
 import { toast } from "sonner";
 import { useAuth } from "@/src/components/providers/AuthProvider";
+import { SOLANA_WRONG_NETWORK_MESSAGE } from "@/src/constants";
+import { useSolanaNetworkGuard } from "@/src/hooks/useSolanaNetworkGuard";
 import { useSolanaWallet } from "@/src/lib/solana-wallet";
 import {
   getAccountControllerGetBalanceQueryKey,
@@ -148,6 +150,7 @@ const useDepositWithdraw = () => {
   const queryClient = useQueryClient();
   const { walletAddress } = useAuth();
   const wallet = useSolanaWallet();
+  const { canSubmitTransactions } = useSolanaNetworkGuard();
   const [isDepositing, setIsDepositing] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
@@ -168,6 +171,9 @@ const useDepositWithdraw = () => {
     async ({ amountSol }: DepositSolParams) => {
       if (!walletAddress) {
         throw new Error("Wallet not connected");
+      }
+      if (!canSubmitTransactions) {
+        throw new Error(SOLANA_WRONG_NETWORK_MESSAGE);
       }
 
       setIsDepositing(true);
@@ -212,13 +218,16 @@ const useDepositWithdraw = () => {
         setIsDepositing(false);
       }
     },
-    [queryClient, wallet, walletAddress],
+    [canSubmitTransactions, queryClient, wallet, walletAddress],
   );
 
   const withdrawSol = useCallback(
     async ({ amountSol }: WithdrawSolParams) => {
       if (!walletAddress) {
         throw new Error("Wallet not connected");
+      }
+      if (!canSubmitTransactions) {
+        throw new Error(SOLANA_WRONG_NETWORK_MESSAGE);
       }
 
       setIsWithdrawing(true);
@@ -275,7 +284,7 @@ const useDepositWithdraw = () => {
         setIsWithdrawing(false);
       }
     },
-    [queryClient, wallet, walletAddress],
+    [canSubmitTransactions, queryClient, wallet, walletAddress],
   );
 
   return {

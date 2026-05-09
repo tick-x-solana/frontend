@@ -295,6 +295,14 @@ const WalletActionPanel = () => {
         {/* Divider */}
         <div className="border-border-main border-t" />
 
+        {/* Devnet notice */}
+        <p className="text-hint bg-background-main rounded-[6px] px-2.5 py-1.5 text-[11px] font-medium">
+          This app operates on{" "}
+          <span className="text-warning-medium font-semibold">Devnet</span> only.
+          Make sure your wallet is set to Devnet before depositing or
+          withdrawing.
+        </p>
+
         {/* Action buttons */}
         <div className="grid grid-cols-2 gap-2">
           <Button

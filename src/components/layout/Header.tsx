@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/src/components/providers/AuthProvider";
 import { Button } from "@/src/components/shadcn/button";
@@ -16,7 +17,13 @@ import {
   DialogTitle,
 } from "@/src/components/shadcn/dialog";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { paymentControllerDebugDeposit } from "@/src/services/queries";
+import { useGameStore } from "@/src/features/trade/store";
+import { extractBalanceAmount } from "@/src/features/trade/components/tradingGrid.utils";
+import {
+  accountControllerGetBalance,
+  getAccountControllerGetBalanceQueryKey,
+  paymentControllerDebugDeposit,
+} from "@/src/services/queries";
 import {
   FAUCET_COOLDOWN_MS,
   FAUCET_DEPOSIT_AMOUNT_SOL,
@@ -56,6 +63,7 @@ const getFaucetCooldownRemainingMs = () => {
 };
 
 const Header = () => {
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const { connected } = useWallet();
   const { isAuthenticated } = useAuth();
@@ -97,6 +105,17 @@ const Header = () => {
       await paymentControllerDebugDeposit({
         amount: String(FAUCET_DEPOSIT_AMOUNT_SOL),
       });
+      const balanceResponse = await accountControllerGetBalance();
+      const nextBalance = extractBalanceAmount(balanceResponse);
+      if (nextBalance !== null) {
+        useGameStore.setState({
+          balance: nextBalance,
+          serverBalance: nextBalance,
+        });
+      }
+      await queryClient.invalidateQueries({
+        queryKey: getAccountControllerGetBalanceQueryKey(),
+      });
       if (typeof window !== "undefined") {
         window.localStorage.setItem(
           FAUCET_LAST_REQUEST_AT_STORAGE_KEY,
@@ -113,7 +132,13 @@ const Header = () => {
     } finally {
       setIsFauceting(false);
     }
-  }, [connected, cooldownRemainingMs, isAuthenticated, updateCooldown]);
+  }, [
+    connected,
+    cooldownRemainingMs,
+    isAuthenticated,
+    queryClient,
+    updateCooldown,
+  ]);
 
   const isActivePath = (href: string) => {
     if (href === "#") return false;
