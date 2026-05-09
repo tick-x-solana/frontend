@@ -1,11 +1,19 @@
 import Image from "next/image";
+import { Architects_Daughter } from "next/font/google";
 import React from "react";
+
+const architectsDaughter = Architects_Daughter({
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+});
 
 const CANVAS_WIDTH = 1613;
 const CANVAS_HEIGHT = 947;
 const LINE_COLOR = "#d9dee7";
 const FLOW_COLOR = "#9fffe3";
-const FLOW_ARROW_DELAYS_SECONDS = [0, 0.74, 1.48];
+const FLOW_ARROW_DELAYS_SECONDS = [0];
+const FLOW_DOT_RADIUS = 4.6;
 
 type DiagramBox = {
   x: number;
@@ -62,7 +70,7 @@ function Frame({
 function Task({ text, box }: { text: string; box: DiagramBox }) {
   return (
     <div
-      className="absolute z-20 flex items-center justify-center rounded-[18px] border-[1.5px] bg-[#05080f] px-2 text-center text-[7px] font-semibold whitespace-nowrap text-text-main min-[520px]:text-[9px] min-[760px]:text-[11px]"
+      className="text-text-main absolute z-20 flex items-center justify-center rounded-[18px] border-[1.5px] bg-[#05080f] px-2 text-center text-[7px] font-semibold whitespace-nowrap min-[520px]:text-[9px] min-[760px]:text-[11px]"
       style={{ ...boxStyle(box), borderColor: LINE_COLOR }}
     >
       {text}
@@ -94,14 +102,16 @@ function FlowPath({
         const beginSeconds = delaySeconds + offsetSeconds;
 
         return (
-          <g key={`${d}-${beginSeconds}`} filter="url(#price-integrity-flow-glow)">
-            <path
-              d="M -13 -7 L 0 0 L -13 7"
-              fill="none"
-              stroke={FLOW_COLOR}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="4"
+          <g
+            key={`${d}-${beginSeconds}`}
+            filter="url(#price-integrity-flow-glow)"
+          >
+            <circle
+              cx="0"
+              cy="0"
+              r={FLOW_DOT_RADIUS}
+              fill={FLOW_COLOR}
+              opacity="0.95"
             />
             <animateMotion
               begin={`${beginSeconds}s`}
@@ -109,7 +119,6 @@ function FlowPath({
               dur={`${durationSeconds}s`}
               path={d}
               repeatCount="indefinite"
-              rotate="auto"
             />
             <animate
               attributeName="opacity"
@@ -135,7 +144,7 @@ function TextLabel({
   return (
     <p
       className={[
-        "absolute z-50 text-[7px] font-semibold whitespace-nowrap text-text-main min-[520px]:text-[9px] min-[760px]:text-[12px]",
+        "text-text-main absolute z-50 text-[7px] font-semibold whitespace-nowrap min-[520px]:text-[9px] min-[760px]:text-[12px]",
         className,
       ]
         .filter(Boolean)
@@ -149,24 +158,30 @@ function TextLabel({
 
 export const PriceIntegrityCREWorkflow: React.FC = () => {
   return (
-    <div className="mx-auto w-full max-w-[980px] overflow-hidden rounded-[14px] border border-white/10 bg-background-main p-2">
-      <div className="relative aspect-[1613/947] w-full overflow-hidden rounded-[12px] border border-white/30 bg-[#04070d]">
+    <div
+      className={`${architectsDaughter.className} bg-background-main mx-auto w-full max-w-[980px] overflow-x-auto overflow-y-hidden rounded-[14px] border border-white/10 p-2`}
+    >
+      <div className="relative aspect-[1613/947] min-w-[760px] overflow-hidden rounded-[12px] border border-white/30 bg-[#04070d] md:min-w-0">
         <Frame
           box={{ x: 12, y: 34, width: 294, height: 204 }}
           className="px-[2.3%] py-[2.7%]"
         >
           <p
-            className="text-[7px] font-semibold text-text-main min-[520px]:text-[10px] min-[760px]:text-[13px]"
+            className="text-text-main text-[7px] font-semibold min-[520px]:text-[10px] min-[760px]:text-[13px]"
             style={{ lineHeight: 1.35 }}
           >
             Binance/Chainlink
             <br />
             Data Feeds
           </p>
-          <div className="mt-[12%] ml-[30%] flex h-[37%] w-[30%] items-center justify-center bg-white">
-            <span className="text-[24px] text-[#2f60e8] min-[520px]:text-[34px] min-[760px]:text-[48px]">
-              ⬡
-            </span>
+          <div className="mx-auto flex w-[22px] items-center justify-center bg-white min-[520px]:w-[30px] min-[760px]:w-[40px]">
+            <Image
+              src="/chainlink.png"
+              alt="Chainlink"
+              width={180}
+              height={80}
+              className="h-auto w-full object-contain"
+            />
           </div>
         </Frame>
 
@@ -174,16 +189,16 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
           box={{ x: 11, y: 278, width: 297, height: 205 }}
           className="px-[2.3%] py-[2.9%]"
         >
-          <p className="text-[7px] font-semibold text-text-main min-[520px]:text-[10px] min-[760px]:text-[13px]">
+          <p className="text-text-main text-[7px] font-semibold min-[520px]:text-[10px] min-[760px]:text-[13px]">
             TickX price API
           </p>
-          <div className="mt-[18%] ml-[24%]">
+          <div className="mx-auto mt-[16%] w-[20px] min-[520px]:w-[28px] min-[760px]:w-[38px]">
             <Image
               src="/tickX.png"
               alt="TickX"
               width={80}
               height={80}
-              className="h-auto w-[34%]"
+              className="h-auto w-full object-contain"
             />
           </div>
         </Frame>
@@ -192,22 +207,28 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
           box={{ x: 440, y: 12, width: 603, height: 923 }}
           className="px-[2%] py-[2.6%]"
         >
-          <p className="text-[7px] font-semibold text-text-main min-[520px]:text-[10px] min-[760px]:text-[13px]">
+          <p className="text-text-main text-[7px] font-semibold min-[520px]:text-[10px] min-[760px]:text-[13px]">
             Switchboard TEE
           </p>
           <div className="absolute top-[1.7%] right-[7.2%]">
             <Image
-              src="/sol.png"
+              src="/switchboard.png"
               alt="Switchboard"
-              width={82}
-              height={82}
-              className="h-auto w-[32px] min-[520px]:w-[48px] min-[760px]:w-[68px]"
+              width={156}
+              height={54}
+              className="h-auto w-[28px] min-[520px]:w-[42px] min-[760px]:w-[58px]"
             />
           </div>
         </Frame>
 
-        <Task text="HTTP Task" box={{ x: 628, y: 93, width: 209, height: 97 }} />
-        <Task text="HTTP Task" box={{ x: 632, y: 242, width: 209, height: 98 }} />
+        <Task
+          text="HTTP Task"
+          box={{ x: 628, y: 93, width: 209, height: 97 }}
+        />
+        <Task
+          text="HTTP Task"
+          box={{ x: 632, y: 242, width: 209, height: 98 }}
+        />
         <Task
           text="Comparision Task"
           box={{ x: 634, y: 403, width: 209, height: 98 }}
@@ -233,7 +254,7 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
           box={{ x: 1177, y: 18, width: 427, height: 372 }}
           className="px-[2%] py-[2.4%]"
         >
-          <p className="text-[7px] font-semibold text-text-main min-[520px]:text-[9px] min-[760px]:text-[11px]">
+          <p className="text-text-main text-[7px] font-semibold min-[520px]:text-[9px] min-[760px]:text-[11px]">
             Price Integrity Contract
           </p>
           <div className="absolute top-[5.8%] right-[5.2%]">
@@ -242,7 +263,7 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
               alt="Contract"
               width={64}
               height={60}
-              className="h-auto w-[36px] min-[520px]:w-[50px] min-[760px]:w-[64px]"
+              className="h-auto w-[20px] min-[520px]:w-[28px] min-[760px]:w-[36px]"
             />
           </div>
         </Frame>
@@ -250,7 +271,7 @@ export const PriceIntegrityCREWorkflow: React.FC = () => {
         <div
           className="absolute z-20 rounded-[21px] border-[1.5px] border-[#00d88b] bg-[rgba(0,128,88,0.46)] px-[1.3%] py-[1.7%] text-[6px] font-semibold text-[#d7ffe9] min-[520px]:text-[8px] min-[760px]:text-[10px]"
           style={{
-            ...boxStyle({ x: 1272, y: 137, width: 208, height: 176 }),
+            ...boxStyle({ x: 1254, y: 126, width: 252, height: 228 }),
             lineHeight: 1.35,
           }}
         >
