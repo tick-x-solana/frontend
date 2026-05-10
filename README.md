@@ -1,185 +1,98 @@
 # TickX FE
 
-TickX frontend, built with Next.js App Router, focused on real-time prediction market trading in the World ecosystem.
+TickX frontend — a desktop-first Solana prediction market trading app built with Next.js App Router.
 
-## Project goals
+## Overview
 
-- Fast trading on a canvas-based price grid with continuous updates.
-- User authentication via World Mini App or EVM wallet.
-- Portfolio tracking, deposit/withdraw flows, leaderboard, referral, and explore modules.
-- Mobile-first UI while maintaining full desktop support.
+TickX is a real-time prediction market where users trade on price movement outcomes. The frontend runs on Solana Devnet, supports Phantom and Solflare wallets, and denominates all balances in SOL. Trading is driven by a canvas-based price grid with continuous WebSocket updates.
 
-## Key features
+## Key Features
 
-- Trade screen (`/`):
-  - Canvas-based trading grid with zoom/pan and click-to-bet.
-  - Real-time updates over socket connections.
-  - Follow-trading and win-sharing interactions.
-- Portfolio (`/portfolio`):
-  - Balance and trading history display.
-  - Wallet action panel.
-  - Debug faucet flow for dev environments.
-- Leaderboard (`/leaderboard`):
-  - Human and AI Agent tabs.
-  - Optimized podium image rendering.
-- Explore (`/explore`):
-  - Browse modules: Follow Trading, Referral, Proof of Integrity, AI Agent.
-  - World Mini App referral link generation and sharing integration.
-- Referral redirect (`/ref/[refCode]`):
-  - Redirects to `/` with `followRef` to prefill referral-driven flows.
+- **Trading grid** (`/`): Canvas-based price grid with zoom/pan and click-to-bet. Real-time updates, follow-trading, and win-sharing.
+- **Portfolio** (`/portfolio`): SOL balance, trading history, deposit and withdraw.
+- **Leaderboard** (`/leaderboard`): Human and AI Agent tabs with podium rendering.
+- **Explore** (`/explore`): Follow Trading, Referral, Proof of Integrity, and AI Agent modules.
+- **Referral redirect** (`/ref/[refCode]`): Redirects to `/` with prefilled referral state.
 
-## Tech stack
+## Tech Stack
 
-- Framework: Next.js `16.2.4` (App Router), React `19.2.4`, TypeScript.
-- Styling: Tailwind CSS v4, shadcn/ui, tokenized CSS variables in `app/globals.css`.
-- State and data:
-  - TanStack Query for server state.
-  - Zustand for local game/trade state.
-- Auth and Web3:
-  - `@worldcoin/minikit-js` for World App / Mini App integration.
-  - `wagmi` + `viem` for EVM wallet connectivity.
-- API client:
-  - Orval-generated typed React Query hooks from OpenAPI.
-  - Axios custom client with token and wallet-address interceptors.
+| Layer | Choice |
+|---|---|
+| Framework | Next.js `16.2.4` (App Router), React `19.2.4`, TypeScript |
+| Styling | Tailwind CSS v4, shadcn/ui, tokenized CSS variables in `app/globals.css` |
+| State | TanStack Query (server state), Zustand (local trade/game state) |
+| Web3 | `@solana/wallet-adapter-*` (Phantom, Solflare), `wagmi` + `viem` |
+| Realtime | `socket.io-client` |
+| API client | Orval-generated typed React Query hooks from OpenAPI spec |
 
-## Directory structure
+## Solana Details
 
-```text
-app/                      # Next.js App Router pages/layout
+- Network: **Devnet** (hard-locked)
+- Program ID: `Bwwg2cPZzgij4GT795iBB882wFtRyuSr5qBrAYzyAoWT`
+- Contract interface: `POOL_RESERVE_IDL` in [src/constants/abi.ts](src/constants/abi.ts)
+- SOL/USD price: fetched from CoinGecko every 10 seconds
+- All backend balances are in SOL units (`balance: 1` = `1 SOL`)
+
+## Directory Structure
+
+```
+app/                      # Next.js App Router pages and layout
 src/
-  components/             # layout, providers, common, shadcn wrappers
+  components/             # Layout, providers, common UI, shadcn wrappers
+  constants/              # Shared constants (abi.ts, index.ts, ...)
   features/
-    trade/                # trading grid, controls, socket/order-follow logic
-    portfolio/            # wallet actions, history, overview
-    referrals/            # explore + referral + integrity flows
-  hooks/                  # domain hooks (deposit/withdraw, mini-app, sharing...)
-  services/               # orval generated queries + models + custom client
-  utils/                  # canvas draw, grid math, shared utilities
-public/                   # static assets
+    trade/                # Trading grid, controls, socket/order-follow logic
+    portfolio/            # Wallet actions, history, overview
+    referrals/            # Explore, referral, and integrity flows
+  hooks/                  # Domain hooks (deposit/withdraw, sharing, ...)
+  services/               # Orval-generated queries + models + custom Axios client
+  utils/                  # Canvas draw helpers, grid math, shared utilities
+public/                   # Static assets
 ```
 
 ## Prerequisites
 
 - Node.js `>= 20`
-- npm or bun (this repo includes both `package-lock.json` and `bun.lock`)
+- npm or bun
 
-## Installation and local run
-
-1. Install dependencies:
+## Getting Started
 
 ```bash
 npm install
-```
-
-2. Create local env file:
-
-```bash
 cp .env.public .env.local
-```
-
-3. Run the dev server:
-
-```bash
 npm run dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000).
 
-## Environment variables
-
-The current codebase uses only a small set of env vars, and several endpoints are still hardcoded. Minimum variables:
+## Environment Variables
 
 | Variable | Example | Purpose |
 |---|---|---|
-| `ENV` | `production` | Toggles environment-dependent behavior in parts of the referral flow. |
-| `RP_ID` | `rp_xxxxx` | World ID 4.0 relying-party ID used by `/api/rp-signature` and `/api/verify-proof`. |
-| `RP_SIGNING_KEY` | `<hex-private-key>` | Secret key used server-side to generate RP signatures. Never expose to client code. |
-| `ORVAL_SWAGGER_URL` | `https://api-tap-fun-chainlink.nysm.work/swagger/json` | Overrides the OpenAPI source used by `generate:api`. |
+| `ENV` | `production` | Toggles environment-dependent behavior (e.g. referral flow) |
+| `RP_ID` | `rp_xxxxx` | World ID 4.0 relying-party ID for RP signature endpoints |
+| `RP_SIGNING_KEY` | `<hex-private-key>` | Server-side secret for RP signature generation — never expose to the client |
+| `ORVAL_SWAGGER_URL` | `https://api.example.com/swagger/json` | Overrides the OpenAPI source used by `generate:api` |
 
 ## Scripts
 
-- `npm run dev`: run local development server.
-- `npm run build`: create production build.
-- `npm run start`: run production server from build artifacts.
-- `npm run lint`: run ESLint.
-- `npm run format`: format code with Prettier.
-- `npm run generate:api`: regenerate API client/hooks with Orval.
-
-## API client generation (Orval)
-
-Configured in `orval.config.ts`:
-
-- Input: OpenAPI spec (`ORVAL_SWAGGER_URL` or the default URL).
-- Output:
-  - `src/services/queries.ts`
-  - `src/services/models/*`
-- Custom mutator: `src/services/custom-client.ts`.
-
-Notes:
-
-- `src/services/queries.ts` and `src/services/models/*` are generated files and should not be edited manually.
-- Regenerate with `npm run generate:api` whenever the OpenAPI spec changes.
-
-## Auth and session flow
-
-- Mini App mode:
-  - Uses MiniKit wallet auth + backend nonce.
-  - Stores token/wallet/session in `localStorage`.
-- Web mode:
-  - Connect wallet via wagmi, sign challenge, then log in to backend for access token.
-- Logout/401:
-  - Interceptor clears token and emits `auth:logout` event to sync app state.
-
-## Main routes
-
-- `/`: Trading.
-- `/portfolio`: Portfolio and wallet actions.
-- `/leaderboard`: Leaderboard.
-- `/explore`: Explore modules.
-- `/ref/[refCode]`: Referral redirect.
-
-## Code quality
-
-- Lint:
-
 ```bash
-npm run lint
+npm run dev           # Local development server
+npm run build         # Production build
+npm run start         # Run production build
+npm run lint          # ESLint
+npm run format        # Prettier
+npm run generate:api  # Regenerate API client with Orval
 ```
 
-- Format:
+## API Client Generation (Orval)
 
-```bash
-npm run format
-```
+Configured in [orval.config.ts](orval.config.ts). Input is an OpenAPI spec; output is `src/services/queries.ts` and `src/services/models/*`. Do not edit generated files manually — run `npm run generate:api` when the spec changes.
 
-## Build and deployment
+## Notable Config
 
-```bash
-npm run build
-npm run start
-```
-
-Pre-deployment checklist:
-
-- Ensure production API endpoints are correct.
-- Regenerate API client if the spec changed.
-- Verify chain/network settings in `src/lib/wagmi.ts` and related hooks.
-- Confirm Mini App App ID and referral link configuration.
-
-## Important technical notes
-
-- `next.config.ts` includes:
-  - Turbopack + SVGR config (`*.svg` imported as React components),
-  - `allowedDevOrigins` for dev tunnel environments,
-  - `images.remotePatterns` for remote image domains.
-- Onboarding and auth gate logic live in the client-side provider layer.
-- UI is token-driven via CSS variables in `app/globals.css`.
-
-## Suggested backlog
-
-- Move hardcoded values (API URLs, App IDs, chain IDs, contract addresses) to environment variables.
-- Add automated tests for auth, trade flows, and API adapters.
-- Add CI pipeline for lint + typecheck + build.
+- [next.config.ts](next.config.ts): Turbopack, SVGR for `*.svg` imports, `allowedDevOrigins`, `images.remotePatterns`.
+- [app/globals.css](app/globals.css): All design tokens as CSS variables — do not hardcode colors in components.
 
 ## License
 
