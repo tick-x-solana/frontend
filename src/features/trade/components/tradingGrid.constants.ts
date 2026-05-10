@@ -39,6 +39,11 @@ export const SUBSCRIBE_SUGGESTED_STRATEGY_EVENT =
 export const SUGGESTED_STRATEGY_UPDATE_EVENT = "suggested_strategy_update";
 // Backend diagnostics event for fortress market center telemetry payloads.
 export const FORTRESS_MC_DIAGNOSTICS_EVENT = "fortress_mc_diagnostics";
+// Emitted to start/stop the backend streaming of fortress MC diagnostics data.
+export const SUBSCRIBE_FORTRESS_MC_DIAGNOSTICS_EVENT =
+  "subscribe_fortress_mc_diagnostics";
+export const UNSUBSCRIBE_FORTRESS_MC_DIAGNOSTICS_EVENT =
+  "unsubscribe_fortress_mc_diagnostics";
 // Realtime socket event that announces a user's winning payout.
 export const WIN_NOTIFICATION_EVENT = "win_notification";
 // Keep the win banner visible briefly so users can read the payout.

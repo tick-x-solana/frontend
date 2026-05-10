@@ -19,11 +19,13 @@ import {
   FOLLOW_ORDER_EVENTS,
   FOLLOWED_ORDER_UPDATE_EVENT,
   ORDER_UPDATE_EVENT,
+  SUBSCRIBE_FORTRESS_MC_DIAGNOSTICS_EVENT,
   SUBSCRIBE_ORDER_FOLLOWS_EVENT,
   SUBSCRIBE_SUGGESTED_STRATEGY_EVENT,
   SUBSCRIBE_USER_EVENT,
   SUGGESTED_STRATEGY_UPDATE_EVENT,
   TRADE_SOCKET_BASE_URL,
+  UNSUBSCRIBE_FORTRESS_MC_DIAGNOSTICS_EVENT,
   UNSUBSCRIBE_ORDER_FOLLOWS_EVENT,
 } from "@/src/features/trade/components/tradingGrid.constants";
 import {
@@ -207,9 +209,11 @@ export function useTradingGridSocketEffects({
       onFortressMcDiagnostics(payload);
     };
 
+    socket.emit(SUBSCRIBE_FORTRESS_MC_DIAGNOSTICS_EVENT);
     socket.on(FORTRESS_MC_DIAGNOSTICS_EVENT, handleFortressMcDiagnostics);
     return () => {
       socket.off(FORTRESS_MC_DIAGNOSTICS_EVENT, handleFortressMcDiagnostics);
+      socket.emit(UNSUBSCRIBE_FORTRESS_MC_DIAGNOSTICS_EVENT);
     };
   }, [
     isFortressMcDiagnosticsOpen,
